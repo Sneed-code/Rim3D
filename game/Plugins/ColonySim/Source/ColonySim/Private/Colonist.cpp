@@ -206,21 +206,16 @@ int colonistTraitGain(const DefDatabase& defs, const std::vector<TraitRecord>& t
     return gain;
 }
 
-// The rest of a point-mode colonist (ours, docs/design/new-game.md), after name and age: no
-// backstories; traits bought from the pool (none for the protagonist); skills from the random curve
-// for all, stretched by age, a few of them lifted as what the person was good at before (in place of
-// the backstories' gains), then the traits' gains on top, which may pass maxLevel; passions as RimWorld.
+// The rest of a point-mode colonist (ours, docs/design/new-game.md), after name and age: no backstories; traits
+// bought from the pool (none for the protagonist); then skills from a pool (sneed 2026-11-24): `skillPointPool`
+// levels (30) handed out at random among the skills the person can use, a disabled skill's share going to the others,
+// some skills drawn as favourites so people differ; the traits' gains on top, which may pass maxLevel. One skill gets
+// a burning (major) passion and another a minor one (`pointPassions`), the person's best skills first.
 bool generatePointColonist(const DefDatabase& defs, Rng& rng, const Def& genRules, const Def& skillRules,
                            const ColonistGenOptions& options, Colonist& out) {
     const std::vector<TraitRecord> traits = options.noTraits ? std::vector<TraitRecord>{} : colonistBuyTraits(defs, options.traitPoints, rng);
 
     const int maxLevel = static_cast<int>(skillRules.integer("maxLevel", 20));
-    const ColonistCurve levelCurve = colonistCurveField(genRules, "skillLevelRandomCurve");
-    const double levelMax = levelCurve.points.empty() ? 1.0 : levelCurve.points.back().first;
-    const ColonistCurve ageFactorCurve = colonistCurveField(genRules, "ageSkillMaxFactorCurve");
-    const double ageFactor = ageFactorCurve.points.empty() ? 1.0
-                                                           : ageFactorCurve.at(std::clamp<double>(out.age, ageFactorCurve.points.front().first,
-                                                                                                  ageFactorCurve.points.back().first));
     std::vector<std::pair<int, const Def*>> skillDefs;  // listOrder, def
     for (const DefId id : defs.idsOfKind("Skills")) {
         skillDefs.emplace_back(static_cast<int>(defs.get(id).integer("listOrder", 0)), &defs.get(id));
@@ -228,31 +223,47 @@ bool generatePointColonist(const DefDatabase& defs, Rng& rng, const Def& genRule
     std::sort(skillDefs.begin(), skillDefs.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     for (const auto& [order, skillDef] : skillDefs) {
         (void)order;
-        double level = std::round(colonistDraw(levelCurve, 0.0, levelMax, 120, rng));
-        if (!ageFactorCurve.points.empty()) {
-            level *= 1.0 + (ageFactor - 1.0) * rng.unit();
-        }
         SkillRecord skill;
         skill.def = skillDef->defName();
-        skill.level = std::clamp(static_cast<int>(std::lround(level)), 0, maxLevel);
         out.skills.push_back(std::move(skill));
     }
-    const int boosts = static_cast<int>(genRules.numberAt("pointSkillBoosts", 0, 0));
-    const int boostMin = static_cast<int>(genRules.numberAt("pointSkillBoosts", 1, 0));
-    const int boostMax = std::max(boostMin, static_cast<int>(genRules.numberAt("pointSkillBoosts", 2, 0)));
-    std::vector<size_t> order;
-    for (size_t i = 0; i < out.skills.size(); ++i) {
-        order.push_back(i);
-    }
-    for (int i = 0; i < boosts && !order.empty(); ++i) {
-        const size_t at = rng.below(static_cast<uint32_t>(order.size()));
-        SkillRecord& skill = out.skills[order[at]];
-        order.erase(order.begin() + static_cast<std::ptrdiff_t>(at));
-        skill.level = std::min(maxLevel, skill.level + boostMin + static_cast<int>(rng.below(static_cast<uint32_t>(boostMax - boostMin + 1))));
-    }
+    // The traits first: they say which skills are disabled (those get no points) and add their gains.
     setColonistTraits(defs, out, traits);
+    std::vector<double> weight(out.skills.size(), 0.0);
+    double weightSum = 0.0;
+    for (size_t i = 0; i < out.skills.size(); ++i) {
+        if (!out.skills[i].disabled) {
+            const double u = rng.unit();
+            weight[i] = 0.15 + u * u * u;  // a few favourites, the rest a little each
+            weightSum += weight[i];
+        }
+    }
+    const int pool = std::max(0, static_cast<int>(genRules.integer("skillPointPool", 30)));
+    for (int point = 0; point < pool && weightSum > 0.0; ++point) {
+        double pick = rng.unit() * weightSum;
+        size_t at = out.skills.size();
+        for (size_t i = 0; i < out.skills.size(); ++i) {
+            if (weight[i] <= 0.0) {
+                continue;
+            }
+            at = i;
+            pick -= weight[i];
+            if (pick < 0.0) {
+                break;
+            }
+        }
+        if (at >= out.skills.size()) {
+            break;
+        }
+        SkillRecord& skill = out.skills[at];
+        ++skill.level;
+        if (skill.level - skill.bonus >= maxLevel) {
+            weightSum -= weight[at];  // full: no more points to it
+            weight[at] = 0.0;
+        }
+    }
     for (SkillRecord& skill : out.skills) {
-        const int index = std::min(skill.level, maxLevel);
+        const int index = std::clamp(skill.level, 0, maxLevel);
         const double toNext = skill.level >= maxLevel + std::max(0, skill.bonus) ? 0.0 : skillRules.numberAt("xpToNextLevel", static_cast<size_t>(index), 0.0);
         skill.xp = static_cast<float>(toNext * rng.range(0.1f, 0.9f));
     }
@@ -269,16 +280,14 @@ bool generatePointColonist(const DefDatabase& defs, Rng& rng, const Def& genRule
     for (size_t i = 0; i < out.skills.size(); ++i) {
         const SkillRecord& s = out.skills[i];
         if (!s.disabled && !colonistListHas(forbidden, s.def)) {
-            ranked.emplace_back((static_cast<uint32_t>(s.level) << 16) | rng.below(0x10000), i);
+            ranked.emplace_back((static_cast<uint32_t>(std::max(0, s.level - s.bonus)) << 16) | rng.below(0x10000), i);
         }
     }
     std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-    const int passionMin = static_cast<int>(genRules.numberAt("passionCount", 0, 0));
-    const int passionMax = static_cast<int>(genRules.numberAt("passionCount", 1, 4));
-    int passions = passionMin + static_cast<int>(rng.below(static_cast<uint32_t>(std::max(1, passionMax - passionMin + 1))));
-    const float majorChance = static_cast<float>(genRules.number("majorPassionChance", 0.33));
-    for (size_t i = 0; i < ranked.size() && passions > 0; ++i, --passions) {
-        out.skills[ranked[i].second].passion = rng.unit() < majorChance ? Passion::Major : Passion::Minor;
+    const int majors = static_cast<int>(genRules.numberAt("pointPassions", 0, 1));
+    const int minors = static_cast<int>(genRules.numberAt("pointPassions", 1, 1));
+    for (size_t i = 0; i < ranked.size() && static_cast<int>(i) < majors + minors; ++i) {
+        out.skills[ranked[i].second].passion = static_cast<int>(i) < majors ? Passion::Major : Passion::Minor;
     }
     return true;
 }
@@ -362,8 +371,53 @@ void setColonistTraits(const DefDatabase& defs, Colonist& colonist, const std::v
                 skill.disabled = skill.disabled || colonistListHas(disabled, tag);
             }
         }
-        if (skill.disabled || colonistListHas(forbidden, skill.def)) {
+    }
+    // A disabled skill's levels and passion go to the skills the person can use (sneed 2026-11-24): the points are
+    // handed round one at a time, best skills first; the passion goes to the best skill without one.
+    const Def* skillRules = defs.find("Rules", "SkillRules");
+    const int maxLevel = skillRules != nullptr ? static_cast<int>(skillRules->integer("maxLevel", 20)) : 20;
+    std::vector<size_t> open;
+    for (size_t i = 0; i < colonist.skills.size(); ++i) {
+        if (!colonist.skills[i].disabled) {
+            open.push_back(i);
+        }
+    }
+    const auto baseOf = [&colonist](size_t i) { return colonist.skills[i].level - colonist.skills[i].bonus; };
+    std::stable_sort(open.begin(), open.end(), [&](size_t a, size_t b) { return baseOf(a) > baseOf(b); });
+    int spare = 0;
+    std::vector<Passion> loose;
+    for (SkillRecord& skill : colonist.skills) {
+        const int base = skill.level - skill.bonus;
+        if (skill.disabled && base > 0) {
+            spare += base;
+            skill.level -= base;
+        }
+        if ((skill.disabled || colonistListHas(forbidden, skill.def)) && skill.passion != Passion::None) {
+            loose.push_back(skill.passion);
             skill.passion = Passion::None;
+        }
+    }
+    while (spare > 0 && !open.empty()) {
+        bool any = false;
+        for (const size_t i : open) {
+            if (spare > 0 && baseOf(i) < maxLevel) {
+                ++colonist.skills[i].level;
+                --spare;
+                any = true;
+            }
+        }
+        if (!any) {
+            break;  // every open skill is full
+        }
+    }
+    std::sort(loose.begin(), loose.end(), [](Passion a, Passion b) { return a > b; });
+    for (const Passion passion : loose) {
+        for (const size_t i : open) {
+            SkillRecord& skill = colonist.skills[i];
+            if (skill.passion == Passion::None && !colonistListHas(forbidden, skill.def)) {
+                skill.passion = passion;
+                break;
+            }
         }
     }
 }

@@ -1193,6 +1193,74 @@ void MeleeSystem::sidestep(Entity defender, Melee& d) {
 
 // ---- Swinging --------------------------------------------------------------------------------
 
+namespace {
+
+// Normalised blend of two unit facings, w 0 gives a, 1 gives b. A blend of near-opposite facings goes round by the
+// side b lies on (through the facing at right angles to a), so a half turn never passes through nothing.
+void meleeTurnBlend(float ax, float ay, float bx, float by, float w, float& ox, float& oy) {
+    const float dot = ax * bx + ay * by;
+    if (dot < 0.0f) {
+        const float side = (ax * by - ay * bx) >= 0.0f ? 1.0f : -1.0f;
+        const float mx = -ay * side;  // a turned a quarter towards b
+        const float my = ax * side;
+        if (w < 0.5f) {
+            meleeTurnBlend(ax, ay, mx, my, w * 2.0f, ox, oy);
+        } else {
+            meleeTurnBlend(mx, my, bx, by, (w - 0.5f) * 2.0f, ox, oy);
+        }
+        return;
+    }
+    const float x = ax + (bx - ax) * w;
+    const float y = ay + (by - ay) * w;
+    const float len = std::sqrt(x * x + y * y);
+    if (len > 1e-6f) {
+        ox = x / len;
+        oy = y / len;
+    } else {
+        ox = bx;
+        oy = by;
+    }
+}
+
+}  // namespace
+
+void MeleeSystem::steerRoll(Entity pawn, Entity target) {
+    entt::registry& reg = things_.registry();
+    Posture* posture = reg.try_get<Posture>(pawn);
+    const Position* pos = reg.try_get<Position>(pawn);
+    if (posture == nullptr || pos == nullptr || target == kNoEntity || !reg.valid(target) || !things_.spawned(target)) {
+        return;
+    }
+    const Position* at = reg.try_get<Position>(target);
+    if (at == nullptr || at->level != pos->level) {
+        return;
+    }
+    // A gun in hand faces its free aim after the roll (lock-on.md), so it has nothing to turn to.
+    if (const Gear* gear = reg.try_get<Gear>(pawn);
+        gear != nullptr && gear->weapon != kNoEntity && reg.valid(gear->weapon) && combat_.isGun(reg.get<Thing>(gear->weapon).def)) {
+        return;
+    }
+    float rx = 0.0f;
+    float ry = 0.0f;
+    if (!combat_.rollDirection(pawn, rx, ry)) {
+        return;
+    }
+    const float dx = at->x - pos->x;
+    const float dy = at->y - pos->y;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.05f) {
+        return;
+    }
+    // Held on the roll's way for the first quarter of the tumble, then turned round with an ease in and out over the rest
+    // and the recovery (about two thirds of a second), ending on the target as the roll ends: the axis swivels, the path
+    // doesn't.
+    float from = 0.0f;
+    const float progress = combat_.rollProgress(pawn, &from);
+    const float t = std::clamp((progress - from) / std::max(1e-4f, 1.0f - from), 0.0f, 1.0f);
+    const float w = t * t * (3.0f - 2.0f * t);
+    meleeTurnBlend(rx, ry, dx / len, dy / len, w, posture->facingX, posture->facingY);
+}
+
 void MeleeSystem::face(Entity pawn, float x, float y) {
     entt::registry& reg = things_.registry();
     Posture* posture = reg.try_get<Posture>(pawn);
@@ -1996,6 +2064,9 @@ void MeleeSystem::faceFocus() {
     entt::registry& reg = things_.registry();
     for (const auto [pawn, m] : reg.view<Melee>().each()) {
         if (m.focus == kNoEntity) {
+            if (m.threat != kNoEntity && combat_.rollLocked(pawn)) {
+                steerRoll(pawn, m.threat);  // an AI's dodge keeps its eyes on whoever it dodged
+            }
             continue;
         }
         const bool keep = things_.spawned(pawn) && reg.all_of<Position, Posture>(pawn) && !health_.incapacitated(pawn) &&
@@ -2021,7 +2092,8 @@ void MeleeSystem::faceFocus() {
             }
         }
         if (combat_.rollLocked(pawn)) {
-            continue;  // a roll goes its own way
+            steerRoll(pawn, m.focus);  // a roll goes its own way, the body turning round to the focus as it goes
+            continue;
         }
         const Shooter* s = reg.try_get<Shooter>(pawn);
         if (s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {

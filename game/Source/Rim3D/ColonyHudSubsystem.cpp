@@ -76,6 +76,12 @@ namespace
 	TAutoConsoleVariable<int32> GHudTextSize(
 		TEXT("UI.TextSize"), 0, TEXT("0 normal text, 1 bigger text in every panel (Settings > Game > Text size; saved)."), ECVF_Default);
 
+	TAutoConsoleVariable<float> GHudTextGrow(
+		TEXT("UI.TextGrow"), 1.5f, TEXT("How much bigger every text is than the first sizes (sneed 2026-11-24: 1.5); boxes keep their widths and wrap."), ECVF_Default);
+
+	TAutoConsoleVariable<int32> GHudLogBoxes(
+		TEXT("UI.LogBoxes"), 0, TEXT("1 logs each box's width (BOXWIDTH) and stops boxes holding their widths, to measure them."), ECVF_Default);
+
 	FAutoConsoleCommandWithWorldAndArgs GHudTabCommand(
 		TEXT("Hud.Tab"), TEXT("Hud.Tab <name> opens a tab of the bottom bar (Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Inventory); no name closes it."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -1143,6 +1149,7 @@ void UColonyHudSubsystem::DrawDateBox(USimSubsystem& Bridge, float Scale)
 	const colony::Sim& Sim = *Bridge.GetSim();
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - 12.0f * Scale, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always,
 		ImVec2(1.0f, 1.0f));
+	ColonyHud::HoldWidth("##HudDate", Scale);
 	if (ImGui::Begin("##HudDate", nullptr, ColonyHud::BoxFlags()))
 	{
 		const colony::GameTime& Time = Sim.time();
@@ -1262,6 +1269,7 @@ void UColonyHudSubsystem::DrawHoverReadout(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + 12.0f * Scale, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(220.0f * Scale, 0.0f), ImVec2(420.0f * Scale, FLT_MAX));
+	ColonyHud::HoldWidth("##HudHover", Scale);
 	if (ImGui::Begin("##HudHover", nullptr, ColonyHud::BoxFlags() | ImGuiWindowFlags_NoInputs))
 	{
 		++Stats.HoverFrames;
@@ -1308,6 +1316,7 @@ void UColonyHudSubsystem::DrawInfoWindow(USimSubsystem& Bridge, float Scale)
 	const float Width = FMath::Min(760.0f * Scale, Viewport->Size.x - 40.0f * Scale);
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + 110.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowSize(ImVec2(Width, 0.0f), ImGuiCond_Always);
+	ColonyHud::HoldWidth("##HudInfo", Scale);
 	if (ImGui::Begin("##HudInfo", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoFocusOnAppearing))
 	{
 		++Stats.InfoFrames;
@@ -1483,6 +1492,7 @@ void UColonyHudSubsystem::DrawSettings(USimSubsystem& Bridge, float Scale)
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + 80.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(720.0f * Scale, 320.0f * Scale), ImVec2(Viewport->Size.x * 0.9f, Viewport->Size.y * 0.8f));
+	ColonyHud::HoldWidth("##HudSettings", Scale);
 	if (!ImGui::Begin("##HudSettings", nullptr, ColonyHud::BoxFlags() & ~ImGuiWindowFlags_NoFocusOnAppearing))
 	{
 		ImGui::End();
