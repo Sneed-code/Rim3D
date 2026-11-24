@@ -574,9 +574,9 @@ void USmokeTestSubsystem::BuildFeelPhases()
 			const FVector Set = Drawn->GetMotionOffset();
 			const AProtagonistPawn* Body = Prot() ? Prot()->GetBody() : nullptr;
 			const FVector2D Local = Body ? Body->GetSimPosition() : FVector2D::ZeroVector;
-			UE_LOG(LogTemp, Display, TEXT("WALKROLLTRACE t=%.3f phase=%d clip=%d mt=%.3f sim=(%.2f,%.2f) local=(%.2f,%.2f) actor=(%.0f,%.0f) pelvis=(%.0f,%.0f) off=(%.0f,%.0f)"),
+			UE_LOG(LogTemp, Display, TEXT("WALKROLLTRACE t=%.3f phase=%d clip=%d mt=%.3f sim=(%.2f,%.2f) local=(%.2f,%.2f) actor=(%.0f,%.0f) pelvis=(%.0f,%.0f) off=(%.0f,%.0f) w=%.3f dt=%.3f"),
 				PhaseTime, static_cast<int32>(Me->rollPhase), Me->motionClip.valid() ? 1 : 0, Me->motionTime, Me->x, Me->y, Local.X, Local.Y, ActorAt.X, ActorAt.Y,
-				Pelvis.X, Pelvis.Y, Set.X, Set.Y);
+				Pelvis.X, Pelvis.Y, Set.X, Set.Y, Drawn->GetLegsClipWeight(), GetWorld()->GetDeltaSeconds());
 		}
 		State->LastPelvis = Pelvis;
 		State->bHavePelvis = true;

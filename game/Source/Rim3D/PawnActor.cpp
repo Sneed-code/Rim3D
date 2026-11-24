@@ -2172,16 +2172,9 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 		const double Ahead = Playing.IsPlaying() ? FrameAhead * static_cast<double>(Playing.GetPlayRate()) : 0.0;
 		const double At = FMath::Clamp(static_cast<double>(Playing.GetPosition()) + Ahead, 0.0, static_cast<double>(PlayingAsset.GetPlayLength()));
 		const FVector Travel = PawnMotionBoneAt(PlayingAsset, Pelvis, At) - PelvisStart;
-		// The weight a frame on too: the blend moves on before the mesh is drawn. With the frame-old weight the drawn hips
-		// jumped back as the roll's clip began to fade (by the weight lost in that frame times its 4 m of travel: 85 cm
-		// after a 65 ms hitch, smoke feel_roll_walking 2026-11-24), and forward again as it caught up.
-		double Weight = Playing.GetWeight();
-		const FAlphaBlend& Blend = Playing.GetBlend();
-		const double Remaining = Blend.GetBlendTimeRemaining();
-		if (Remaining > 1.0e-4)
-		{
-			Weight += (static_cast<double>(Blend.GetDesiredValue()) - Weight) * FMath::Min(1.0, FrameAhead / Remaining);
-		}
+		// The weight as it is now (the drawn pose blends with this same weight: smoke feel_roll, 1.6 cm; a weight
+		// predicted a frame on drew the hips 20 cm off through the fade, PC 2026-11-24).
+		const double Weight = Playing.GetWeight();
 		return FVector(-Travel.Y, Travel.X, 0.0) * Weight * Height;
 	};
 	// The bodies' meshes tick after the pawns (TG_PostUpdateWork), so the moments and weights read here are a frame

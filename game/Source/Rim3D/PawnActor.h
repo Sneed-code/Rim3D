@@ -267,6 +267,7 @@ public:
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
 	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
+	float GetLegsClipWeight() const { return LegsClipWeight; }
 	/** While an attack clip is on screen: the seconds of the clip still to play before its blow (negative once past it) and
 	 *  the rate it plays at. False when no clip with a blow is playing. */
 	bool GetMotionClipToHit(float& OutSeconds, float& OutRate) const;
