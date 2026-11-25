@@ -49,7 +49,8 @@ from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome 
    (`seed=-1`, the gun range's), so every hair and body update reaches you while you leave her be; **Default look**
    goes back to her. **Next: your companions**.
 5. **Your companions** (page 4): the races on top (Human open; Impid, Orcoid, drow and cat-strain locked); left, a card
-   per stranger (mugshot, name, age 18, traits) with **Reroll** and **Reroll both**, and the picked one's name; right,
+   per stranger (mugshot, name, age 18, traits) with **Reroll** and **Reroll both**, and the picked one's name (a click
+   anywhere on a card picks that stranger; only the picked one stands on the spot, sneed 2026-11-25); right,
    **Traits and skills** (points left in large figures; the chosen traits as chips, click to take back; the shop of
    strengths with their cost and drawbacks with the points they give, greyed with the reason when they don't fit;
    **Random traits** spends all points, **Clear**; skills with bars to 20, skill-trait levels in jade past them, and
@@ -57,12 +58,17 @@ from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome 
 
 **Looks** (both screens): woman or man, height, thin to heavy, soft to muscular, breasts, more masculine or feminine,
 older (companions only a little), skin, hair style (the styles the body has) and colour, eyes, body hair below, Random
-looks. Changes show at once on the body and go to the sim when a slider is let go.
+looks. Changes show at once on the body and go to the sim when a slider is let go. **Skin** is one slider from fair to
+dark (sneed 2026-11-25), blending the old seven swatches, saved as the colour (`skinR/G/B`, what body and game draw)
+and the slider's place (`skinTone`); the skin material shifts the 4K skin texture's own average to any colour, so every
+point works. Beside it the **clothes on** tick (the cargo pack's cotton shirt and trousers on everyone, drawn through the
+real clothes path, `USimPawnSubsystem::SetApparelPreview`, nothing in the sim).
 
-Under the body on both screens: a **clothes on** tick (the cargo pack's cotton shirt and trousers on everyone, drawn
-through the real clothes path, `USimPawnSubsystem::SetApparelPreview`, nothing in the sim) and the turntable: dragging
-spins the body itself (`ASimPawnActor::SetPreviewSpin`), so soft tissue and hair swing; it eases to a stop, up and down
-tilt, the wheel zooms. The stage is cosmetic too: the sky is held at mid-morning while the screen is open
+Only the one being shaped stands on the spot: the other starting colonists are hidden while the screen is open
+(`ASimPawnActor::SetBodyHidden`, shown again on leaving). Under the body on both screens the turntable: dragging with the
+left button spins the body itself (`ASimPawnActor::SetPreviewSpin`), so soft tissue and hair swing; it eases to a stop,
+up and down tilt; holding the right button orbits the camera round the still body (all the way round, tilt -50 to +15
+degrees, the eye kept over the feet); the wheel and the - + buttons zoom. The stage is cosmetic too: the sky is held at mid-morning while the screen is open
 (`USkySubsystem::SetHourOverride`; the sim's clock is untouched; the hour nearest 10:30, earlier, whose exposure stays
 under 12.25 EV, because higher the engine prints a clipping warning), plants within 3.5 m of each person on show are not
 drawn (`UTerrainSubsystem::SetPlantClearings`), a soft key light stands by the camera, and for each
@@ -145,8 +151,10 @@ Title (the starship stage: fails if she, her body, her clothes, the planet or th
 sun still shines there; `NEWGAME title stage` names where her look came from and her outfit), scenario page, "Land somewhere random" on seed 42 (You: three colonists, each with a creator look on its
 MakeHuman body, you the default woman with no traits, game still at step 0, `NEWGAME person` lines), clothes on and
 spinning (`NEWGAME clothes on`: shirt and trousers drawn as garments, nothing worn in the sim), the companions after random traits (`NEWGAME companion`: 18,
-10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`), and Start (the game runs, looks kept).
-One 1080p screenshot each with the UI.
+10 of 10 points), their Looks tab after a reroll of slot 2 (`NEWGAME reroll`) and the Short hair style on the first
+stranger only (`NEWGAME hair style`: nobody else's look changes), and Start (the game runs, looks kept, nobody left
+hidden). On every page only the one being shaped stands on the spot (`NEWGAME <page>: slot N shown/hidden`); the clothes
+page also turns the camera 35 degrees round with the orbit. One 1080p screenshot each with the UI.
 
 ## Debug scenes
 

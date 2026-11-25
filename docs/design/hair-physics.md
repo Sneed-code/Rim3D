@@ -171,6 +171,13 @@ hair swinging into the body is pushed back out at the skin. Buzz has no physics 
 `Pawns.StrandHairCollision` 1 fitted (default), 0 nothing, 2 the body's own asset (to compare). Head sliders do not
 resize the spheres (the 4 mm keeps a slightly smaller head clear).
 
+Short, Messy and Bob are still too (sneed 2026-11-25, character screen: "the hair seems to sink into the scalp
+revealing a lot of it"): under Unreal's groom physics these short styles, grown standing a little off the scalp, sagged
+under gravity down to the collision shapes 4 mm inside the skin, flattening onto and into the scalp. They now keep their
+grown shape and move with the head. A groom that comes into view (or a new style on the same component) starts its
+simulation from the grown shape (`ResetSimulation`), and a style change no longer shows the old style's wig again under
+the new strands.
+
 ## Near and far (step 2)
 
 `UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun

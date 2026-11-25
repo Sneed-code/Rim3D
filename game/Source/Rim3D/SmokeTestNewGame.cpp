@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 
 #include "ColonyHudSubsystem.h"
+#include "CreatorPeople.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
 #include "SimSubsystem.h"
@@ -38,6 +39,7 @@ namespace
 	{
 		int32 FramesBefore = 0;
 		std::string RerolledName;
+		std::string YourLook;  // your creator text before the first stranger's hair style changed
 	};
 
 	FString NewGameSmokeName(const colony::Sim& Sim, colony::Entity Pawn)
@@ -53,6 +55,22 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	const auto Bridge = [this]() { return GetWorld()->GetSubsystem<USimSubsystem>(); };
 	const auto Hud = [this]() { return GetWorld()->GetSubsystem<UColonyHudSubsystem>(); };
 	const auto Pawns = [this]() { return GetWorld()->GetSubsystem<USimPawnSubsystem>(); };
+	// The character screen shows only the one being shaped on the spot (sneed 2026-11-25): true if slot Shown is drawn
+	// and every other starting colonist hidden. Logs each one.
+	const auto ShownAlone = [=, this](const TCHAR* Phase, int32 Shown)
+	{
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		bool bAlone = !People.empty();
+		for (int32 Slot = 0; Slot < static_cast<int32>(People.size()); ++Slot)
+		{
+			const ASimPawnActor* Actor = Pawns()->FindPawn(People[static_cast<size_t>(Slot)]);
+			const bool bHidden = !Actor || Actor->IsBodyHidden();
+			UE_LOG(LogTemp, Display, TEXT("NEWGAME %s: slot %d %s"), Phase, Slot, bHidden ? TEXT("hidden") : TEXT("shown"));
+			bAlone = bAlone && bHidden == (Slot != Shown);
+		}
+		return bAlone;
+	};
 
 	// 1. The title screen over its own backdrop: the starship stage (sneed 2026-11-23: the character at a window in orbit,
 	// a planet and the galaxy behind her) over the wild rainforest tile the title runs.
@@ -268,6 +286,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	{
 		Hud()->SetPeopleClothesForTest(true);
 		Hud()->SetPeopleSpinForTest(240.0f);
+		Hud()->SetPeopleOrbitForTest(35.0f);  // the right-button orbit: the camera a little round to one side
 	};
 	ClothesPhase.Verify = [=, this]()
 	{
@@ -289,12 +308,17 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		{
 			Fail(TEXT("newgame_you_clothes: the turntable did not turn the body"));
 		}
+		if (!ShownAlone(TEXT("you_clothes"), 0))
+		{
+			Fail(TEXT("newgame_you_clothes: someone besides you stands on the spot"));
+		}
 		const colony::Gear* Worn = People.empty() ? nullptr : Sim->things().registry().try_get<colony::Gear>(People[0]);
 		if (Worn && !Worn->apparel.empty())
 		{
 			Fail(TEXT("newgame_you_clothes: the preview put real clothes on in the sim"));
 		}
 		Hud()->SetPeopleClothesForTest(false);
+		Hud()->SetPeopleOrbitForTest(0.0f);
 	};
 	Phases.Add(MoveTemp(ClothesPhase));
 
@@ -332,6 +356,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 				Fail(TEXT("newgame_companions: a companion is not 18 with all 10 trait points spent"));
 			}
 		}
+		if (!ShownAlone(TEXT("companions"), 1))
+		{
+			Fail(TEXT("newgame_companions: the stranger being shaped does not stand alone on the spot"));
+		}
 	};
 	Phases.Add(MoveTemp(CompanionsPhase));
 
@@ -344,6 +372,23 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	{
 		Hud()->SetPeopleForTest(1, 1);
 		Bridge()->Submit(colony::RerollColonistCommand{2});
+		// A hair style for the first stranger alone (sneed 2026-11-25: "it picks for all characters"): Short (index 5 of
+		// the creator's styles), on top of the look it has.
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		const colony::PawnLooks* First = People.size() == 3 ? Sim->things().registry().try_get<colony::PawnLooks>(People[1]) : nullptr;
+		const colony::PawnLooks* Yours = People.size() == 3 ? Sim->things().registry().try_get<colony::PawnLooks>(People[0]) : nullptr;
+		CreatorPeople::FLook Look;
+		if (First && Yours && CreatorPeople::Decode(UTF8_TO_TCHAR(First->creator.c_str()), Look))
+		{
+			State->YourLook = Yours->creator;
+			Look.Values.Add(TEXT("hairStyle"), 5.0f);
+			colony::EditColonistCommand Edit;
+			Edit.slot = 1;
+			Edit.setCreator = true;
+			Edit.creator = TCHAR_TO_UTF8(*CreatorPeople::Encode(Look));
+			Bridge()->Submit(Edit);
+		}
 	};
 	LooksPhase.Verify = [=, this]()
 	{
@@ -360,6 +405,23 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		if (!Third || !ThirdLooks || ThirdLooks->creator.empty())
 		{
 			Fail(TEXT("newgame_looks: the rerolled colonist has no creator look"));
+		}
+		const colony::PawnLooks* FirstLooks = Sim->things().registry().try_get<colony::PawnLooks>(People[1]);
+		const colony::PawnLooks* YourLooks = Sim->things().registry().try_get<colony::PawnLooks>(People[0]);
+		UE_LOG(LogTemp, Display, TEXT("NEWGAME hair style: first stranger '%s', you '%s'"), FirstLooks ? UTF8_TO_TCHAR(FirstLooks->creator.c_str()) : TEXT("-"),
+			YourLooks ? UTF8_TO_TCHAR(YourLooks->creator.c_str()) : TEXT("-"));
+		if (!FirstLooks || FirstLooks->creator.find("hairStyle=5;") == std::string::npos)
+		{
+			Fail(TEXT("newgame_looks: the first stranger did not take the Short hair style"));
+		}
+		if (!YourLooks || YourLooks->creator != State->YourLook || (ThirdLooks && ThirdLooks->creator.find("hairStyle=5;") != std::string::npos &&
+			ThirdLooks->creator == FirstLooks->creator))
+		{
+			Fail(TEXT("newgame_looks: a hair style for the first stranger reached someone else"));
+		}
+		if (!ShownAlone(TEXT("looks"), 1))
+		{
+			Fail(TEXT("newgame_looks: the stranger being shaped does not stand alone on the spot"));
 		}
 	};
 	Phases.Add(MoveTemp(LooksPhase));
@@ -392,6 +454,10 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			if (!PawnLooks || PawnLooks->creator.empty())
 			{
 				Fail(TEXT("newgame_landed: a colonist lost its creator look"));
+			}
+			if (const ASimPawnActor* Actor = Pawns()->FindPawn(Pawn); Actor && Actor->IsBodyHidden())
+			{
+				Fail(TEXT("newgame_landed: a colonist the character screen hid is still hidden"));
 			}
 		}
 	};

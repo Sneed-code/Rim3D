@@ -1,8 +1,8 @@
 {
-  "comment": "Strand hair grown on our own MakeHuman bodies (docs/design/hair-physics.md 'Growing our own grooms'). tools/makehuman/grow_hair.py writes game/Saved/Grooms/<base>/<Style>.abc from the base's FBX; the HairGrooms commandlet imports each as /Game/Rim3D/Generated/Grooms/GA_<base>_<Style>. 'creator' maps the creator's hair style names (the wig meshes) to a grown style; a creator style missing here keeps its wig at every distance. 'still' styles get no physics (Buzz is too short to move; the afro holds its own shape, and Unreal's groom physics would let its coils sag).",
+  "comment": "Strand hair grown on our own MakeHuman bodies (docs/design/hair-physics.md 'Growing our own grooms'). tools/makehuman/grow_hair.py writes game/Saved/Grooms/<base>/<Style>.abc from the base's FBX; the HairGrooms commandlet imports each as /Game/Rim3D/Generated/Grooms/GA_<base>_<Style>. 'creator' maps the creator's hair style names (the wig meshes) to a grown style; a creator style missing here keeps its wig at every distance. 'still' styles get no physics (Buzz is too short to move; the afro holds its own shape, and Unreal's groom physics would let its coils sag; Short, Messy and Bob sagged flat onto the scalp under the physics, showing it through the hair on the character screen, sneed 2026-11-25).",
   "bases": ["CreatorFemale", "CreatorMale"],
   "styles": ["LongStraight", "LongWavy", "Ponytail", "Bob", "Short", "Buzz", "Braid", "Afro", "Messy"],
-  "still": ["Buzz", "Afro"],
+  "still": ["Buzz", "Afro", "Short", "Messy", "Bob"],
   "creator": {
     "Long": "LongStraight",
     "Bob": "Bob",
