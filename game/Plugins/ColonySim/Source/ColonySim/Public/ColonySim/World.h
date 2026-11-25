@@ -96,6 +96,11 @@ public:
     int tileX(int index) const { return index % width_; }
     int tileY(int index) const { return index / width_; }
     const WorldTile& tile(int index) const { return tiles_[static_cast<size_t>(index)]; }
+    // The neighbour across side (0..5) of the hexagon the map draws: pointy-top, odd rows half a unit to the right.
+    // 0 east, 1 south-east, 2 south-west, 3 west, 4 north-west, 5 north-east. -1 past a pole; east and west wrap.
+    int hexNeighbour(int index, int side) const;
+    // The settlement index of a hex-adjacent settlement, or -1 (a colony cannot start next to one).
+    int nearSettlement(int index) const;
     // The neighbour in direction dir (0..7), or -1 past a pole. East and west wrap.
     int neighbour(int index, int dir) const;
 
@@ -106,7 +111,7 @@ public:
     int landTileCount() const;
 
     // The start tile: -1 until chosen. A tile may start a colony when it is land, not impassable
-    // mountain, not open sea ice and has no settlement.
+    // mountain, not open sea ice, has no settlement and is not hex-adjacent to one.
     int startTile() const { return startTile_; }
     bool canStartAt(int index) const;
     bool chooseStartTile(int index);

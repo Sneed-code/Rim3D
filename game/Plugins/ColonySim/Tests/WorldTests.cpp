@@ -4,7 +4,11 @@
 #include <doctest.h>
 
 #include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -243,4 +247,145 @@ TEST_CASE("without a WorldGen def the world is empty") {
     std::vector<std::string> errors;
     DefDatabase::build({}, "", db, errors);
     CHECK(World::generate(db, 1).empty());
+}
+
+TEST_CASE("a colony cannot start next to a settlement, two tiles away is fine") {
+    const World w = World::generate(worldTestDefs(), 42);
+    CHECK(!w.settlements().empty());
+    // The six sides of a hexagon are all different tiles, east and west wrap, and the odd rows lean right.
+    const int mid = w.index(10, 5);   // odd row
+    const int even = w.index(10, 4);  // even row
+    CHECK(w.hexNeighbour(mid, 0) == w.index(11, 5));
+    CHECK(w.hexNeighbour(mid, 1) == w.index(11, 6));
+    CHECK(w.hexNeighbour(mid, 2) == w.index(10, 6));
+    CHECK(w.hexNeighbour(mid, 3) == w.index(9, 5));
+    CHECK(w.hexNeighbour(mid, 4) == w.index(10, 4));
+    CHECK(w.hexNeighbour(mid, 5) == w.index(11, 4));
+    CHECK(w.hexNeighbour(even, 1) == w.index(10, 5));
+    CHECK(w.hexNeighbour(even, 5) == w.index(10, 3));
+    CHECK(w.hexNeighbour(w.index(w.width() - 1, 4), 0) == w.index(0, 4));
+    CHECK(w.hexNeighbour(w.index(0, 0), 5) == -1);
+    CHECK(w.hexNeighbour(w.index(0, w.height() - 1), 1) == -1);
+
+    int adjacentChecked = 0;
+    int farStarts = 0;
+    for (const WorldSettlement& s : w.settlements()) {
+        const int home = s.tile;
+        CHECK(!w.canStartAt(home));
+        for (int side = 0; side < 6; ++side) {
+            const int n = w.hexNeighbour(home, side);
+            if (n < 0) {
+                continue;
+            }
+            const WorldTile& t = w.tile(n);
+            if (!t.water && t.settlement == kNoSettlement) {
+                CHECK(!w.canStartAt(n));
+                CHECK(w.nearSettlement(n) >= 0);
+                ++adjacentChecked;
+            }
+            // The tile beyond, two steps away in a line, when it touches no settlement, may start.
+            const int far = w.hexNeighbour(n, side);
+            if (far >= 0 && w.nearSettlement(far) < 0 && w.tile(far).settlement == kNoSettlement && w.canStartAt(far)) {
+                ++farStarts;
+            }
+        }
+    }
+    CHECK(adjacentChecked > 0);
+    CHECK(farStarts > 0);
+    // No tile that may start touches a settlement.
+    for (int i = 0; i < w.tileCount(); ++i) {
+        if (w.canStartAt(i)) {
+            CHECK(w.nearSettlement(i) < 0);
+        }
+    }
+}
+
+TEST_CASE("tropicsExtraTiles widens the hot, wet belt around the equator") {
+    // The game's WorldGen def, with the extra tiles set to 0 for the narrow world.
+    auto build = [](const char* replaceFrom, const char* replaceWith) {
+        std::vector<DefSource> sources;
+        const std::filesystem::path root = std::filesystem::path(COLONY_DATA_DIR) / "defs";
+        for (const auto& kindDir : std::filesystem::directory_iterator(root)) {
+            if (!kindDir.is_directory()) {
+                continue;
+            }
+            for (const auto& file : std::filesystem::directory_iterator(kindDir.path())) {
+                if (file.path().extension() != ".json") {
+                    continue;
+                }
+                std::ifstream in(file.path());
+                std::stringstream ss;
+                ss << in.rdbuf();
+                std::string text = ss.str();
+                const size_t at = text.find(replaceFrom);
+                if (kindDir.path().filename() == "WorldGen" && at != std::string::npos) {
+                    text.replace(at, std::strlen(replaceFrom), replaceWith);
+                }
+                sources.push_back({kindDir.path().filename().string(), file.path().filename().string(), text});
+            }
+        }
+        auto db = std::make_unique<DefDatabase>();
+        std::vector<std::string> errors;
+        std::string tuning;
+        {
+            std::ifstream in(std::filesystem::path(COLONY_DATA_DIR) / "tuning.json");
+            std::stringstream ss;
+            ss << in.rdbuf();
+            tuning = ss.str();
+        }
+        DefDatabase::build(sources, tuning, *db, errors);
+        CHECK(errors.empty());
+        return db;
+    };
+    const auto narrow = build("\"tropicsExtraTiles\": 2", "\"tropicsExtraTiles\": 0");
+    const auto wide = build("\"tropicsExtraTiles\": 2", "\"tropicsExtraTiles\": 2");
+    const World a = World::generate(*narrow, 42);
+    const World b = World::generate(*wide, 42);
+    CHECK(!a.empty());
+    CHECK(a.width() == b.width());
+    if (a.empty() || a.width() != b.width()) {
+        return;
+    }
+    CHECK(a.hash() != b.hash());
+
+    auto tropical = [](const World& w, int& firstRow, int& lastRow) {
+        int n = 0;
+        firstRow = w.height();
+        lastRow = -1;
+        for (int i = 0; i < w.tileCount(); ++i) {
+            const WorldTile& t = w.tile(i);
+            if (t.water) {
+                continue;
+            }
+            const std::string& name = w.biomeName(t);
+            if (name == "TropicalRainforest" || name == "TropicalSwamp") {
+                ++n;
+                firstRow = std::min(firstRow, w.tileY(i));
+                lastRow = std::max(lastRow, w.tileY(i));
+            }
+        }
+        return n;
+    };
+    int aFirst = 0;
+    int aLast = 0;
+    int bFirst = 0;
+    int bLast = 0;
+    const int narrowCount = tropical(a, aFirst, aLast);
+    const int wideCount = tropical(b, bFirst, bLast);
+    CHECK(wideCount > narrowCount);
+    CHECK(bFirst <= aFirst);
+    CHECK(bLast >= aLast);
+    CHECK((aFirst - bFirst) + (bLast - aLast) > 0);
+
+    // The land is the same; only the temperature moves, warmer where the belt grew, never colder.
+    bool warmer = false;
+    for (int i = 0; i < a.tileCount(); ++i) {
+        CHECK(a.tile(i).water == b.tile(i).water);
+        CHECK(b.tile(i).temperature >= a.tile(i).temperature - 1e-4f);
+        warmer = warmer || b.tile(i).temperature > a.tile(i).temperature + 0.01f;
+    }
+    CHECK(warmer);
+    // On the equator rows nothing changes.
+    const int eq = a.height() / 2;
+    CHECK(a.tile(a.index(5, eq)).temperature == doctest::Approx(b.tile(b.index(5, eq)).temperature).epsilon(0.5));
 }

@@ -1310,14 +1310,8 @@ void UColonyHudSubsystem::DrawScenarioPage(USimSubsystem& Bridge, float Scale)
 	{
 		MainMenuPage = 0;
 	}
-	ImGui::SameLine(FooterRight - 520.0f * Scale);
-	if (NgButton(TEXT("Land somewhere random"), false, ImVec2(250.0f * Scale, 0.0f)) && Picked)
-	{
-		StartNewColony(false);
-	}
-	ColonyHud::Tip(TEXT("Skips the world map: the shuttle comes down on a random tropical site"));
-	ImGui::SameLine();
-	if (NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) && Picked)
+	ImGui::SameLine(FooterRight - 260.0f * Scale);
+	if ((NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed()) && Picked)
 	{
 		StartNewColony(true);
 	}
@@ -2245,7 +2239,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		ImGui::SameLine(FootRight - 280.0f * Scale);
 		if (bYouPage)
 		{
-			if (NgButton(TEXT("Next: your companions"), false, ImVec2(280.0f * Scale, 0.0f), true))
+			if (NgButton(TEXT("Next: your companions"), false, ImVec2(280.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed())
 			{
 				MainMenuPage = 4;
 				PeopleSelected = 1;
@@ -2255,7 +2249,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 				PeopleSpinRate = 0.0f;
 			}
 		}
-		else if (NgButton(TEXT("Land and start"), false, ImVec2(280.0f * Scale, 0.0f), true))
+		else if (NgButton(TEXT("Land and start"), false, ImVec2(280.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed())
 		{
 			NgEndPanel();
 			LandColony(Bridge);

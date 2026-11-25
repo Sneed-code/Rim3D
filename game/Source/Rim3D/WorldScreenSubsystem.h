@@ -119,6 +119,8 @@ private:
 	int32 SimGeneration = -1;
 	FWorldScreenStats Stats;
 	bool bNewGame = false;
+	/** Set by SetNewGame: the next draw picks a random valid site once. */
+	bool bPickOnOpen = false;
 	bool bLanded = false;
 	bool bCancelled = false;
 	TArray<FString> NewGameBiomes;
