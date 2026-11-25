@@ -903,7 +903,7 @@ bool UTerrainSubsystem::WantRoofs() const
 		return Mode != 0;
 	}
 	const UOverseerSubsystem* Overseer = GetWorld() ? GetWorld()->GetSubsystem<UOverseerSubsystem>() : nullptr;
-	return !(Overseer && Overseer->IsOverseerActive());
+	return !(Overseer && Overseer->IsOverseerCamera());
 }
 
 void UTerrainSubsystem::UpdateRoofVisibility(bool bForce)

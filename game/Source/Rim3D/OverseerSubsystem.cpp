@@ -199,7 +199,50 @@ AOverseerPawn* UOverseerSubsystem::GetOverseerPawn() const
 
 bool UOverseerSubsystem::IsOverseerActive() const
 {
+	return (bActive || bUiOverDirect) && IsValid(Pawn.Get());
+}
+
+bool UOverseerSubsystem::IsOverseerCamera() const
+{
 	return bActive && IsValid(Pawn.Get());
+}
+
+bool UOverseerSubsystem::MakeCameraPawn()
+{
+	UWorld* World = GetWorld();
+	if (IsValid(Pawn.Get()))
+	{
+		return true;
+	}
+	if (!World)
+	{
+		return false;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Pawn = World->SpawnActor<AOverseerPawn>(AOverseerPawn::StaticClass(), FTransform::Identity, Params);
+	if (!Pawn)
+	{
+		return false;
+	}
+	if (const USimSubsystem* Bridge = World->GetSubsystem<USimSubsystem>(); Bridge && Bridge->GetSim())
+	{
+		const colony::Map& Map = Bridge->GetSim()->map();
+		Pawn->FocusOn(Bridge->SimToWorld(Map.width() * 0.5f, Map.height() * 0.5f, 0));
+	}
+	Pawn->SnapCamera();
+	return true;
+}
+
+bool UOverseerSubsystem::SetUiOverDirectView(bool bOn)
+{
+	if (bOn && !MakeCameraPawn())
+	{
+		return false;
+	}
+	bUiOverDirect = bOn;
+	UE_LOG(LogOverseer, Log, TEXT("Overseer panels over the walking view: %s"), bOn ? TEXT("on") : TEXT("off"));
+	return true;
 }
 
 AOverseerPawn* UOverseerSubsystem::EnterOverseerMode()
@@ -211,22 +254,11 @@ AOverseerPawn* UOverseerSubsystem::EnterOverseerMode()
 		UE_LOG(LogOverseer, Warning, TEXT("No player controller to give the overseer camera to"));
 		return nullptr;
 	}
-	if (!IsValid(Pawn.Get()))
+	if (!MakeCameraPawn())
 	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		Pawn = World->SpawnActor<AOverseerPawn>(AOverseerPawn::StaticClass(), FTransform::Identity, Params);
-		if (!Pawn)
-		{
-			return nullptr;
-		}
-		if (const USimSubsystem* Bridge = World->GetSubsystem<USimSubsystem>(); Bridge && Bridge->GetSim())
-		{
-			const colony::Map& Map = Bridge->GetSim()->map();
-			Pawn->FocusOn(Bridge->SimToWorld(Map.width() * 0.5f, Map.height() * 0.5f, 0));
-		}
-		Pawn->SnapCamera();
+		return nullptr;
 	}
+	bUiOverDirect = false;
 	bActive = true;
 	PC->Possess(Pawn);
 	PC->SetViewTarget(Pawn);

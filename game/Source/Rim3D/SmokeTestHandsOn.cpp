@@ -9,6 +9,8 @@
 #include "Kismet/GameplayStatics.h"
 
 #include "HandsOnSubsystem.h"
+#include "KeyBindings.h"
+#include "OverseerSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
@@ -61,6 +63,9 @@ namespace
 		int32 LogsBefore = 0;
 		float FallClock = 0.0f;
 		int32 FallShots = 0;
+		float StandX = 0.0f;
+		float StandY = 0.0f;
+		int32 ChainedAtStart = 0;
 		bool bFallStarted = false;
 	};
 
@@ -431,17 +436,38 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		State->bDone = false;
 	});
 
-	// 7. The build ghost: B, aim at the ground, see it, click.
-	AddPhase(TEXT("build_ghost"), [=, this]()
+	// 7. The build screen (sneed 2026-11-25): B brings up the overseer's bar over this view with Build open, the camera
+	// stays, the mouse is free; a click at the middle of the screen (where the crosshair was) plans a wall there, and the
+	// colonist does not move. B again goes back to walking.
+	AddPhase(TEXT("build_screen"), [=, this]()
 	{
 		Release();
 		Hands()->SetScripted(true);
 		Aim(315.0f, -35.0f);
 		State->Step = 0;
-		Hands()->ToggleBuilding();
-		if (!Orders()->IsDirectBuilding() || !Orders()->SelectBuilding(TEXT("Wall")))
+		if (const colony::ThingView* Mine = Me())
 		{
-			Fail(TEXT("B did not take the build ghost in hand"));
+			State->StandX = Mine->x;
+			State->StandY = Mine->y;
+		}
+		Hands()->ToggleBuilding();  // as B does
+		UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+		if (!Prot()->IsBuildUiOpen() || !Overseer || !Overseer->IsOverseerActive() || Overseer->IsOverseerCamera())
+		{
+			Fail(TEXT("B did not bring up the overseer's panels over the walking view"));
+		}
+		if (!PC || PC->GetViewTarget() != Prot()->GetBody() || !PC->bShowMouseCursor)
+		{
+			Fail(TEXT("The build screen moved the camera off the colonist or kept the mouse captured"));
+		}
+		if (!Orders()->IsBuildMenuOpen())
+		{
+			Fail(TEXT("The build screen did not open the Build menu"));
+		}
+		if (Orders()->IsDirectBuilding() || !Orders()->SelectBuilding(TEXT("Wall")) || Orders()->GetTool() != EOrderTool::Build)
+		{
+			Fail(TEXT("The Build menu did not take the wall in hand"));
 		}
 	}, 1.0f, 4.0f, [=, this]()
 	{
@@ -450,29 +476,95 @@ void USmokeTestSubsystem::BuildHandsOnPhases()
 		{
 			State->Step = 1;
 			colony::CellPos Cell;
-			if (!Hands()->GetAimCell(Cell))
+			APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+			int32 Wide = 0;
+			int32 High = 0;
+			if (PC)
 			{
-				Fail(TEXT("The crosshair found no ground for the ghost"));
+				PC->GetViewportSize(Wide, High);
+			}
+			if (!Hands()->GetAimCell(Cell) || Wide <= 0 || High <= 0)
+			{
+				Fail(TEXT("No ground under the middle of the screen"));
 				return;
 			}
 			State->GhostCell = Cell;
-			if (Orders()->GetStats().GhostValid + Orders()->GetStats().GhostInvalid < 1)
+			// A click as the mouse makes it, at the middle of the screen (where the cursor comes up).
+			const FVector2D Middle(Wide * 0.5, High * 0.5);
+			if (!Orders()->HandleLeftPressed(Middle) || !Orders()->HandleLeftReleased(Middle))
 			{
-				Fail(TEXT("No ghost was drawn"));
-			}
-			if (!Hands()->PlaceBuilding())
-			{
-				Fail(TEXT("The click did not plan the wall"));
+				Fail(TEXT("The click on the ground did not reach the Build tool"));
 			}
 		}
 	}, [=, this]()
 	{
 		const colony::Sim* Sim = SimOf();
-		if (!Sim || Sim->construction().siteAt(State->GhostCell) == colony::kNoEntity)
+		bool bNear = false;
+		for (int32 Dy = -1; Sim && Dy <= 1; ++Dy)
 		{
-			Fail(TEXT("There is no plan where the ghost was"));
+			for (int32 Dx = -1; Dx <= 1; ++Dx)
+			{
+				bNear = bNear || Sim->construction().siteAt(colony::CellPos{State->GhostCell.x + Dx, State->GhostCell.y + Dy, 0}) != colony::kNoEntity;
+			}
 		}
-		Orders()->CancelTool();
+		if (!bNear)
+		{
+			Fail(FString::Printf(TEXT("There is no wall planned at the middle of the screen (cell %d, %d)"), State->GhostCell.x, State->GhostCell.y));
+		}
+		if (const colony::ThingView* Mine = Me(); !Mine || FMath::Abs(Mine->x - State->StandX) > 0.05f || FMath::Abs(Mine->y - State->StandY) > 0.05f)
+		{
+			Fail(TEXT("The colonist moved while the build screen was up"));
+		}
+		Hands()->ToggleBuilding();  // B again
+		const UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
+		if (Prot()->IsBuildUiOpen() || (Overseer && Overseer->IsOverseerActive()) || Orders()->GetTool() != EOrderTool::None || Rim3DKeys::AreGameKeysBlocked())
+		{
+			Fail(TEXT("B did not close the build screen"));
+		}
+		Notes.Add(FString::Printf(TEXT("handson build_screen: wall planned near cell %d, %d; %d frames up"), State->GhostCell.x, State->GhostCell.y,
+			Prot()->GetBuildUiFrames()));
+	});
+
+	// 7b. Holding F on: two grass cells in reach, F held on the first, and the second is cut without letting go.
+	AddPhase(TEXT("hold_on_grass"), [=, this]()
+	{
+		colony::Sim* Sim = SimOf();
+		if (!Sim)
+		{
+			return;
+		}
+		const colony::DefId Grass = Sim->defs().idOf("Things", "Plant_Grass");
+		Sim->plants().place(colony::CellPos{65, 65, 0}, Grass, 1.0f);
+		Sim->plants().place(colony::CellPos{66, 66, 0}, Grass, 1.0f);
+		Aim(45.0f, -30.0f);
+		State->bHeld = false;
+		State->bDone = false;
+		State->ChainedAtStart = Hands()->GetStats().ChainedJobs;
+	}, 1.0f, 20.0f, [=, this]()
+	{
+		const colony::Sim* Sim = SimOf();
+		if (!Prot()->IsDirectMode() || !Sim || State->bDone)
+		{
+			return;
+		}
+		if (HoldWhenReady(colony::HandsOnKind::Cut) && !Sim->plants().has(colony::CellPos{65, 65, 0}) && !Sim->plants().has(colony::CellPos{66, 66, 0}))
+		{
+			State->bDone = true;
+			Release();
+		}
+	}, [=, this]()
+	{
+		Release();
+		const colony::Sim* Sim = SimOf();
+		if (!Sim || Sim->plants().has(colony::CellPos{65, 65, 0}) || Sim->plants().has(colony::CellPos{66, 66, 0}))
+		{
+			Fail(TEXT("Holding F did not go on from one grass cell to the next"));
+		}
+		if (Hands()->GetStats().ChainedJobs <= State->ChainedAtStart)
+		{
+			Fail(TEXT("No work was started by itself while F stayed held"));
+		}
+		State->bDone = false;
 	});
 
 	// 8. Pick up again, put it down where the crosshair is, and Tab out.

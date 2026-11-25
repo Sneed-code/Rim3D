@@ -260,6 +260,9 @@ public:
 	bool IsDecalMaterialMissing() const { return bDecalMaterialMissing; }
 	/** Frames in which the HUD was drawn. */
 	int32 GetHudFramesDrawn() const { return HudFramesDrawn; }
+	/** The top edge (screen pixels) of the weapon box bottom middle as drawn last frame, 0 when none was drawn: the hands-on
+	 *  prompt and the carry box sit on top of it. */
+	float GetBottomBoxTop() const { return GunBoxFrame + 1 >= GFrameCounter ? GunBoxTop : 0.0f; }
 	/** The weapon in a pawn's hands, if it has one (drawn by UWeaponDrawSubsystem since U22). */
 	UStaticMeshComponent* GetHeldGun(colony::Entity Pawn) const;
 
@@ -456,4 +459,6 @@ private:
 	int32 HitMarkers = 0;
 	int32 HitboxesDrawn = 0;
 	int32 HudFramesDrawn = 0;
+	float GunBoxTop = 0.0f;
+	uint64 GunBoxFrame = 0;
 };
