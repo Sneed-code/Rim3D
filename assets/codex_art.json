@@ -569,7 +569,8 @@
    "kind": "gun"
   },
   "Gun_RecurveBow": {
-   "kind": "gun"
+   "kind": "gun",
+   "turn": "xz-swap"
   },
   "Gun_Revolver": {
    "kind": "gun"
@@ -930,6 +931,185 @@
     "Spool",
     "Lamp"
    ]
+  },
+  "Grenade_Frag": {
+   "kind": "item",
+   "def": "Grenade_Frag",
+   "size": [
+    0.065,
+    0.061,
+    0.109
+   ]
+  },
+  "MealSurvivalPack": {
+   "kind": "item",
+   "def": "MealSurvivalPack",
+   "size": [
+    0.22,
+    0.14,
+    0.06
+   ]
+  },
+  "Pemmican": {
+   "kind": "item",
+   "def": "Pemmican",
+   "size": [
+    0.22,
+    0.177,
+    0.072
+   ]
+  },
+  "Beer": {
+   "kind": "item",
+   "def": "Beer",
+   "size": [
+    0.23,
+    0.158,
+    0.25
+   ]
+  },
+  "MealNutrientPaste": {
+   "kind": "item",
+   "def": "MealNutrientPaste",
+   "size": [
+    0.24,
+    0.18,
+    0.06
+   ]
+  },
+  "Chemfuel": {
+   "kind": "item",
+   "def": "Chemfuel",
+   "size": [
+    0.362,
+    0.191,
+    0.354
+   ]
+  },
+  "Kibble": {
+   "kind": "item",
+   "def": "Kibble",
+   "size": [
+    0.3,
+    0.22,
+    0.14
+   ]
+  },
+  "MedicineLumen": {
+   "kind": "item",
+   "def": "MedicineLumen",
+   "size": [
+    0.26,
+    0.163,
+    0.1
+   ]
+  },
+  "SculptureSmall": {
+   "kind": "building",
+   "def": "SculptureSmall",
+   "size": [
+    0.486,
+    0.541,
+    0.871
+   ]
+  },
+  "SculptureLarge": {
+   "kind": "building",
+   "def": "SculptureLarge",
+   "size": [
+    0.878,
+    1.853,
+    1.697
+   ]
+  },
+  "SculptureGrand": {
+   "kind": "building",
+   "def": "SculptureGrand",
+   "size": [
+    1.875,
+    1.82,
+    2.644
+   ]
+  },
+  "Column": {
+   "kind": "building",
+   "def": "Column",
+   "size": [
+    0.6,
+    0.6,
+    3.0
+   ]
+  },
+  "FenceGate": {
+   "kind": "building",
+   "def": "FenceGate",
+   "size": [
+    1.0,
+    0.12,
+    1.2
+   ]
+  },
+  "MeditationSpot": {
+   "kind": "building",
+   "def": "MeditationSpot",
+   "size": [
+    0.9,
+    0.9,
+    0.12
+   ]
+  },
+  "AnimalSleepingSpot": {
+   "kind": "building",
+   "def": "AnimalSleepingSpot",
+   "size": [
+    0.85,
+    0.85,
+    0.1
+   ]
+  },
+  "SteamGeyser": {
+   "kind": "building",
+   "def": "SteamGeyser",
+   "size": [
+    1.9,
+    1.9,
+    0.35
+   ],
+   "parts": [
+    "Water",
+    "Bubbles",
+    "Throat"
+   ]
+  },
+  "ShipStructuralBeam": {
+   "kind": "building",
+   "def": "ShipStructuralBeam",
+   "size": [
+    1.9,
+    5.9,
+    1.4
+   ],
+   "parts": [
+    "StatusLights",
+    "JackFeet"
+   ]
+  },
+  "Gun_DoomsdayLauncher": {
+   "kind": "gun"
+  },
+  "Gun_Greatbow": {
+   "kind": "gun",
+   "turn": "xz-swap"
+  },
+  "Gun_EMPLauncher": {
+   "kind": "gun"
+  },
+  "Gun_ShortBow": {
+   "kind": "gun",
+   "turn": "xz-swap"
+  },
+  "Gun_Pila": {
+   "kind": "gun"
   }
  },
  "buildings": [
@@ -2206,6 +2386,251 @@
     "fbx": "assets/raw/codex/TailorBenchElectric/TailorBenchElectric_Lamp_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/TailorBenchElectric",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Grenade_Frag",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Grenade_Frag",
+    "fbx": "assets/raw/codex/Grenade_Frag/Grenade_Frag_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Grenade_Frag",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MealSurvivalPack",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MealSurvivalPack",
+    "fbx": "assets/raw/codex/MealSurvivalPack/MealSurvivalPack_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MealSurvivalPack",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Pemmican",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Pemmican",
+    "fbx": "assets/raw/codex/Pemmican/Pemmican_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Pemmican",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Beer",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Beer",
+    "fbx": "assets/raw/codex/Beer/Beer_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Beer",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MealNutrientPaste",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MealNutrientPaste",
+    "fbx": "assets/raw/codex/MealNutrientPaste/MealNutrientPaste_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MealNutrientPaste",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Chemfuel",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Chemfuel",
+    "fbx": "assets/raw/codex/Chemfuel/Chemfuel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Chemfuel",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Kibble",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Kibble",
+    "fbx": "assets/raw/codex/Kibble/Kibble_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Kibble",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MedicineLumen",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MedicineLumen",
+    "fbx": "assets/raw/codex/MedicineLumen/MedicineLumen_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MedicineLumen",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "SculptureSmall",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "SculptureSmall",
+    "fbx": "assets/raw/codex/SculptureSmall/SculptureSmall_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SculptureSmall",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SculptureLarge",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SculptureLarge",
+    "fbx": "assets/raw/codex/SculptureLarge/SculptureLarge_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SculptureLarge",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SculptureGrand",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SculptureGrand",
+    "fbx": "assets/raw/codex/SculptureGrand/SculptureGrand_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SculptureGrand",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Column",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Column",
+    "fbx": "assets/raw/codex/Column/Column_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Column",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "FenceGate",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "FenceGate",
+    "fbx": "assets/raw/codex/FenceGate/FenceGate_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/FenceGate",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MeditationSpot",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MeditationSpot",
+    "fbx": "assets/raw/codex/MeditationSpot/MeditationSpot_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MeditationSpot",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "AnimalSleepingSpot",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "AnimalSleepingSpot",
+    "fbx": "assets/raw/codex/AnimalSleepingSpot/AnimalSleepingSpot_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/AnimalSleepingSpot",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SteamGeyser",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SteamGeyser",
+    "fbx": "assets/raw/codex/SteamGeyser/SteamGeyser_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SteamGeyser",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "SteamGeyser",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SteamGeyser_Water",
+    "fbx": "assets/raw/codex/SteamGeyser/SteamGeyser_Water_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SteamGeyser",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SteamGeyser",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SteamGeyser_Bubbles",
+    "fbx": "assets/raw/codex/SteamGeyser/SteamGeyser_Bubbles_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SteamGeyser",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SteamGeyser",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "SteamGeyser_Throat",
+    "fbx": "assets/raw/codex/SteamGeyser/SteamGeyser_Throat_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SteamGeyser",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipStructuralBeam",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipStructuralBeam",
+    "fbx": "assets/raw/codex/ShipStructuralBeam/ShipStructuralBeam_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipStructuralBeam",
+    "normalOpenGL": true,
+    "emissiveStrength": 3.0
+   }
+  },
+  {
+   "def": "ShipStructuralBeam",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipStructuralBeam_StatusLights",
+    "fbx": "assets/raw/codex/ShipStructuralBeam/ShipStructuralBeam_StatusLights_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipStructuralBeam",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ShipStructuralBeam",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "ShipStructuralBeam_JackFeet",
+    "fbx": "assets/raw/codex/ShipStructuralBeam/ShipStructuralBeam_JackFeet_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ShipStructuralBeam",
     "normalOpenGL": true
    }
   }

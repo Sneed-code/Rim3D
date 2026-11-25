@@ -105,7 +105,7 @@
   ]
  },
  {
-  "defName": "Column",
+  "defName": "Column", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Column/SM_Column.SM_Column"},
   "parent": "StuffBuildingBase",
   "label": "column",
   "size": [

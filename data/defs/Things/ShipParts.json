@@ -1,6 +1,6 @@
 [
  {
-  "defName": "ShipStructuralBeam",
+  "defName": "ShipStructuralBeam", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/ShipStructuralBeam/SM_ShipStructuralBeam.SM_ShipStructuralBeam", "moving": {"anims": "ShipStructuralBeam", "parts": [{"part": "StatusLights", "mesh": "/Game/Rim3D/Generated/Buildings/ShipStructuralBeam_StatusLights/SM_ShipStructuralBeam_StatusLights.SM_ShipStructuralBeam_StatusLights"}, {"part": "JackFeet", "mesh": "/Game/Rim3D/Generated/Buildings/ShipStructuralBeam_JackFeet/SM_ShipStructuralBeam_JackFeet.SM_ShipStructuralBeam_JackFeet"}], "play": [{"clip": "Idle", "when": "always", "loop": true}]}},
   "parent": "BuildingBase",
   "label": "ship structural beam",
   "size": [
