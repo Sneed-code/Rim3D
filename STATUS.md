@@ -10,6 +10,18 @@ grenade, survival meals, pemmican, beer, nutrient paste meal, chemfuel can, kibb
 animal sleeping spot. Also in `assets/guns.json` now: the recurve bow (made in batch 4) and the incendiary and smoke
 launchers (on the grenade launcher model). Bow and pila hold points are first guesses.
 
+Hair on the scalp, creator and new colony (sneed, 2026-11-25; sim, data, art steps and Unreal): **hair** sits on the scalp
+for every style with no per-style tweaks (`docs/design/hair-physics.md` "Sitting on the scalp"): grooms preload gravity
+(`GravityPreloading=1`), roots are stiffer than tips (bend curve), the head collision is greedy spheres fitted to the scalp
+(median 3.6 mm under the skin), the layered lift is capped at 8 mm, and each style gets a short dense "Under" groom (no
+physics) that hides the scalp between strands. The bob swings again (only Buzz and Afro stay still). **Pelvis spike** on
+turns gone: the tail swing only runs when the person has a tail. **Pubic hair** finer (4500 thinner tapered strands).
+**Creator**: right-drag orbits all the way round (read from the player controller, pitch to 85 degrees up and down),
+panels flush to the screen edges, genital size, darker nipples/genitals, up to 4 tattoos and jewellery picks are back
+(chosen ones only). **New colony**: no "Land somewhere random" button; Enter presses the main button on each page and lands
+on the picked map tile; the landing map opens with a random valid site picked; tropics reach 2 tiles further from the
+equator (`tropicsExtraTiles`); no colony on a tile next to a settlement (2 away is fine).
+
 Colony creator, HUD and player polish (sneed, 2026-11-25; sim, data and Unreal): **HUD**: the date box is fully top right
 (head of the `HudLayout` right column) with the alarm as a plain **Draft / Stand down** button beside "Day N"; no "F1 keys"
 fold box (overseer or walking); the colonist faces sit flush in the top left with the selected colonist's box touching

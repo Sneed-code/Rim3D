@@ -178,6 +178,33 @@ grown shape and move with the head. A groom that comes into view (or a new style
 simulation from the grown shape (`ResetSimulation`), and a style change no longer shows the old style's wig again under
 the new strands.
 
+## Sitting on the scalp, for every style (sneed 2026-11-25)
+
+After the short styles were made still, sneed: "you succeeded in fixing the sinking into the scalp but now it's above ...
+this hair still sinks a bit and shows hairline at scalp ... consistent with any size / gender ... as i move the hair
+does and it just seems like the collision point is still too low"; the bob had stopped moving. Four causes, each fixed
+once for every style (the grower and the import, nothing per style):
+
+- **Sagging under gravity.** Unreal's groom physics starts the strands at their grown shape and lets gravity pull them
+  down until the bends give, so hair grown on the scalp settled onto and into it. Every simulated groom now has gravity
+  preloading on (`SolverSettings.GravityPreloading` 1: the solver works out the pull that holds the rest shape up), so
+  hair rests where it was grown and swings from there, and stiffer bends near the root (bend stiffness 0.05, scaled 1 at
+  the root to 0.15 at the tips; Unreal's default is 0.01 everywhere), so the roots keep their lie as the head turns and
+  stops (`HairGroomsCommandlet`). Short, Messy and Bob have their physics back; only Buzz and the afro stay still.
+- **Collision too low on the head.** The head had 12 spheres at set places 4 mm inside the skin; between them hair could
+  sink up to a centimetre. `grow_hair.head_collision` now picks 16 spheres greedily to follow the scalp, 1.5 mm inside
+  it (on MakeHuman's base mesh: hair can sink 3.6 mm median, 8.5 mm at worst, gaps included), out of 94 shapes in all
+  (Unreal reads fewer than 100; the body keeps its 78).
+- **Floating layers.** Strands stood off the scalp at a style's lift plus volume, up to 2.6 cm for the bob, with most of
+  them near the outside: a helmet with the scalp showing through its sparse inside. Now every style lies in a layer at
+  most `MAX_LAYER` (8 mm) thick over `MIN_CLEARANCE` (1.2 mm), most strands near the scalp (`clearance = 1.2 mm + layer *
+  u^1.6`).
+- **Scalp between the strands.** Every style but Buzz and the afro gets an undercoat, `<Style>Under`: half as many
+  strands again, 3.5 cm long, a little thicker, lying flat 0.7 to 1.9 mm off the scalp, combed the same way. The game
+  wears it as a second groom riding on the style's (`StrandHairWearUndercoat`, same fit and colour, shown and hidden with
+  it, never simulated), so wherever the hair parts or swings, hair shows under it, not skin. A future style gets all of
+  this by being grown.
+
 ## Near and far (step 2)
 
 `UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun

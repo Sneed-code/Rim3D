@@ -59,6 +59,9 @@ namespace
 	// and how far over the feet the eye must stay (cm).
 	constexpr float NgPreviewPitchLow = -50.0f;
 	constexpr float NgPreviewPitchHigh = 15.0f;
+	// Holding the right button goes further: nearly straight down from above and straight up from under the feet.
+	constexpr float NgPreviewOrbitPitchLow = -85.0f;
+	constexpr float NgPreviewOrbitPitchHigh = 85.0f;
 	constexpr double NgPreviewLowestEyeCm = 25.0;
 	// The engine warns on screen when its exposure passes 12 (cached lighting would clip): the screen's hour is the one
 	// nearest NgPreviewHour, earlier in the morning, whose exposure (ours, which reads a little above the engine's) stays
@@ -636,16 +639,44 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 	// orbit the character"), side to side all the way round, up and down within the tilt's limits. The wheel zooms.
 	const ImGuiIO& IO = ImGui::GetIO();
 	const float Delta = FMath::Clamp(IO.DeltaTime, 0.0f, 0.1f);
-	const bool bOrbiting = !IO.WantCaptureMouse && ImGui::IsMouseDown(ImGuiMouseButton_Right) && !ImGui::IsMouseDown(ImGuiMouseButton_Left);
+	// The right button is read from the player controller too, and the mouse's move from the cursor or, while the engine
+	// holds the cursor still for a right-button drag, from the raw mouse: ImGui alone never heard it (sneed 2026-11-25:
+	// "when i right click i cannot do a 360 orbit (or any orbit)").
+	const bool bRightDown = ImGui::IsMouseDown(ImGuiMouseButton_Right) || PC->IsInputKeyDown(EKeys::RightMouseButton);
+	float CursorX = 0.0f;
+	float CursorY = 0.0f;
+	const bool bHasCursor = PC->GetMousePosition(CursorX, CursorY);
+	const FVector2D Cursor(CursorX, CursorY);
+	FVector2D OrbitMove = bHasCursor && bPeopleHadCursor ? Cursor - PeopleLastCursor : FVector2D::ZeroVector;
+	PeopleLastCursor = Cursor;
+	bPeopleHadCursor = bHasCursor;
+	if (OrbitMove.IsNearlyZero())
+	{
+		float RawX = 0.0f;
+		float RawY = 0.0f;
+		PC->GetInputMouseDelta(RawX, RawY);
+		OrbitMove = FVector2D(RawX, -RawY) * 4.0;  // raw counts, up positive: about the same feel as cursor pixels
+	}
+	// Started over the open middle (not a panel), the orbit keeps going wherever the mouse goes until the button is let go.
+	if (!bRightDown)
+	{
+		bPeopleOrbiting = false;
+	}
+	else if (!bPeopleOrbiting && !IO.WantCaptureMouse && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+	{
+		bPeopleOrbiting = true;
+	}
+	const bool bOrbiting = bPeopleOrbiting;
 	if (bOrbiting)
 	{
-		PeopleOrbit = FRotator::NormalizeAxis(PeopleOrbit + IO.MouseDelta.x * 0.35f);
-		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.2f, NgPreviewPitchLow, NgPreviewPitchHigh);
+		// All the way round and right over and under the body (sneed: "rotate around to see underside etc all angles").
+		PeopleOrbit = FRotator::NormalizeAxis(PeopleOrbit + static_cast<float>(OrbitMove.X) * 0.35f);
+		PeoplePitch = FMath::Clamp(PeoplePitch - static_cast<float>(OrbitMove.Y) * 0.25f, NgPreviewOrbitPitchLow, NgPreviewOrbitPitchHigh);
 	}
 	if (!bOrbiting && !IO.WantCaptureMouse && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f))
 	{
 		PeopleSpinRate = Delta > 0.0f ? IO.MouseDelta.x * 0.45f / Delta : 0.0f;
-		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.15f, NgPreviewPitchLow, NgPreviewPitchHigh);
+		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.15f, FMath::Min(NgPreviewPitchLow, PeoplePitch), FMath::Max(NgPreviewPitchHigh, PeoplePitch));
 	}
 	else
 	{
@@ -670,10 +701,12 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 	const float Facing = Actor->GetDrawnYaw() + PeopleViewYaw + PeopleOrbit;
 	const FRotator Around(PeoplePitch, Facing + 180.0f, 0.0f);
 	FVector Eye = Focus - Around.Vector() * PeopleDistance;
-	// Never under the ground when looking up from far off: the eye stays a little over the feet (looking at the same spot).
+	// Never under the ground when looking up from far off: the eye stays a little over the feet (looking at the same spot),
+	// unless the right-button orbit has been taken under the body on purpose to look up at it (the ground is one-sided, so
+	// from below it is not drawn and the body shows from underneath).
 	const double LowestEye = Actor->GetActorLocation().Z + NgPreviewLowestEyeCm;
 	FRotator Looking = Around;
-	if (Eye.Z < LowestEye)
+	if (Eye.Z < LowestEye && PeoplePitch <= NgPreviewPitchHigh)
 	{
 		Eye.Z = LowestEye;
 		Looking = (Focus - Eye).Rotation();
@@ -1310,14 +1343,8 @@ void UColonyHudSubsystem::DrawScenarioPage(USimSubsystem& Bridge, float Scale)
 	{
 		MainMenuPage = 0;
 	}
-	ImGui::SameLine(FooterRight - 520.0f * Scale);
-	if (NgButton(TEXT("Land somewhere random"), false, ImVec2(250.0f * Scale, 0.0f)) && Picked)
-	{
-		StartNewColony(false);
-	}
-	ColonyHud::Tip(TEXT("Skips the world map: the shuttle comes down on a random tropical site"));
-	ImGui::SameLine();
-	if (NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) && Picked)
+	ImGui::SameLine(FooterRight - 260.0f * Scale);
+	if ((NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed()) && Picked)
 	{
 		StartNewColony(true);
 	}
@@ -1431,6 +1458,191 @@ void UColonyHudSubsystem::DrawPeopleNames(const colony::DefDatabase& Defs, const
 		Edit.nickName = PeopleNick[0] != 0 ? PeopleNick : PeopleFirst;
 		Edit.lastName = PeopleLast;
 		Submit(Edit);
+	}
+}
+
+void UColonyHudSubsystem::DrawPeopleMarks(CreatorPeople::FLook& Look, const CreatorPeople::FLook& Full, bool& bLive, bool& bSend, float Scale)
+{
+	// Up to four tattoos, scars, brands or paint marks, each on a body area, sized, turned and as strong as wanted.
+	static const float InkColours[][3] = {{0.08f, 0.10f, 0.14f}, {0.02f, 0.02f, 0.02f}, {0.10f, 0.25f, 0.14f}, {0.55f, 0.08f, 0.07f},
+		{0.10f, 0.20f, 0.55f}, {0.85f, 0.85f, 0.80f}, {0.75f, 0.45f, 0.10f}};
+	const float Gap = NgStyle::kGap * Scale;
+	NgHeading(TEXT("Tattoos and marks"));
+	const TArray<FString> Areas = CreatorPeople::MarkAreas(Look);
+	if (Areas.IsEmpty())
+	{
+		ColonyHud::TextColored(NgStyle::Faint, TEXT("This body has no areas for marks yet."));
+		return;
+	}
+	// Area names as words: "UpperArmL" -> "upper arm (left)".
+	const auto AreaWords = [](const FString& Name)
+	{
+		FString Body = Name;
+		FString SideWord;
+		if (Body.Len() > 1 && (Body.EndsWith(TEXT("L")) || Body.EndsWith(TEXT("R"))) && FChar::IsLower(Body[Body.Len() - 2]))
+		{
+			SideWord = Body.EndsWith(TEXT("L")) ? TEXT(" (left)") : TEXT(" (right)");
+			Body.LeftChopInline(1);
+		}
+		FString Out;
+		for (int32 i = 0; i < Body.Len(); ++i)
+		{
+			if (i > 0 && FChar::IsUpper(Body[i]))
+			{
+				Out.AppendChar(TEXT(' '));
+			}
+			Out.AppendChar(i > 0 ? FChar::ToLower(Body[i]) : Body[i]);
+		}
+		return Out + SideWord;
+	};
+	const auto Key = [](int32 Mark, const TCHAR* Field) { return FString::Printf(TEXT("mark%d%s"), Mark, Field); };
+	bool bOffered = false;
+	for (int32 m = 0; m < 4; ++m)
+	{
+		ImGui::PushID(m);
+		const int32 Design = FMath::RoundToInt(Full.Get(*Key(m, TEXT("Design")), -1.0f));
+		if (Design < 0)
+		{
+			if (!bOffered && NgButton(TEXT("Add a tattoo or mark"), false, ImVec2(-1.0f, 0.0f)))
+			{
+				Look.Values.Add(Key(m, TEXT("Design")), 0.0f);
+				Look.Values.Add(Key(m, TEXT("Area")), static_cast<float>(FMath::Max(0, Areas.IndexOfByKey(TEXT("UpperArmL")))));
+				bLive = bSend = true;
+			}
+			bOffered = true;
+			ImGui::PopID();
+			continue;
+		}
+		const float Avail = ImGui::GetContentRegionAvail().x;
+		const float RemoveW = ImGui::CalcTextSize("Remove").x + 2.0f * ImGui::GetStyle().FramePadding.x;
+		const float ComboW = (Avail - RemoveW - 2.0f * Gap) * 0.5f;
+		// What it is.
+		ImGui::SetNextItemWidth(ComboW);
+		if (ImGui::BeginCombo("##design", TCHAR_TO_UTF8(*CreatorPeople::MarkDesignLabel(Design))))
+		{
+			for (int32 d = 0; d < CreatorPeople::MarkDesignCount(); ++d)
+			{
+				if (ImGui::Selectable(TCHAR_TO_UTF8(*CreatorPeople::MarkDesignLabel(d)), d == Design))
+				{
+					Look.Values.Add(Key(m, TEXT("Design")), static_cast<float>(d));
+					bLive = bSend = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		// Where.
+		ImGui::SameLine(0.0f, Gap);
+		const int32 AreaIndex = FMath::Clamp(FMath::RoundToInt(Full.Get(*Key(m, TEXT("Area")), 0.0f)), 0, Areas.Num() - 1);
+		ImGui::SetNextItemWidth(ComboW);
+		if (ImGui::BeginCombo("##area", TCHAR_TO_UTF8(*AreaWords(Areas[AreaIndex]))))
+		{
+			for (int32 a = 0; a < Areas.Num(); ++a)
+			{
+				if (ImGui::Selectable(TCHAR_TO_UTF8(*AreaWords(Areas[a])), a == AreaIndex))
+				{
+					Look.Values.Add(Key(m, TEXT("Area")), static_cast<float>(a));
+					bLive = bSend = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::SameLine(0.0f, Gap);
+		if (NgButton(TEXT("Remove")))
+		{
+			for (const TCHAR* Field : {TEXT("Design"), TEXT("Area"), TEXT("Size"), TEXT("Angle"), TEXT("Opacity"), TEXT("R"), TEXT("G"), TEXT("B")})
+			{
+				Look.Values.Remove(Key(m, Field));
+			}
+			bLive = bSend = true;
+			ImGui::PopID();
+			continue;
+		}
+		// How big, which way and how strong.
+		const auto Small = [&](const TCHAR* Field, const char* Format, float Default, float Min, float Max, float Width)
+		{
+			float Value = Full.Get(*Key(m, Field), Default);
+			ImGui::SetNextItemWidth(Width);
+			if (ImGui::SliderFloat(TCHAR_TO_UTF8(*FString::Printf(TEXT("##%s"), Field)), &Value, Min, Max, Format))
+			{
+				Look.Values.Add(Key(m, Field), Value);
+				bLive = true;
+			}
+			bSend |= ImGui::IsItemDeactivatedAfterEdit();
+		};
+		const float Third = (ImGui::GetContentRegionAvail().x - 2.0f * Gap) / 3.0f;
+		Small(TEXT("Size"), "%.0f cm", 12.0f, 3.0f, 40.0f, Third);
+		ImGui::SameLine(0.0f, Gap);
+		Small(TEXT("Angle"), "turn %.0f", 0.0f, -180.0f, 180.0f, Third);
+		ImGui::SameLine(0.0f, Gap);
+		Small(TEXT("Opacity"), "strength %.2f", 0.9f, 0.1f, 1.0f, Third);
+		if (CreatorPeople::MarkDesignTakesColour(Design))
+		{
+			const float Swatch = 22.0f * Scale;
+			for (int32 c = 0; c < static_cast<int32>(UE_ARRAY_COUNT(InkColours)); ++c)
+			{
+				if (c > 0)
+				{
+					ImGui::SameLine(0.0f, Gap * 0.6f);
+				}
+				const bool bSame = FMath::IsNearlyEqual(Full.Get(*Key(m, TEXT("R")), InkColours[0][0]), InkColours[c][0], 0.01f) &&
+					FMath::IsNearlyEqual(Full.Get(*Key(m, TEXT("G")), InkColours[0][1]), InkColours[c][1], 0.01f) &&
+					FMath::IsNearlyEqual(Full.Get(*Key(m, TEXT("B")), InkColours[0][2]), InkColours[c][2], 0.01f);
+				if (NgSwatch(TCHAR_TO_UTF8(*FString::Printf(TEXT("##ink%d"), c)), InkColours[c], bSame, Swatch))
+				{
+					Look.Values.Add(Key(m, TEXT("R")), InkColours[c][0]);
+					Look.Values.Add(Key(m, TEXT("G")), InkColours[c][1]);
+					Look.Values.Add(Key(m, TEXT("B")), InkColours[c][2]);
+					bLive = bSend = true;
+				}
+			}
+		}
+		NgRule();
+		ImGui::PopID();
+	}
+}
+
+void UColonyHudSubsystem::DrawPeopleJewellery(CreatorPeople::FLook& Look, const CreatorPeople::FLook& Full, bool& bLive, bool& bSend, float Scale)
+{
+	// Each piece on or off, in its metal.
+	const float Gap = NgStyle::kGap * Scale;
+	NgHeading(TEXT("Jewellery"));
+	const float Avail = ImGui::GetContentRegionAvail().x;
+	const float MetalW = FMath::Min(130.0f * Scale, Avail * 0.35f);
+	for (int32 j = 0; j < CreatorPeople::JewelCount(); ++j)
+	{
+		ImGui::PushID(j);
+		const FString Name = FString::Printf(TEXT("jewel%d"), j);
+		const int32 Worn = FMath::RoundToInt(Full.Get(*Name, 0.0f));
+		if (NgButton(CreatorPeople::JewelLabel(j), Worn > 0, ImVec2(Avail - MetalW - Gap, 0.0f)))
+		{
+			if (Worn > 0)
+			{
+				Look.Values.Remove(Name);
+			}
+			else
+			{
+				Look.Values.Add(Name, 1.0f);
+			}
+			bLive = bSend = true;
+		}
+		if (Worn > 0)
+		{
+			ImGui::SameLine(0.0f, Gap);
+			ImGui::SetNextItemWidth(MetalW);
+			if (ImGui::BeginCombo("##metal", TCHAR_TO_UTF8(*CreatorPeople::MetalLabel(Worn - 1))))
+			{
+				for (int32 Metal = 0; Metal < CreatorPeople::MetalCount(); ++Metal)
+				{
+					if (ImGui::Selectable(TCHAR_TO_UTF8(*CreatorPeople::MetalLabel(Metal)), Metal == Worn - 1))
+					{
+						Look.Values.Add(Name, static_cast<float>(Metal + 1));
+						bLive = bSend = true;
+					}
+				}
+				ImGui::EndCombo();
+			}
+		}
+		ImGui::PopID();
 	}
 }
 
@@ -1615,6 +1827,13 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 			bLive = bSend = true;
 		}
 	}
+	// The rest of the old creator's choices (sneed 2026-11-25): genital size, how dark the nipples and genitals are,
+	// tattoos and other marks, and jewellery. Only what the player picks; nobody is given any by chance.
+	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
+	Slider(TEXT("Genital size"), TEXT("genital"), -1.0f, 1.0f);
+	Slider(TEXT("Darker nipples and genitals"), TEXT("pigment"), 0.0f, 1.0f);
+	DrawPeopleMarks(Look, Full, bLive, bSend, Scale);
+	DrawPeopleJewellery(Look, Full, bLive, bSend, Scale);
 	ImGui::Dummy(ImVec2(1.0f, Gap));
 	if (bYou)
 	{
@@ -2004,22 +2223,25 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 	}
 	UpdatePeopleCamera(Picked);
 
+	// The panels sit flush on the screen's edges and on each other, with no gaps (sneed 2026-11-25: "the bottom ui bar is
+	// right at the bottom of the screen ... the two side panels ... stretched to sizes so the open viewing box has no
+	// gaps"): the bar along the whole bottom, the side panels from the top down onto it.
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const float Pad = NgStyle::kPad * Scale;
 	const float Gap = NgStyle::kGap * Scale;
-	const float Left = Viewport->Pos.x + Pad;
-	const float Right = Viewport->Pos.x + Viewport->Size.x - Pad;
-	const float Top = Viewport->Pos.y + Pad;
-	const float FooterH = 62.0f * Scale;
-	const float Bottom = Viewport->Pos.y + Viewport->Size.y - Pad - FooterH;
-	const float SideW = 420.0f * Scale;
-	const float InfoW = 460.0f * Scale;
+	const float Left = Viewport->Pos.x;
+	const float Right = Viewport->Pos.x + Viewport->Size.x;
+	const float Top = Viewport->Pos.y;
+	const float FooterH = FMath::Max(70.0f * Scale, ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().WindowPadding.y + 8.0f * Scale);
+	const float Bottom = Viewport->Pos.y + Viewport->Size.y - FooterH;
+	const float SideW = FMath::Min(460.0f * Scale, Viewport->Size.x * 0.27f);
+	const float InfoW = FMath::Min(500.0f * Scale, Viewport->Size.x * 0.29f);
 	const colony::Colonist* Colonist = Sim->colonistOf(Picked);
 
 	if (bYouPage)
 	{
 		// Left: who you are (nobody you remember).
-		if (NgBeginPanel("##NgYou", ImVec2(Left, Top), ImVec2(SideW, Bottom - Top - Gap)))
+		if (NgBeginPanel("##NgYou", ImVec2(Left, Top), ImVec2(SideW, Bottom - Top)))
 		{
 			NgTitle(TEXT("Who you are"));
 			ImGui::PushTextWrapPos(0.0f);
@@ -2038,7 +2260,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		}
 		NgEndPanel();
 		// Right: the looks.
-		if (NgBeginPanel("##NgYouLooks", ImVec2(Right - InfoW, Top), ImVec2(InfoW, Bottom - Top - Gap)))
+		if (NgBeginPanel("##NgYouLooks", ImVec2(Right - InfoW, Top), ImVec2(InfoW, Bottom - Top)))
 		{
 			NgHeading(TEXT("Your looks"));
 			DrawPeopleLooks(*Sim, Picked, 0, true, Scale);
@@ -2076,10 +2298,10 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 			ImGui::EndGroup();
 		}
 		NgEndPanel();
-		const float BodyTop = Top + HeadH + Gap;
+		const float BodyTop = Top + HeadH;
 
 		// Left: the two strangers as cards.
-		if (NgBeginPanel("##NgCompanionsCards", ImVec2(Left, BodyTop), ImVec2(SideW, Bottom - BodyTop - Gap)))
+		if (NgBeginPanel("##NgCompanionsCards", ImVec2(Left, BodyTop), ImVec2(SideW, Bottom - BodyTop)))
 		{
 			NgHeading(TEXT("The strangers"));
 			ImGui::PushTextWrapPos(0.0f);
@@ -2169,7 +2391,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		NgEndPanel();
 
 		// Right: traits or looks of the one being shaped.
-		if (Colonist && NgBeginPanel("##NgCompanionsInfo", ImVec2(Right - InfoW, BodyTop), ImVec2(InfoW, Bottom - BodyTop - Gap)))
+		if (Colonist && NgBeginPanel("##NgCompanionsInfo", ImVec2(Right - InfoW, BodyTop), ImVec2(InfoW, Bottom - BodyTop)))
 		{
 			const float Half = (ImGui::GetContentRegionAvail().x - Gap) * 0.5f;
 			if (NgButton(TEXT("Traits and skills"), PeopleTab == 0, ImVec2(Half, 0.0f)))
@@ -2198,9 +2420,10 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 	}
 
 	// Under the body: how to look at it (the clothes tick is in the looks, next to the skin).
-	const float StripW = 760.0f * Scale;
+	// It fills the open middle's width and sits on the bar, between the side panels.
+	const float StripW = Right - InfoW - (Left + SideW);
 	const float StripH = ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().WindowPadding.y + 4.0f * Scale;
-	if (NgBeginPanel("##NgPeopleStrip", ImVec2(Viewport->Pos.x + (Viewport->Size.x - StripW) * 0.5f, Bottom - StripH - Gap), ImVec2(StripW, StripH)))
+	if (NgBeginPanel("##NgPeopleStrip", ImVec2(Left + SideW, Bottom - StripH), ImVec2(StripW, StripH)))
 	{
 		ImGui::AlignTextToFramePadding();
 		ImGui::TextColored(NgStyle::Faint, "%s", "Drag: spin    Hold right click: orbit    Wheel: zoom");
@@ -2245,7 +2468,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		ImGui::SameLine(FootRight - 280.0f * Scale);
 		if (bYouPage)
 		{
-			if (NgButton(TEXT("Next: your companions"), false, ImVec2(280.0f * Scale, 0.0f), true))
+			if (NgButton(TEXT("Next: your companions"), false, ImVec2(280.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed())
 			{
 				MainMenuPage = 4;
 				PeopleSelected = 1;
@@ -2255,7 +2478,7 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 				PeopleSpinRate = 0.0f;
 			}
 		}
-		else if (NgButton(TEXT("Land and start"), false, ImVec2(280.0f * Scale, 0.0f), true))
+		else if (NgButton(TEXT("Land and start"), false, ImVec2(280.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed())
 		{
 			NgEndPanel();
 			LandColony(Bridge);

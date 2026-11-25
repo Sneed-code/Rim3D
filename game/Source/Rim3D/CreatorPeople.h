@@ -57,4 +57,21 @@ namespace CreatorPeople
 	FString HairStyleLabel(int32 Index);
 	/** Whether the pawn's base has this hair style (bald always). */
 	bool HasHairStyle(int32 Index, const ASimPawnActor& Pawn);
+
+	/**
+	 * Chosen cosmetics (never generated; docs/design/new-game.md): genital (-1 smaller .. 1 larger), pigment (0 .. 1, how
+	 * much darker the nipples and genitals are than the skin), jewel<j> (the piece's metal + 1; 0 or absent: not worn),
+	 * and up to four marks mark<m>Design (index into the designs, -1 none), mark<m>Area (index into MarkAreas),
+	 * mark<m>Size (cm), mark<m>Angle (degrees), mark<m>Opacity, mark<m>R/G/B (ink or paint, sRGB).
+	 */
+	int32 JewelCount();
+	FString JewelLabel(int32 Index);
+	int32 MetalCount();
+	FString MetalLabel(int32 Index);
+	int32 MarkDesignCount();
+	FString MarkDesignLabel(int32 Index);
+	/** Ink and paint take a colour; scars and brands are the skin's own. */
+	bool MarkDesignTakesColour(int32 Index);
+	/** The body areas a mark can go on for this look's base (sorted names, e.g. UpperArmL). */
+	TArray<FString> MarkAreas(const FLook& Look);
 }

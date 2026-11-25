@@ -182,7 +182,8 @@ void FMakeHumanTailNode::UpdateInternal(const FAnimationUpdateContext& Context)
 
 bool FMakeHumanTailNode::IsValidToEvaluate(const USkeleton* Skeleton, const FBoneContainer& RequiredBones)
 {
-	return !Bones.IsEmpty() && Bones[0].IsValidToEvaluate(RequiredBones);
+	// No tail on show: the bones stay as animated (a folded-away tail skinned to swinging bones stretches into a spike).
+	return Amount > 0.02f && !Bones.IsEmpty() && Bones[0].IsValidToEvaluate(RequiredBones);
 }
 
 void FMakeHumanTailNode::InitializeBoneReferences(const FBoneContainer& RequiredBones)
@@ -242,7 +243,8 @@ void FMakeHumanTailNode::EvaluateSkeletalControl_AnyThread(FComponentSpacePoseCo
 		}
 		const float Along = (i + 1.0f) / FMath::Max(Count, 1);
 		const float Wave = (5.0f + 4.0f * Pace) * FMath::Sin(2.0f * PI * Time - 0.9f * i);
-		const float Angle = (Wave + TurnSwing / FMath::Max(Count, 1) * 2.0f * Along) * (0.5f + Along);
+		// A short (part-grown) tail swings less: its tube is partly folded towards the root.
+		const float Angle = (Wave + TurnSwing / FMath::Max(Count, 1) * 2.0f * Along) * (0.5f + Along) * FMath::Square(FMath::Clamp(Amount, 0.0f, 1.0f));
 		TipAngle += Angle;
 		Total = FQuat(FVector::UpVector, FMath::DegreesToRadians(Angle)) * Total;
 		FTransform Moved = Original[i];
@@ -1476,6 +1478,11 @@ int32 UMakeHumanAnimInstance::GetPhysicsChains() const
 void UMakeHumanAnimInstance::SetSoftTissueEnabled(bool bEnabled)
 {
 	GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled = bEnabled;
+}
+
+void UMakeHumanAnimInstance::SetTailAmount(float Amount)
+{
+	GetProxyOnGameThread<FMakeHumanAnimProxy>().Tail.Amount = FMath::Clamp(Amount, 0.0f, 1.0f);
 }
 
 void UMakeHumanAnimInstance::SetBreastJiggle(float Amount)

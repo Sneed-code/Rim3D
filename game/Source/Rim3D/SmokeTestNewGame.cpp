@@ -179,7 +179,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 	ScenarioPhase.Setup = [=, this]() { Hud()->SetMainMenuPageForTest(1); };
 	Phases.Add(MoveTemp(ScenarioPhase));
 
-	// 3. Land somewhere random: "You", with the three on their creator bodies.
+	// 3. Land on a random site (no button for it any more; the test still starts that way): "You", with the three on their creator bodies.
 	FPhase PeoplePhase;
 	PeoplePhase.Name = TEXT("newgame_people");
 	PeoplePhase.WarmupSeconds = 8.0f;

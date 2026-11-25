@@ -16,7 +16,7 @@ Elevation (m, negative under water), yearly mean temperature (°C), rainfall (mm
 
 1. **Elevation:** four to five octaves of wrapping value noise. Sea level is the quantile that leaves `landFraction` (40%) as land. Land metres rise to `highestPeak` (4,500), the sea floor falls to `seaFloorDepth`.
 2. **Temperature:** `equator - poleDrop * |lat|^1.5`, minus 6.5 °C per km of height, plus a few degrees of noise; water is moderated (x 0.9).
-3. **Rainfall:** a wet band at the equator and one in the mid latitudes, dry subtropics between, times noise, plus a bonus near the coast, less in the cold.
+3. **Rainfall:** a wet band at the equator and one in the mid latitudes (2026-11-25, sneed: `tropicsExtraTiles`, 2, widens the hot and wet equator belt by that many tiles each side: the temperature drop and the equator band start that far from the equator, so jungle and tropical swamp reach two tiles further north and south), dry subtropics between, times noise, plus a bonus near the coast, less in the cold.
 4. **Biome:** `biomeRules`, tried in order, first match wins, by temperature, rainfall and a swampiness noise; a biome that does not exist falls back to temperate forest. A tile is swampy when the noise is above `swampiness.threshold`, or, for each swampy rule (cold bog, temperate swamp, tropical swamp), when it is in the top `swampiness.minRuleShare` (30%) of the land fitting that rule's temperature and rainfall: the wet places swamps need are thin bands, and world 42's noise missed them all (no swamps at all before). The `CrashlandedRainforest` start on world 42 moved with it from tile 3956 to tile 3776 (flat, about 29 C); `-SimWorldTile=3956` still gives the old one. Frozen water gets `waterRules` (sea ice).
 5. **Hilliness:** a score from height and a ruggedness noise, cut at the `quantiles` of land tiles (52% flat, 24% small hills, 14% large hills, 9% mountainous, 1% impassable).
 6. **Rivers:** water runs from every land tile to its lowest neighbour (a tiny per-tile jitter makes the order strict); a tile's river size is how much passes through it (creek, river, large, huge). A pit that a river runs into becomes a lake.
@@ -25,7 +25,7 @@ Elevation (m, negative under water), yearly mean temperature (°C), rainfall (mm
 
 ## Choosing a start tile
 
-`canStartAt(tile)`: land, a biome, not impassable (`startTile.maxHilliness`), no settlement. `chooseStartTile(tile)` sets it; `suggestStartTile(StartCriteria)` picks one (by seed) that is a given biome, in a temperature range, beside a river or a road (-1 when none). `siteFor(tile)` gives the map generator (S8) what it needs: biome name, hilliness, river size, road, temperature, rainfall, elevation and a `mapSeed` made from the world seed and the tile, so a tile always makes the same 1 km map.
+`canStartAt(tile)`: land, a biome, not impassable (`startTile.maxHilliness`), no settlement, and no settlement on any of the six hexagon neighbours (`hexNeighbour`: the sides the map draws, pointy-top, odd rows half a unit right; 2026-11-25, sneed: 2 tiles away is fine, `nearSettlement` names the one that is too close). `chooseStartTile(tile)` sets it; `suggestStartTile(StartCriteria)` picks one (by seed) that is a given biome, in a temperature range, beside a river or a road (-1 when none). `siteFor(tile)` gives the map generator (S8) what it needs: biome name, hilliness, river size, road, temperature, rainfall, elevation and a `mapSeed` made from the world seed and the tile, so a tile always makes the same 1 km map.
 
 ## The game on a world (W2)
 

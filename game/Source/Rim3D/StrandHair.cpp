@@ -169,6 +169,73 @@ namespace
 		return Pawn && (Pawn->GetSeveredShown() & colony::kSeveredHead) != 0;
 	}
 
+	/** The undercoat grown with a style (grow_hair.py <Style>Under, GA_<base>_<Style>Under), or null: short strands lying
+	 *  flat on the scalp, never simulated, worn under the style so that wherever its hair parts or swings the scalp reads
+	 *  as hair (sneed 2026-11-25: "shows hairline at scalp ... consistent with any size / gender"). Looked up once each. */
+	UGroomAsset* StrandHairUndercoatOf(const UGroomAsset& Groom)
+	{
+		static TMap<FString, TWeakObjectPtr<UGroomAsset>> Known;
+		static TSet<FString> Missing;
+		const FString Name = Groom.GetName() + TEXT("Under");
+		if (Missing.Contains(Name))
+		{
+			return nullptr;
+		}
+		if (const TWeakObjectPtr<UGroomAsset>* Found = Known.Find(Name); Found && Found->IsValid())
+		{
+			return Found->Get();
+		}
+		UGroomAsset* Under = LoadObject<UGroomAsset>(nullptr, *(FString(StrandHairGrownFolder) / Name + TEXT(".") + Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (Under)
+		{
+			Known.Add(Name, Under);
+		}
+		else
+		{
+			Missing.Add(Name);
+		}
+		return Under;
+	}
+
+	/** Hair's undercoat, as a groom riding on it (same place and size, shown and hidden with it), or none if its style has
+	 *  none (a MetaHuman groom, the afro, buzz, the pressed under-a-hat styles). */
+	void StrandHairWearUndercoat(UGroomComponent& Hair)
+	{
+		UGroomComponent* Under = nullptr;
+		for (USceneComponent* Child : Hair.GetAttachChildren())
+		{
+			if (UGroomComponent* Groom = Cast<UGroomComponent>(Child); Groom && !Under)
+			{
+				Under = Groom;
+			}
+		}
+		UGroomAsset* Wanted = Hair.GroomAsset ? StrandHairUndercoatOf(*Hair.GroomAsset) : nullptr;
+		if (!Wanted)
+		{
+			if (Under && Under->GroomAsset)
+			{
+				Under->SetGroomAsset(nullptr);
+				Under->SetVisibility(false);
+			}
+			return;
+		}
+		if (!Under)
+		{
+			UObject* Outer = Hair.GetOwner() ? static_cast<UObject*>(Hair.GetOwner()) : static_cast<UObject*>(&Hair);
+			Under = NewObject<UGroomComponent>(Outer, MakeUniqueObjectName(Outer, UGroomComponent::StaticClass(), TEXT("StrandUnder")));
+			Under->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Under->SetCanEverAffectNavigation(false);
+			Under->SetupAttachment(&Hair);
+			Under->RegisterComponent();
+		}
+		if (Under->GroomAsset != Wanted)
+		{
+			Under->SetGroomAsset(Wanted);
+		}
+		Under->SetRelativeTransform(FTransform::Identity);
+		Under->SetVisibility(Hair.IsVisible());
+	}
+
 	/** Puts Groom on Body's head: the groom's curves are in a space where the head they were made on is at SourceHead
 	 *  (component space, cm) with a neck-to-head length of SourceNeck; they are moved onto Body's head bone, scaled by
 	 *  the two lengths (within 15%), turned by the yaw cvar, then the offset cvars. */
@@ -182,7 +249,7 @@ namespace
 		{
 			if (Existing)
 			{
-				Existing->SetVisibility(false);
+				Existing->SetVisibility(false, true);  // its undercoat too
 			}
 			return Existing;
 		}
@@ -235,6 +302,7 @@ namespace
 			Hair->ResetCollisionComponents();
 			Hair->SetPhysicsAsset(Collision);
 		}
+		StrandHairWearUndercoat(*Hair);
 		if (bNewGroom)
 		{
 			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR %s on %s: fitted scale %.3f (neck to head %.1f / %.1f cm, fit %.3f, moved %s), body head at %s, groom head at %s, collides with %s"),
@@ -795,6 +863,14 @@ void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)
 	const float Redness = FMath::Clamp((Hair.R - Hair.B) / FMath::Max(Hair.R, 0.01f), 0.0f, 1.0f) * 0.8f;
 	Groom->SetScalarParameterValueOnMaterials(TEXT("HairMelanin"), Melanin);
 	Groom->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);
+	for (USceneComponent* Child : Groom->GetAttachChildren())
+	{
+		if (UGroomComponent* Under = Cast<UGroomComponent>(Child))
+		{
+			Under->SetScalarParameterValueOnMaterials(TEXT("HairMelanin"), Melanin);  // the undercoat
+			Under->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);
+		}
+	}
 }
 
 // ---- who wears strands ------------------------------------------------------------------------------------------------
@@ -849,7 +925,7 @@ void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Bas
 		// on the head under the new strands (its sections are still the wearer's until below).
 		if (UGroomComponent* Old = Found->Strands.Get())
 		{
-			Old->SetVisibility(false);
+			Old->SetVisibility(false, true);
 		}
 		Found->bStrands = false;
 	}
@@ -859,7 +935,7 @@ void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Bas
 		{
 			if (UGroomComponent* Strands = Found->Strands.Get())
 			{
-				Strands->SetVisibility(false);
+				Strands->SetVisibility(false, true);
 			}
 			Wearers.RemoveAll([Body](const FWearer& W) { return W.Body.Get() == Body; });
 		}
@@ -968,7 +1044,7 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 	}
 	else if (UGroomComponent* Strands = Wearer.Strands.Get())
 	{
-		Strands->SetVisibility(false);
+		Strands->SetVisibility(false, true);
 	}
 	for (const int32 Section : Wearer.WigSections)
 	{

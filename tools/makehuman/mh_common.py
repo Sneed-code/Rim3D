@@ -897,7 +897,7 @@ def _pubic_layout(rig, body, female, count, seed, log=print):
     return layout
 
 
-def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style="natural", length=0.018, width=0.0006,
+def grow_pubic_hair(rig, body, female=True, layout_path=None, count=4500, style="natural", length=0.018, width=0.00034,
                     color=(0.03, 0.025, 0.022), seed=7, curl=1.0, trim=1.0, log=print):
     """Pubic hair as hairs growing out of the skin, for any body: each a thin tapered curly ribbon rooted on the skin,
     lying down and in towards the middle line as they grow, weighted like the skin at its root (so it moves with the
@@ -924,7 +924,10 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
     cx = rig.data.bones["pelvis"].head_local.x
     deform = {b.name for b in rig.data.bones if b.use_deform}
     groups = {g.index: g.name for g in body.vertex_groups if g.name in deform}
-    segments = 5
+    # Fine hairs (sneed 2026-11-25: "more fine, natural, detailed ... smooth the edges, they are square like"): thinner
+    # ribbons (0.34 mm at the root, was 0.6) on twice the points, so each curls in a smooth arc instead of five straight
+    # pieces, tapering to a fine point instead of a flat cut end; half as many again of them keep the patch as full.
+    segments = 10
     verts, faces, weights = [], [], []
     hair_uv = []
     for tri, bary, u, v, factor, phase, spin, zone, rand, edge in layout:
@@ -958,9 +961,11 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
         d = (n * 0.55 + tangent * 0.45).normalized()
         step = L / segments
         for k in range(segments):
-            twist = Quaternion(n, spin * (0.9 + 0.5 * math.sin(phase + k * 1.7)) * curl)   # curl 0: straight
+            # The same curl and lie as the five-piece hairs had, spread over the finer steps (each turns half as far).
+            kk = k * 5.0 / segments
+            twist = Quaternion(n, 0.5 * spin * (0.9 + 0.5 * math.sin(phase + kk * 1.7)) * curl)   # curl 0: straight
             d = (twist @ d)
-            d = (d * 0.6 + tangent * 0.4 - n * 0.08 * k).normalized()   # bends down onto the skin
+            d = (d * 0.78 + tangent * 0.22 - n * 0.045 * kk).normalized()   # bends down onto the skin
             pts_h.append(pts_h[-1] + d * step)
         base = len(verts)
         for k, p in enumerate(pts_h):
@@ -968,7 +973,7 @@ def grow_pubic_hair(rig, body, female=True, layout_path=None, count=3000, style=
             dirk = (pts_h[min(k + 1, segments)] - pts_h[max(k - 1, 0)]).normalized()
             across = dirk.cross(n)
             across = across.normalized() if across.length > 1e-6 else Vector((1, 0, 0))
-            w = width * (1.0 - 0.8 * t)
+            w = width * (1.0 - 0.97 * t ** 0.8)   # to a fine point
             verts.append(p - across * w * 0.5)
             verts.append(p + across * w * 0.5)
         for k in range(segments):

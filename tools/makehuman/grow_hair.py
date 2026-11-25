@@ -44,8 +44,38 @@ def log(*a):
 
 # The arm bones whose joints are read from the rig (their heads: shoulder, elbow, wrist on each side).
 ARM_BONES = ("upperarm_l", "lowerarm_l", "hand_l", "upperarm_r", "lowerarm_r", "hand_r")
-# At most this many collision shapes: Unreal's hair simulation reads at most 100 shapes from a physics asset.
-MAX_COLLISION_SHAPES = 90
+# At most this many collision shapes: Unreal's hair simulation reads fewer than 100 shapes from a physics asset
+# (PHYSICS_ASSET_MAX_PRIMITIVES, UE 5.8), and the game adds a couple for the bust (StrandHair.cpp).
+MAX_COLLISION_SHAPES = 94
+# Of them, the head's: spheres following the scalp, this far (m) inside the skin. Hair is grown at least
+# MIN_CLEARANCE off the scalp, so resting hair never starts inside them.
+HEAD_COLLISION_SHAPES = 16
+HEAD_MARGIN = 0.0015
+# Strands on the head lie in a layer this thick at most (m) over MIN_CLEARANCE, most of them near the scalp, the way
+# real hair lies: the old layer (a style's lift + volume, up to 2.6 cm, most strands near its outside) made short
+# styles a helmet standing off the head with the scalp showing through its sparse inside (sneed 2026-11-25).
+MAX_LAYER = 0.008
+MIN_CLEARANCE = 0.0012
+# Every style but the shortest and the afro also gets an undercoat, <Style>Under: short strands (UNDER_LENGTH) lying
+# flat on the scalp under the hair, combed the same way, a share UNDER_SHARE of the style's count. The game wears it
+# with the style, still (no physics), so wherever the hair parts or swings the scalp under it reads as hair, not skin.
+UNDER_LENGTH = 0.035
+UNDER_SHARE = 0.5
+UNDER_CLEARANCE = 0.0007
+
+
+def undercoat_style(style):
+    """The undercoat of a style, or None for styles that need none (too short to part, or the afro, which hides it)."""
+    if style.get("part") == "radial" or style.get("no_under") or style.get("_hat") or ("to" not in style and style.get("length", 0.0) < 0.03):
+        return None
+    under = {k: v for k, v in style.items() if k not in ("to", "_hat")}
+    if "gather" in under:
+        under["gather"] = {k: v for k, v in style["gather"].items() if k != "braid"}   # combed to the band, never plaited
+    under.update(count=max(200, int(style["count"] * UNDER_SHARE)), length=min(UNDER_LENGTH, style.get("length", UNDER_LENGTH)),
+                 segments=8, lift=0.0, volume=0.0012, _clearance=UNDER_CLEARANCE, stiffness=max(style["stiffness"], 0.85),
+                 gravity=0.1, clump=0.0, wave=0.0, frizz=0.0003, u_cut=0.0, length_spread=0.1, shorter_sides=0.0, coil=0.0,
+                 width_root=0.00012, width_tip=0.00008)   # a little thicker than the hair over it: it covers, never shows
+    return under
 # The collision shapes are picked until hair can sink at most about this far (m) into the skin anywhere below the head.
 COLLISION_TARGET = 0.006
 
@@ -217,6 +247,71 @@ def collision_part(bone):
     return None
 
 
+def head_collision(body, inside, budget, margin, rng, target=0.002):
+    """Spheres inside the skull following the scalp: candidates 1.2 to 8 cm under the scalp (along its normal), each as
+    big as stays `margin` inside the skin; the one that most cuts how deep hair could sink into the scalp (measured at
+    the scalp's vertices, anywhere hair grows or could swing onto) is taken, with its mirror image, until `budget`.
+    Returns [("sphere", "head", c, c, r, 0)]."""
+    v = body.verts
+    t = body.tris
+    normals = np.zeros_like(v)
+    face = np.cross(v[t[:, 1]] - v[t[:, 0]], v[t[:, 2]] - v[t[:, 0]])
+    for k in range(3):
+        np.add.at(normals, t[:, k], face)
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
+    az, el, r = scalp_frame(body, v)
+    lateral = np.abs(v[:, 0] - body.skull[0])
+    scalp = (el > hairline_elevation(az) - 12.0) & (r < body.skull_r * 1.35) & (v[:, 2] > body.head[2] - 0.02)
+    scalp &= ~((lateral > body.skull_r * 0.93) & (el < 22))   # not the ears
+    ids = np.nonzero(scalp)[0]
+    if len(ids) == 0:
+        return []
+    mid_x = body.skull[0]
+    sample = ids[:: max(1, len(ids) // 1500)]
+    P = v[sample]
+    seeds = [i for i in ids[:: max(1, len(ids) // 500)] if v[i, 0] <= mid_x + 0.005]
+    cands = []
+    for depth in (0.012, 0.02, 0.03, 0.045, 0.06, 0.08):
+        for i in seeds:
+            c = v[i] - normals[i] * depth
+            rad = inside(c) - margin
+            if rad > 0.01:
+                cands.append((c, rad))
+    if not cands:
+        return []
+
+    def pair(c, rad):
+        twin = np.array([2.0 * mid_x - c[0], c[1], c[2]])
+        return [(c, rad)] if abs(c[0] - mid_x) < 0.004 else [(c, rad), (twin, rad)]
+
+    cap = 0.05
+    D = np.full((len(cands), len(sample)), cap, dtype=np.float32)
+    for k, (c, rad) in enumerate(cands):
+        for cc, rr in pair(c, rad):
+            D[k] = np.minimum(D[k], np.linalg.norm(P - cc, axis=1) - rr)
+    count = np.array([len(pair(c, rad)) for c, rad in cands])
+    current = np.full(len(sample), cap, dtype=np.float32)
+
+    def cost(d):
+        return np.clip(d - target, 0.0, None).sum(axis=-1)
+
+    base = cost(current)
+    picked = []
+    while True:
+        totals = cost(np.minimum(D, current))
+        gain = (base - totals) / count
+        gain[count > budget - len(picked)] = -1.0
+        best = int(np.argmax(gain))
+        if gain[best] <= 0.0:
+            break
+        current = np.minimum(current, D[best])
+        base = totals[best]
+        picked.extend(pair(*cands[best]))
+    log("head collision: %d spheres %.1f mm inside the scalp; hair can sink into the scalp (mm) median %.1f, 90%% %.1f, worst %.1f"
+        % (len(picked), margin * 1000, np.median(current) * 1000, np.percentile(current, 90) * 1000, current.max() * 1000))
+    return [("sphere", "head", c, c, float(rad), np.zeros(3)) for c, rad in picked]
+
+
 def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET, seed=3):
     """Shapes for the groom's physics to collide with, all inside the skin, so hair grown lying on the skin starts clear
     of them and only meets them when it swings or the body moves into it. The body's own physics asset wraps each bone
@@ -245,15 +340,10 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
             return -1.0
         return dist
 
-    # The head: the skull centre and points towards the crown, back and sides (MakeHuman faces -y).
-    for d in [(0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 0.7, 0.7), (0, 0.8, -0.5), (0, -0.5, 0.7), (1, 0, 0.2), (-1, 0, 0.2),
-              (0.6, 0.6, 0.4), (-0.6, 0.6, 0.4), (0.6, 0.6, -0.4), (-0.6, 0.6, -0.4)]:
-        d = np.array(d, dtype=float)
-        n = np.linalg.norm(d)
-        c = body.skull + (d / n * 0.45 * body.skull_r if n > 0 else d)
-        r = inside(c) - margin
-        if r > 0.012:
-            shapes.append(("sphere", "head", c, c, float(r), np.zeros(3)))
+    # The head: spheres picked to follow the scalp closely (sneed 2026-11-25: "the collision point is still too low"; the
+    # old 12 spheres at set places, 4 mm inside the skin, left dips of up to a centimetre between them, and the hair
+    # sank into them as the head moved). The same greedy pick as the body's below, on the scalp only, nearer the skin.
+    shapes.extend(head_collision(body, inside, HEAD_COLLISION_SHAPES, HEAD_MARGIN, rng))
 
     # The skin below the head that hair can reach, each vertex with its part and normal.
     v = body.verts
@@ -622,8 +712,10 @@ def grow(body, style, rng, count_scale):
     seg_len = max_len / segs
 
     # Each strand stands off the body by its own small distance: the layers that give the hair its volume.
-    clearance = style["lift"] * 0.25 + (style["lift"] * 0.75 + style["volume"]) * np.sqrt(rng.random(n))
-    clearance = np.maximum(clearance, 0.0015)
+    # Most strands lie near the scalp and fewer further out, within a layer no thicker than MAX_LAYER (the same rule for
+    # every style, so any new style sits on the head as real hair does: no hairline or scalp showing, no helmet).
+    layer = min(style["lift"] * 0.75 + style["volume"], MAX_LAYER)
+    clearance = style.get("_clearance", MIN_CLEARANCE) + layer * rng.random(n) ** 1.6
 
     flow = flow_directions(body, style, roots, rng)
     gather = style.get("gather")
@@ -839,7 +931,7 @@ def comb(body, style, pts, end_idx, roots, rng, seg_len):
     hat_gap = hat["gap"] if hat else 0.0
     for i in range(n):
         for k in range(1, end_idx[i] + 1):
-            out[i, k] = body.keep(out[i, k], 0.0015, reach, hat_z, hat_gap)
+            out[i, k] = body.keep(out[i, k], MIN_CLEARANCE, reach, hat_z, hat_gap)
     return out
 
 
@@ -1003,8 +1095,11 @@ def main():
         jobs.append((name, styles[name]))
         if hat and not a.no_hats and not styles[name].get("no_hat"):
             jobs.append((name + "Hat", dict(styles[name], _hat=hat)))  # the same style worn under a hat
+        under = undercoat_style(styles[name])
+        if under:
+            jobs.append((name + "Under", under))
     for name, style in jobs:
-        rng = np.random.default_rng([a.seed, sum(map(ord, name.removesuffix("Hat")))])
+        rng = np.random.default_rng([a.seed, sum(map(ord, name.removesuffix("Hat").removesuffix("Under"))), 1 if name.endswith("Under") else 0])
         pts, end_idx, roots, seg_len = grow(body, style, rng, a.count_scale)
         pts = comb(body, style, pts, end_idx, roots, rng, seg_len)
         obj, npts = make_curves(name, pts, end_idx, head, style)

@@ -117,6 +117,18 @@ slot and rerolls). Pawns without one (joiners, raiders) are still the MetaHumans
 "Clothes on" draws the cotton shirt and trousers as MakeHuman garments (#425). The scenario's `startHour` (Crash Landed:
 7, ours) sets the calendar's first hour so the landing is by daylight; steps still start at 0.
 
+**Chosen cosmetics (sneed 2026-11-25).** The Looks panel also has the old creator's genital size and how much darker
+the nipples and genitals are, up to four tattoos or marks (design, body area, size, turn, strength, ink colour) and
+the jewellery (each piece on or off, in its metal). They travel in the look text (`genital`, `pigment`, `jewel<j>` =
+metal + 1, `mark<m>Design/Area/Size/Angle/Opacity/R/G/B`; `CreatorPeople.h`) and are drawn by `CreatorApply` in game too.
+Only what the player picks: nobody is given marks or jewellery by chance.
+
+**The screen's layout and camera (sneed 2026-11-25).** The side panels and the bottom bar sit flush on the screen's
+edges and on each other (no gaps round the open middle), a little wider than before; the hint strip fills the middle
+on the bar. Holding the right button orbits the camera all the way round and from nearly straight above to under the
+feet (the ground is one-sided, so the body shows from below); the button and the mouse's move are read from the player
+controller too, since the engine holds the cursor during a right-button drag and ImGui alone never heard the orbit.
+
 ## The starship stage (title backdrop)
 
 sneed (2026-11-23): "on title screen I'd prefer it's from a space ship window in orbit with the current character in
@@ -193,6 +205,10 @@ loads again, so every world system starts fresh and reads them as in a fresh cop
 back when it ends. The command line carries `-DebugScene=<id>`: **F10**, or the scene ending, loads the title screen
 again (the command line without any scene's arguments, `DebugScenes::StripSceneArgs`) instead of quitting.
 The old launch files still work and run the same scenes in the same copy of the game.
+
+## Landing flow changes (2026-11-25, sneed)
+
+The scenario page no longer has "Land somewhere random": the way on is "Choose landing site". The landing map opens with a random valid site already picked (not landed; click elsewhere or press "Pick a random site"). **Enter** presses the main button on every new-colony page: "Choose landing site", "Land here" (when the picked tile is allowed), "Next: your companions" and "Land and start". It never works while a name field is being typed in, and one press only ever acts on one page. The world is made with the tropics two tiles wider on each side of the equator, and a colony cannot land on a tile next to a settlement (two tiles away is fine; the map says "Too close to <name>").
 
 ## Not done yet
 
