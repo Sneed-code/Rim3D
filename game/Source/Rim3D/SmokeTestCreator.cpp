@@ -1093,6 +1093,34 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
 		State->b4KSkin = !FParse::Param(FCommandLine::Get(), TEXT("Creator2K"));  // 4K by default (sneed 2026-11-23)
+		// -CreatorFaceShape=Brow:1,HeadWidth:-1 (CreatorFaceShapes by morph name without "Shape", -1 .. 1) on everyone, for
+		// pictures of the hair on a changed head (sneed 2026-11-25: high brows put skin through the hair).
+		FString FaceShapeArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorFaceShape="), FaceShapeArg, false))
+		{
+			TArray<FString> FaceShapePairs;
+			FaceShapeArg.ParseIntoArray(FaceShapePairs, TEXT(","));
+			for (const FString& Pair : FaceShapePairs)
+			{
+				FString PartName;
+				FString PartValue;
+				if (!Pair.Split(TEXT(":"), &PartName, &PartValue))
+				{
+					continue;
+				}
+				for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+				{
+					if (FString(CreatorFaceShapes[f].Morph).Equals(TEXT("Shape") + PartName, ESearchCase::IgnoreCase))
+					{
+						for (FCreatorPerson& FacePerson : State->People)
+						{
+							FacePerson.FaceShape[f] = FMath::Clamp(FCString::Atof(*PartValue), -1.0f, 1.0f);
+						}
+						UE_LOG(LogTemp, Display, TEXT("creator: face shape %s %s on everyone"), CreatorFaceShapes[f].Morph, *PartValue);
+					}
+				}
+			}
+		}
 		// -CreatorJewels=0,3,7 (indices into CreatorJewels) for pictures; -CreatorMetal=<0-5>.
 		FString JewelArg;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorJewels="), JewelArg, false))
