@@ -171,7 +171,7 @@ namespace HudIcons
 		}
 		const int32 Hash = Label.Find(TEXT("##"));
 		const FString Shown = Hash == INDEX_NONE ? Label : Label.Left(Hash);
-		const FString Id = Hash == INDEX_NONE ? TEXT("##") + Label : Label.Mid(Hash);
+		const FString Id = TEXT("##") + Label;  // the whole label stays in the id: "Work##tab" and "Build##tab" must not both become "##tab"
 		const FTCHARToUTF8 Text(*Shown);
 		const ImGuiStyle& Style = ImGui::GetStyle();
 		const ImVec2 TextSize = Shown.IsEmpty() ? ImVec2(0.0f, 0.0f) : ImGui::CalcTextSize(Text.Get());
@@ -183,11 +183,9 @@ namespace HudIcons
 		const ImVec2 Min = ImGui::GetItemRectMin();
 		const ImVec2 Max = ImGui::GetItemRectMax();
 		ImDrawList* DrawList = ImGui::GetWindowDrawList();
-		// Icon and label centred together; a label too long for the button is drawn smaller so it never spills out.
-		const float Room = FMath::Max(1.0f, Max.x - Min.x - 2.0f * Style.FramePadding.x - IconSide - Gap);
-		const float FontSize = TextSize.x > Room ? ImGui::GetFontSize() * FMath::Max(0.55f, Room / TextSize.x) : ImGui::GetFontSize();
-		const float TextWidth = TextSize.x > Room ? TextSize.x * FontSize / ImGui::GetFontSize() : TextSize.x;
-		const float Total = IconSide + Gap + TextWidth;
+		// Icon and label centred together, always at the font's own size (sneed 2026-11-25: buttons grow, text never shrinks).
+		const float FontSize = ImGui::GetFontSize();
+		const float Total = IconSide + Gap + TextSize.x;
 		const float Left = (Min.x + Max.x - Total) * 0.5f;
 		const float MidY = (Min.y + Max.y) * 0.5f;
 		Draw(DrawList, Icon, ImVec2(Left + IconSide * 0.5f, MidY), IconSide);
