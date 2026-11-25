@@ -1,6 +1,45 @@
 # Status
 
-Updated 2026-11-24.
+Updated 2026-11-25.
+
+Colony creator, HUD and player polish (sneed, 2026-11-25; sim, data and Unreal): **HUD**: the date box is fully top right
+(head of the `HudLayout` right column) with the alarm as a plain **Draft / Stand down** button beside "Day N"; no "F1 keys"
+fold box (overseer or walking); the colonist faces sit flush in the top left with the selected colonist's box touching
+under them; silver no longer shows under the faces; mugshots are taken front on (the head bone's facing, standing still).
+The inspect box names a building with its stuff ("Wooden wall", `stuffProps.stuffAdjective`) and drops the kind/number,
+cell, ground height and footprint lines. **Overseer see-through**: people and buildings hidden behind trees, roofs or walls
+show a coloured outline and faint fill (post-process `M_SeeThrough`, art step `see-through-art`, `r.CustomDepth=3`,
+`Overseer.SeeThrough`), and the overseer view is 0.8 stops brighter (`Overseer.BrighterEV`). **Trees**: the tropical swamp's
+willows (and cocoa) had no models and were drawn as low-poly blobs; they now use the island, jacaranda and small tree models
+(cocoa: dragon tree). **Red on-screen text** was Lumen's cached-lighting clip warning (our camera reaches EV 15-16, the engine
+default covers -8..12): `r.EyeAdaptation.CachedLightingPreExposure=7`, look `maxEV` 15.
+
+Character screen polish (`docs/design/new-game.md`): on Your companions a click on a stranger's card picks them, and **only
+the one being shaped stands on the spot**. **Holding the right mouse button orbits the camera** (left-drag still spins,
+wheel and - + zoom). **Skin is a slider** from fair to dark (any tone, saved and used in game), with the CLOTHES ON tick
+beside it in Looks. **Short, Messy and Bob hair no longer sag into the scalp** (no hair physics on those short styles), and a
+style change no longer shows the old hair under the new.
+
+Title and world map: the title's **stars are crisp** (a flat high-resolution `sky_view.png` in front of the galaxy sphere),
+the **planet is 8K** with storm spirals, cloud shadows, snowy mountains, rivers, relief, a glinting sea and city lights
+(mip-ready `.r3tx` files, art step `title-art`), and its air rim turns orange at the day/night line. The **world map and
+landing-site picker are hexagons**: a detailed picture painted once per world (biome textures, shaded relief, sea depth,
+surf, beaches, hex grid) with rivers, named settlements, hover and picked outlines, wheel zoom and drag. The sim keeps its
+square grid.
+
+Landing, doors and wood: **Crash Landed lands in a clearing** (`Sim::clearLandingSite`: least overgrown dry spot near the
+middle, trees and tall plants cleared 9 m round it, ragged edge, grass left). **Doors replace walls** as in RimWorld
+(`canPlaceOverWall`): over a wall plan it replaces it; over a built wall the door's ghost shows over the wall until a builder
+takes the wall down (normal refund) and builds the door. **Cut grass and bushes** break into clippings that fall and shrink
+away over 10 s (`UPlantBreakSubsystem`). **Wooden walls** use Poly Haven brown planks instead of the grey siding that looked
+like sandstone (`stuff-textures`, `surface-materials` rerun).
+
+Walking play: the **F prompt and work bar sit bottom middle**, the fists hint strip is gone, the clock is flush top right,
+and an **item you look at shows "F  Pick up ..." over itself** (F on a weapon in reach equips it). **Hands-on reach is two
+cells, diagonals too** (player only), and **holding F chains to the next target of the same kind** nearest the view
+(`JobSystem::nextHandsOn`). **B is the build screen**: the overseer's bar with Build open over the walking camera, cursor
+freed, clicks and drags plan under the cursor, the body's keys off; B or Esc goes back. The **fists guard no longer leans
+back** (`blockUpright`, `SetUpperUpright`).
 
 HUD batch (sneed, 2026-11-24; Unreal only, `docs/design/ui-layout.md` "Layout v2" onward): bar windows (Work,
 Schedule, Build...) sit flush on the screen's left edge and on the bar; the terrain/inspect box moved fully top right, with
