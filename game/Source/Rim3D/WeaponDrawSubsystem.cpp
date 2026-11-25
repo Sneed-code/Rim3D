@@ -1595,6 +1595,7 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	UAnimSequence* Clip = nullptr;
 	float Weight = 0.0f;
 	float HoldAt = -1.0f;
+	float Upright = -1.0f;
 	colony::WeaponHold Hold;
 	if (bShow && GWeaponStances.GetValueOnGameThread() != 0 && !Actor.IsJumping() && colony::holdFor(Defs, View.weapon, Hold))
 	{
@@ -1618,6 +1619,9 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 			if (Hold.style.valid() && Hold.style.value < Defs.size())
 			{
 				HoldAt = static_cast<float>(Defs.get(Hold.style).number("blockHold", 0.35));
+				// The style's `blockUpright` (degrees forward of the walk's chest): a guard clip that leans back is stood up
+				// (sneed 2026-11-25, the fists' block). Not with a shield's clip.
+				Upright = bShieldArm ? -1.0f : static_cast<float>(Defs.get(Hold.style).number("blockUpright", -1.0));
 			}
 			if (!Clip && View.shieldUp)
 			{
@@ -1647,6 +1651,7 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 			Weight *= 0.6f;  // crouched: the arms only
 		}
 	}
+	Anim->SetUpperUpright(Upright);
 	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f, 0.2f, HoldAt >= 0.0f ? 3.5f : 5.0f, HoldAt);
 	// A body on the back: bent forward under it (docs/design/weapon-hold.md, "Carrying a body").
 	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;

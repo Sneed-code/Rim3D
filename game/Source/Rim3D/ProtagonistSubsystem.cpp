@@ -20,6 +20,7 @@
 #include "ColonyHudSubsystem.h"
 #include "DebugScenes.h"
 #include "OverseerPawn.h"
+#include "OrdersSubsystem.h"
 #include "OverseerSubsystem.h"
 #include "PawnActor.h"
 #include "PawnSubsystem.h"
@@ -159,6 +160,8 @@ void UProtagonistSubsystem::Deinitialize()
 	{
 		EndDeathScreen();  // the slowed world must not outlive the screen
 	}
+	bBuildUi = false;
+	Rim3DKeys::SetGameKeysBlocked(false);  // the keys belong to the next world
 	if (USimSubsystem* Bridge = BridgeSource.Get())
 	{
 		Bridge->OnBeforeStep.Remove(BeforeStepHandle);
@@ -241,6 +244,7 @@ bool UProtagonistSubsystem::EnterDirectMode(colony::Entity Pawn)
 		UE_LOG(LogProtagonist, Warning, TEXT("Direct mode needs a running sim and a player controller"));
 		return false;
 	}
+	CloseBuildUi();  // taking over someone else (or coming back from a load) starts with walking
 	UOverseerSubsystem* Overseer = World->GetSubsystem<UOverseerSubsystem>();
 	if (Pawn == colony::kNoEntity && Overseer && Overseer->GetSelection().Kind == ESimPickKind::Thing &&
 		ProtagonistIsColonistOnMap(*Bridge, Overseer->GetSelection().Thing))
@@ -269,7 +273,7 @@ bool UProtagonistSubsystem::EnterDirectMode(colony::Entity Pawn)
 	{
 		Yaw = Pawns->FindPawn(Pawn)->GetActorRotation().Yaw;
 	}
-	if (Overseer && Overseer->GetOverseerPawn() && Overseer->IsOverseerActive())
+	if (Overseer && Overseer->GetOverseerPawn() && Overseer->IsOverseerCamera())
 	{
 		Yaw = Overseer->GetOverseerPawn()->GetYaw();
 	}
@@ -323,6 +327,7 @@ void UProtagonistSubsystem::ExitDirectMode()
 		return;
 	}
 	WakeUp();  // a sleeper gets up before it is let go
+	CloseBuildUi();
 	UWorld* World = GetWorld();
 	USimSubsystem* Bridge = BridgeSource.Get();
 	const colony::Entity Released = Controlled;
@@ -530,6 +535,152 @@ void UProtagonistSubsystem::StartUnstuck()
 	}
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// The build screen (sneed 2026-11-25: "When I hit B it shows me my UI (like overseer mode) with build open by default.
+// When I click and drag i.e. walls, I don't move. B just toggles the overseer interface without the view"). The overseer's
+// panels and order tools run over the walking camera (UOverseerSubsystem::SetUiOverDirectView); the order tools pick the
+// ground under the cursor through this camera, so plans go where the cursor points. docs/design/handson.md.
+
+bool UProtagonistSubsystem::OpenBuildUi()
+{
+	UWorld* World = GetWorld();
+	APlayerController* PC = World ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+	UOverseerSubsystem* Overseer = World ? World->GetSubsystem<UOverseerSubsystem>() : nullptr;
+	if (bBuildUi)
+	{
+		return true;
+	}
+	if (!IsDirectMode() || bDead || IsAsleep() || !PC || !Overseer || !Overseer->SetUiOverDirectView(true))
+	{
+		return false;
+	}
+	bBuildUi = true;
+	Rim3DKeys::SetGameKeysBlocked(true);
+	PC->bShowMouseCursor = true;
+	FInputModeGameAndUI InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	InputMode.SetHideCursorDuringCapture(false);
+	PC->SetInputMode(InputMode);
+	// The cursor comes up where the crosshair was, on what the player was looking at.
+	int32 ViewWide = 0;
+	int32 ViewHigh = 0;
+	PC->GetViewportSize(ViewWide, ViewHigh);
+	if (ViewWide > 0 && ViewHigh > 0)
+	{
+		PC->SetMouseLocation(ViewWide / 2, ViewHigh / 2);
+	}
+	if (UColonyHudSubsystem* Hud = World->GetSubsystem<UColonyHudSubsystem>())
+	{
+		Hud->OpenTab(EHudTab::Build);
+	}
+	UE_LOG(LogProtagonist, Log, TEXT("Build screen open over the walking view"));
+	return true;
+}
+
+void UProtagonistSubsystem::CloseBuildUi()
+{
+	if (!bBuildUi)
+	{
+		return;
+	}
+	bBuildUi = false;
+	Rim3DKeys::SetGameKeysBlocked(false);
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	if (UOrdersSubsystem* Orders = World->GetSubsystem<UOrdersSubsystem>())
+	{
+		Orders->CancelTool();
+	}
+	UColonyHudSubsystem* Hud = World->GetSubsystem<UColonyHudSubsystem>();
+	if (Hud)
+	{
+		Hud->OpenTab(EHudTab::None);
+	}
+	if (UOverseerSubsystem* Overseer = World->GetSubsystem<UOverseerSubsystem>())
+	{
+		Overseer->SetUiOverDirectView(false);
+	}
+	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+	if (PC && bDirect && !(Hud && Hud->IsMainMenuOpen()))
+	{
+		PC->bShowMouseCursor = false;
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+	UE_LOG(LogProtagonist, Log, TEXT("Build screen closed: walking again"));
+}
+
+void UProtagonistSubsystem::ToggleBuildUi()
+{
+	if (bBuildUi)
+	{
+		CloseBuildUi();
+	}
+	else
+	{
+		OpenBuildUi();
+	}
+}
+
+void UProtagonistSubsystem::UpdateBuildUi(APlayerController& PC)
+{
+	UWorld* World = GetWorld();
+	UOverseerSubsystem* Overseer = World ? World->GetSubsystem<UOverseerSubsystem>() : nullptr;
+	if (!Overseer || !Overseer->IsUiOverDirectView())
+	{
+		CloseBuildUi();  // the overseer view took over, or its camera pawn went
+		return;
+	}
+	UColonyHudSubsystem* Hud = World->GetSubsystem<UColonyHudSubsystem>();
+	if (Hud && Hud->IsMainMenuOpen())
+	{
+		return;  // the menu has the mouse; it gives it back as walking wants it, put right below once it closes
+	}
+	++BuildUiFrames;
+	if (!PC.bShowMouseCursor)
+	{
+		PC.bShowMouseCursor = true;
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PC.SetInputMode(InputMode);
+	}
+	if (PC.WasInputKeyJustPressed(EKeys::Escape))
+	{
+		CloseBuildUi();
+		return;
+	}
+	// The overseer camera's own clicks (AOverseerPawn), here because the walking body keeps the player controller: a tool
+	// in hand takes the left button (the order tools' own input processor takes it first when it can), else it selects.
+	UOrdersSubsystem* Orders = World->GetSubsystem<UOrdersSubsystem>();
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (!PC.GetMousePosition(MouseX, MouseY))
+	{
+		return;
+	}
+	const FVector2D Mouse(MouseX, MouseY);
+	Overseer->UpdateSelectPress(Mouse);
+	if (PC.WasInputKeyJustPressed(EKeys::LeftMouseButton) && !(Orders && Orders->HandleLeftPressed(Mouse)))
+	{
+		Overseer->BeginSelectPress(Mouse);
+	}
+	if (PC.WasInputKeyJustReleased(EKeys::LeftMouseButton) && !(Orders && Orders->HandleLeftReleased(Mouse)))
+	{
+		Overseer->EndSelectPress(Mouse, PC.IsInputKeyDown(EKeys::LeftShift) || PC.IsInputKeyDown(EKeys::RightShift));
+	}
+	if (Orders && PC.WasInputKeyJustPressed(EKeys::RightMouseButton))
+	{
+		Orders->HandleRightClick(Mouse);
+	}
+	if (Orders && PC.WasInputKeyJustPressed(EKeys::R))
+	{
+		Orders->HandleRotateOrDraftKey();
+	}
+}
+
 void UProtagonistSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -591,6 +742,10 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 				ExitDirectMode();
 			}
 		}
+	}
+	if (bBuildUi && (!bDirect || bDead || bDeathRequested || !IsValid(Body.Get())))
+	{
+		CloseBuildUi();
 	}
 	if (bDeathRequested)
 	{
@@ -663,6 +818,10 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		else if (Rim3DKeys::WasPressed(PC, ERim3DAction::SleepHere))
 		{
 			SleepHere();
+		}
+		if (bBuildUi)
+		{
+			UpdateBuildUi(*PC);
 		}
 		if (!bAsleep)
 		{
@@ -908,10 +1067,17 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
 
-	// The time, and pause or 1x (a faster game would outrun the body).
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+	// The build screen (B): the overseer's own panels are up, with its clock; the walking screen keeps out of their way.
+	if (IsBuildUiOpen())
+	{
+		++HudFramesDrawn;
+		return;
+	}
+
+	// The time, and pause or 1x (a faster game would outrun the body): flush in the top right corner, where the overseer
+	// view has its clock too (sneed 2026-11-25).
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x, Viewport->Pos.y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
-	float TimeBottom = Viewport->Pos.y + Margin + 60.0f * Scale;
 	if (ImGui::Begin("##DirectTime", nullptr, PanelFlags))
 	{
 		const colony::GameTime& Time = Sim.time();
@@ -923,12 +1089,11 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ProtagonistSpeedButton("1x", 1, Bridge);
 		// The date, the temperature and the weather (U13).
 		ProtagonistText(USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
-		TimeBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
 	}
 	ImGui::End();
 
-	// The enemy you are locked on to: its name and the health of its worst body part, under the clock.
-	DrawFocus(Bridge, TimeBottom + 6.0f * Scale, Scale);
+	// The enemy you are locked on to: its name and the health of its worst body part, top middle.
+	DrawFocus(Bridge, Viewport->Pos.y + Margin, Scale);
 
 	// Who you are, bottom left.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
@@ -988,32 +1153,30 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 		ImGui::End();
 	}
 
-	// Keys, bottom right.
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
-	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (!USimSubsystem::IsKeyHelpShown())
+	// The key list, bottom right, only while it is asked for (F1, or Menu > Settings > Key list); no "F1 keys" box
+	// otherwise (sneed 2026-11-25).
+	if (USimSubsystem::IsKeyHelpShown())
 	{
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+		ImGui::SetNextWindowBgAlpha(0.6f);
 		if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
 		{
-			ImGui::TextUnformatted("F1  keys");
+			// The keys as they are bound now (Settings > Controls changes them, KeyBindings.h).
+			const auto KeyOf = [](ERim3DAction Action) { return Rim3DKeys::GetKeyLabel(Action); };
+			const auto Line = [](const FString& Text) { ImGui::TextUnformatted(TCHAR_TO_UTF8(*Text)); };
+			Line(FString::Printf(TEXT("F1 hide   F3 speed   WASD walk   %s slow   %s sprint on/off   mouse look"), *KeyOf(ERim3DAction::WalkSlow), *KeyOf(ERim3DAction::Sprint)));
+			Line(FString::Printf(TEXT("%s jump   %s roll / dash   right mouse aim (a scoped rifle: its scope)   wheel zoom"), *KeyOf(ERim3DAction::Jump), *KeyOf(ERim3DAction::RollDash)));
+			Line(FString::Printf(TEXT("%s hold: work, and on to the next of its kind / pick up / take weapon   %s put down"), *KeyOf(ERim3DAction::Interact), *KeyOf(ERim3DAction::PutDown)));
+			Line(FString::Printf(TEXT("%s build screen (the bar over this view; %s or Esc back)   %s pick up a gun"), *KeyOf(ERim3DAction::BuildMode), *KeyOf(ERim3DAction::BuildMode), *KeyOf(ERim3DAction::EquipWeapon)));
+			Line(FString::Printf(TEXT("%s take over   %s overseer view   resources are picked up as you walk by"), *KeyOf(ERim3DAction::TakeOver), *KeyOf(ERim3DAction::SwitchMode)));
+			Line(FString::Printf(TEXT("%s sleep here (18:00 to 6:00)   %s on a bed: sleep   F5 quicksave"), *KeyOf(ERim3DAction::SleepHere), *KeyOf(ERim3DAction::Interact)));
+			if (Rim3DKeys::IsLockOnFocusEnabled())
+			{
+				Line(FString::Printf(TEXT("%s lock on to the next enemy   %s let go"), *KeyOf(ERim3DAction::FocusNextTarget), *KeyOf(ERim3DAction::EndFocus)));
+			}
 		}
+		ImGui::End();
 	}
-	else if (ImGui::Begin("##DirectHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
-	{
-		// The keys as they are bound now (Settings > Controls changes them, KeyBindings.h).
-		const auto KeyOf = [](ERim3DAction Action) { return Rim3DKeys::GetKeyLabel(Action); };
-		const auto Line = [](const FString& Text) { ImGui::TextUnformatted(TCHAR_TO_UTF8(*Text)); };
-		Line(FString::Printf(TEXT("F1 hide   F3 speed   WASD walk   %s slow   %s sprint on/off   mouse look"), *KeyOf(ERim3DAction::WalkSlow), *KeyOf(ERim3DAction::Sprint)));
-		Line(FString::Printf(TEXT("%s jump   %s roll / dash   right mouse aim (a scoped rifle: its scope)   wheel zoom"), *KeyOf(ERim3DAction::Jump), *KeyOf(ERim3DAction::RollDash)));
-		Line(FString::Printf(TEXT("%s hold: work / pick up / take weapon   %s put down   %s build"), *KeyOf(ERim3DAction::Interact), *KeyOf(ERim3DAction::PutDown), *KeyOf(ERim3DAction::BuildMode)));
-		Line(FString::Printf(TEXT("%s take over   %s overseer view   resources are picked up as you walk by"), *KeyOf(ERim3DAction::TakeOver), *KeyOf(ERim3DAction::SwitchMode)));
-		Line(FString::Printf(TEXT("%s sleep here (18:00 to 6:00)   %s on a bed: sleep   F5 quicksave"), *KeyOf(ERim3DAction::SleepHere), *KeyOf(ERim3DAction::Interact)));
-		if (Rim3DKeys::IsLockOnFocusEnabled())
-		{
-			Line(FString::Printf(TEXT("%s lock on to the next enemy   %s let go"), *KeyOf(ERim3DAction::FocusNextTarget), *KeyOf(ERim3DAction::EndFocus)));
-		}
-	}
-	ImGui::End();
 
 	++HudFramesDrawn;
 }
@@ -1133,7 +1296,7 @@ void UProtagonistSubsystem::UpdateFlick(APlayerController& PC, USimSubsystem& Br
 	const UWorld* World = GetWorld();
 	const AProtagonistPawn* Player = GetBody();
 	const float Threshold = CVarLockOnFlickMouse.GetValueOnGameThread();
-	if (!World || !Player || Focus == colony::kNoEntity || Player->HasGunDrawn() || Threshold <= 0.0f)
+	if (!World || !Player || Focus == colony::kNoEntity || Player->HasGunDrawn() || Threshold <= 0.0f || bBuildUi)
 	{
 		FlickX = 0.0f;
 		FlickAge = 0.0f;

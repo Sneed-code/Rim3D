@@ -652,7 +652,8 @@ bool UOrdersSubsystem::IsDirectBuilding() const
 {
 	const UWorld* World = GetWorld();
 	const UProtagonistSubsystem* Protagonist = World ? World->GetSubsystem<UProtagonistSubsystem>() : nullptr;
-	return Tool == EOrderTool::Build && Protagonist && Protagonist->IsDirectMode();
+	// Not on the build screen (B): there the overseer's own tools run, under the cursor.
+	return Tool == EOrderTool::Build && Protagonist && Protagonist->IsDirectMode() && !Protagonist->IsBuildUiOpen();
 }
 
 bool UOrdersSubsystem::CycleBuilding(int32 Direction)

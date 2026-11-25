@@ -89,6 +89,12 @@ These are the defaults; all are rebindable and the full list is in [controls.md]
 | Space, 1 | pause, 1x (2 and 3 stay at 1x) |
 | F5, F9, F8, F7 | the bridge's keys (F5 quicksave, F9 quickload); a save made in direct mode puts you back in direct mode when you load it |
 | N, F on a bed | sleep the night away, 18:00 to 6:00 (W A S D, N or Esc: get up) |
+| B | the build screen over this view ([handson.md](handson.md) "The build screen") |
+
+**The screen** (sneed 2026-11-25): the clock and date flush in the top right corner (where the overseer view has its
+clock), who you are bottom left, the crosshair, what F would do bottom middle with any weapon box under it (no box for
+bare fists), an item's pick-up key over the item itself. No "F1 keys" box: F1 (or Menu > Settings > Key list) still
+shows the key list bottom right.
 
 The overseer's inspect panel also has a **Take control (O)** button for a selected colonist. The
 console has `Protagonist.Enter` and `Protagonist.Exit`. The game starts in direct mode with `-Direct`

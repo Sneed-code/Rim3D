@@ -155,6 +155,11 @@ public:
 	/** HoldAt >= 0: the clip plays once up to that moment (s) and holds there (a block raised and held, sneed 2026-11-23:
 	 *  "it loops, it's supposed to be a natural hold"); below 0 it loops. */
 	void SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds = 0.2f, float WeightRate = 5.0f, float HoldAt = -1.0f);
+	/** The clip the next SetUpperStance gives is stood up (sneed 2026-11-25: "the animation to block with fists is bad
+	 *  because you lean back"): where its chest leans back of the walk's own, the chest is turned forward about spine_01 to
+	 *  this many degrees forward of the walk's; below 0 the clip keeps its own lean. Each frame, before SetUpperStance; it
+	 *  stays with the clip as it fades out. */
+	void SetUpperUpright(float ForwardDegrees) { UpperUprightNext = ForwardDegrees; }
 	/** Bends the body forward at the waist by this many degrees (a load on the back), eased in and out. */
 	void SetSpineBend(float Degrees) { SpineBendTarget = Degrees; }
 	UAnimSequence* GetUpperStance() const { return UpperClip; }
@@ -210,4 +215,7 @@ private:
 	float UpperWeightRate = 5.0f;
 	float SpineBend = 0.0f;        // degrees now
 	float SpineBendTarget = 0.0f;
+	float UpperUprightNext = -1.0f;  // SetUpperUpright, for the next SetUpperStance
+	float UpperUpright = -1.0f;      // the clip's (degrees forward of the walk's chest; below 0 its own lean)
+	float UpperOldUpright = -1.0f;   // the clip it fades from
 };

@@ -308,7 +308,7 @@ struct SetBillCommand {
 // Hands-on work (task U10, docs/design/handson.md): what the controlled colonist does with its
 // hands. Work: start the sim's own job on what the player looks at, in place (no walking): `thing` is
 // a blueprint, a frame or an item, else `cell` is a rock to mine or a plant to chop or pick. The job
-// runs while the player stays within kHandsOnReach and ends when it is done, or on Stop. Picking up
+// runs while the player stays within kHandsOnReachCells and ends when it is done, or on Stop. Picking up
 // is instant. PutDown: set down what the colonist carries on `cell` (else near its feet). Fails if
 // the pawn is not the controlled one, the target is out of reach or taken, or there is nothing to do.
 enum class HandsOnMode : uint8_t { Work, PutDown, Stop };
@@ -338,8 +338,10 @@ struct AddFilthCommand {
     int layers = 1;
 };
 
-// How far from the edge of a rock, plant, frame or item a controlled colonist can work on it, in metres.
-inline constexpr float kHandsOnReach = 2.0f;
+// How far a controlled colonist can work with its hands: two cells (sneed 2026-11-25; the player only, the sim's own
+// colonists walk up beside the target). Counted from the cell the colonist stands in to the nearest cell of the rock,
+// plant, frame, bed or item, diagonals too: a 5 by 5 square round the feet.
+inline constexpr int kHandsOnReachCells = 2;
 
 // Power (task E5, docs/design/power.md): opens or closes a switch, or flicks a consumer or generator on
 // or off. Fails if the building has nothing to switch.

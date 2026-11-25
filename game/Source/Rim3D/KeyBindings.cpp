@@ -180,6 +180,17 @@ namespace
 	}
 }
 
+namespace
+{
+	// The build screen over the walking view (UProtagonistSubsystem::OpenBuildUi): the body's keys are off, B still closes it.
+	bool bKeyBindGameBlocked = false;
+
+	bool KeyBindIsBlocked(ERim3DAction Action)
+	{
+		return bKeyBindGameBlocked && Action != ERim3DAction::BuildMode;
+	}
+}
+
 namespace Rim3DKeys
 {
 	FKey GetDefault(ERim3DAction Action)
@@ -233,17 +244,27 @@ namespace Rim3DKeys
 
 	bool IsDown(const APlayerController* PC, ERim3DAction Action)
 	{
-		return PC && !GKeyBindCapture.IsValid() && PC->IsInputKeyDown(Get(Action));
+		return PC && !GKeyBindCapture.IsValid() && !KeyBindIsBlocked(Action) && PC->IsInputKeyDown(Get(Action));
 	}
 
 	bool WasPressed(const APlayerController* PC, ERim3DAction Action)
 	{
-		return PC && !KeyBindQuiet() && PC->WasInputKeyJustPressed(Get(Action));
+		return PC && !KeyBindQuiet() && !KeyBindIsBlocked(Action) && PC->WasInputKeyJustPressed(Get(Action));
 	}
 
 	bool WasReleased(const APlayerController* PC, ERim3DAction Action)
 	{
 		return PC && PC->WasInputKeyJustReleased(Get(Action));
+	}
+
+	void SetGameKeysBlocked(bool bBlocked)
+	{
+		bKeyBindGameBlocked = bBlocked;
+	}
+
+	bool AreGameKeysBlocked()
+	{
+		return bKeyBindGameBlocked;
 	}
 
 	bool IsLockOnFocusEnabled()
