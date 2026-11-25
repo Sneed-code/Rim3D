@@ -57,6 +57,18 @@ sneed, 2026-11-21: colonists and raiders must not walk through trees.
   watchdog's phase still walks through everything.
 - **Bodies.** Staggers, shoves and other clip moves (`BodyMotionSystem::fits`) stop at the bark too.
 
+## Cut grass and bushes break up
+
+sneed, 2026-11-25: "when I cut grass it gets destroyed and broken up and fades over 10 sec, same with bush".
+
+- **Sim.** A plant cut by the cut-plants job or the work tool ("cut", also "harvested" away) now sends its growth in
+  millionths as the PlantRemoved's `count`, as a felled tree does.
+- **Unreal** (`UPlantBreakSubsystem`, cosmetic). For any plant that isn't a tree, removed "cut", "harvested" or
+  "broken": the chunk drops it and four (grass) or six (bush) clippings take its place, smaller copies of the same mesh
+  (`UTerrainSubsystem::GetPlantLook`) tilted every way and thrown up and out a little. They fall, bounce once, lie, and
+  from 40% of their life shrink and sink away to nothing at `PlantBreak.Seconds` (10; the foliage materials can't fade,
+  so they shrink). No shadows, at most `PlantBreak.Max` (120) at once, the oldest go first; a paused game holds them.
+
 ## Falling trees
 
 sneed, 2026-11-21: a cut tree falls over, physically, no snapping.

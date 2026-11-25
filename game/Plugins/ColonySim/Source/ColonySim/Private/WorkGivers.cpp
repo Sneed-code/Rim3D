@@ -159,7 +159,8 @@ public:
         const entt::registry& reg = jobs.things().registry();
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
-            if (s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn)) {
+            // A door planned over a wall gets nothing until the wall is down (RimWorld's blocking thing).
+            if (s.hasAllMaterials() || jobs.deliveryReservedByOther(site, pawn) || jobs.construction().replacing(site) != kNoEntity) {
                 return;
             }
             CellPos stand;
@@ -232,7 +233,7 @@ public:
         const Position& at = reg.get<Position>(pawn);
         reg.view<const ConstructionSite, const Position>().each([&](Entity site, const ConstructionSite& s, const Position& pos) {
             if (s.stage != ConstructionStage::Frame || !s.hasAllMaterials() ||
-                jobs.construction().isArt(reg.get<Thing>(site).def) != wantsArt()) {
+                jobs.construction().isArt(reg.get<Thing>(site).def) != wantsArt() || jobs.construction().replacing(site) != kNoEntity) {
                 return;
             }
             CellPos stand;
@@ -275,6 +276,19 @@ public:
                 }
                 out.push_back(WorkCandidate{JobTarget{building, CellPos{}}, workGiverDistSq(at, pos), 0, 0, true, stand});
             });
+        // A wall a door's plan stands over comes down first (RimWorld's HandleBlockingThingJob): the builder
+        // deconstructs it, with the usual refund, before the door's materials are brought.
+        reg.view<const ConstructionSite>().each([&](Entity site, const ConstructionSite&) {
+            const Entity wall = jobs.construction().replacing(site);
+            if (wall == kNoEntity || reg.all_of<MarkedForDeconstruct>(wall) || !reg.all_of<Footprint, Position>(wall)) {
+                return;  // a marked wall is in the list above already
+            }
+            CellPos stand;
+            if (!jobs.construction().workCell(reg.get<Footprint>(wall).rect(), cellOf(at), stand)) {
+                return;
+            }
+            out.push_back(WorkCandidate{JobTarget{wall, CellPos{}}, workGiverDistSq(at, reg.get<Position>(wall)), 0, 0, true, stand});
+        });
     }
 
     bool makeJob(JobSystem&, Entity, const WorkCandidate& candidate, Job& out) override {

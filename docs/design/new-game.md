@@ -22,6 +22,15 @@ from a point pool ([traits.md](traits.md) "Trait points"); you have none. Biome 
 (rainforest and tropical swamp) are the world tiles it may land on. All of this is ours (sneed's list). The old
 `Crashlanded`, `CrashlandedRainforest` and `PerfColony` stay for tests and smoke tests, with backstories.
 
+**Landing in a clearing** (sneed 2026-11-25: "make sure that you land in a cleared area, not in the trees"; ours).
+`landingClearRadiusM` 9 and `landingSearchM` 24 (`Sim::clearLandingSite`): the landing moves from the dry spot nearest
+the map's middle to the dry spot within 24 m of it with the fewest trees and tall plants within 9 m (a tree counts three
+times a bush; a little nearer the middle wins a tie). Then every tree and every plant that slows walking (tall grass,
+bushes, brambles, cacti: `pathCost` above 0) within 9 m is removed, and a 3 m ring beyond it is thinned (from all at
+its inner edge to none at its outer one, by its own random stream), so the clearing's edge is ragged. Short grass,
+dandelions and moss stay. The people and the cargo are then put down round the new landing as before. Test:
+`NewGameTests.cpp` "Crash Landed lands in a clearing".
+
 ## The steps
 
 1. **Title** (`MainMenuPage` 0): shown at launch without `-SimScenario` (not in smoke tests; `-NoMenu` skips it) and

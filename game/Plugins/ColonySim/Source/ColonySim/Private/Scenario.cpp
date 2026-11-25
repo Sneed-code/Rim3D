@@ -8,12 +8,15 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Looks.h"
+#include "ColonySim/Map.h"
+#include "ColonySim/Plants.h"
 #include "ColonySim/Random.h"
 #include "ColonySim/Research.h"
 #include "ColonySim/Sim.h"
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 #include <utility>
@@ -64,6 +67,33 @@ std::string scenarioRollLineage(const Def& scenario, uint64_t colonistSeed, cons
         pick -= weights[i];
     }
     return fallback;
+}
+
+// A plant cleared from the landing: trees and anything that slows walking (tall grass, bushes, brambles, cacti).
+// Short grass, dandelions and moss stay, so the clearing still looks natural.
+bool scenarioClearsPlant(const DefDatabase& defs, const Plants& plants, CellPos c) {
+    if (!plants.has(c)) {
+        return false;
+    }
+    const Def& def = defs.get(plants.defAt(c));
+    return def.flag("plant.isTree") || def.number("pathCost", 0.0) > 0.0;
+}
+
+// Walkable dry ground (no water, marsh, mud or rock) in every cell within `radius` of `c`, as the stockpile's landing.
+bool scenarioDryAround(const Map& map, CellPos c, int radius) {
+    for (int y = c.y - radius; y <= c.y + radius; ++y) {
+        for (int x = c.x - radius; x <= c.x + radius; ++x) {
+            const CellPos n{x, y, 0};
+            if (!map.walkable(n)) {
+                return false;
+            }
+            const Terrain t = map.terrain(n);
+            if (t == Terrain::ShallowWater || t == Terrain::Marsh || t == Terrain::Mud) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 }  // namespace
@@ -332,6 +362,72 @@ bool Sim::editColonist(const EditColonistCommand& edit, std::string& error) {
     return true;
 }
 
+// The landing in the clear (sneed 2026-11-25: "make sure that you land in a cleared area, not in the trees"). Crash
+// Landed lands in the tropics, where the jungle stands thick: the landing moves to the dry spot within
+// `landingSearchM` of the middle with the fewest trees and tall plants round it (a little nearer the middle wins a
+// tie), then every tree and tall plant within `landingClearRadiusM` goes, and a ring of 3 m beyond it is thinned, more
+// towards the inside, so the clearing's edge is ragged. Grass stays. Its own random stream: nothing else moves.
+void Sim::clearLandingSite(const Def& scenario) {
+    const double radius = scenario.number("landingClearRadiusM", 0.0);
+    if (radius <= 0.0 || !stockpileCell_) {
+        return;
+    }
+    constexpr int kDryRadius = 4;  // as placeStockpileAndThings
+    constexpr double kFringeM = 3.0;
+    const int reach = static_cast<int>(std::ceil(radius + kFringeM));
+    const double radiusSq = radius * radius;
+    const auto crowding = [&](CellPos at) {
+        int score = 0;
+        for (int dy = -reach; dy <= reach; ++dy) {
+            for (int dx = -reach; dx <= reach; ++dx) {
+                const CellPos c{at.x + dx, at.y + dy, 0};
+                if (dx * dx + dy * dy <= radiusSq && map_.inBounds(c) && scenarioClearsPlant(*defs_, *plants_, c)) {
+                    score += plants_->isTree(c) ? 3 : 1;  // a tree is the bigger clearing job, and the one that hides you
+                }
+            }
+        }
+        return score;
+    };
+    const int search = std::max(0, static_cast<int>(scenario.integer("landingSearchM", 0)));
+    const CellPos middle = *stockpileCell_;
+    CellPos best = middle;
+    int bestScore = crowding(middle) * 4;
+    for (int dy = -search; dy <= search; dy += 2) {
+        for (int dx = -search; dx <= search; dx += 2) {
+            const CellPos c{middle.x + dx, middle.y + dy, 0};
+            if ((dx == 0 && dy == 0) || !map_.walkable(c) || !scenarioDryAround(map_, c, kDryRadius)) {
+                continue;
+            }
+            // Twelve points a tree, four a tall plant, one for every 2 m further from the middle.
+            const int score = crowding(c) * 4 + static_cast<int>(std::sqrt(static_cast<double>(dx * dx + dy * dy)) * 0.5);
+            if (score < bestScore) {
+                bestScore = score;
+                best = c;
+            }
+        }
+    }
+    stockpileCell_ = best;
+
+    Rng rng(splitMix64(settings_.seed ^ 0x636C656172696E67ULL), 17);
+    for (int dy = -reach; dy <= reach; ++dy) {
+        for (int dx = -reach; dx <= reach; ++dx) {
+            const CellPos c{best.x + dx, best.y + dy, 0};
+            if (!map_.inBounds(c) || !scenarioClearsPlant(*defs_, *plants_, c)) {
+                continue;
+            }
+            const double d = std::sqrt(static_cast<double>(dx * dx + dy * dy));
+            if (d > radius + kFringeM) {
+                continue;
+            }
+            // Inside: always. The fringe: from a sure clear at its inner edge down to none at its outer one.
+            const double keep = d <= radius ? 0.0 : (d - radius) / kFringeM;
+            if (d <= radius || rng.unit() >= keep) {
+                plants_->remove(c);
+            }
+        }
+    }
+}
+
 // Starts the scenario named in the settings (docs/design/colonists.md): the protagonist and the
 // colonists made from the seed, standing near the middle of the map, with the scenario's items
 // lying around them. Uses its own random streams, so the rest of the sim is not disturbed.
@@ -373,6 +469,7 @@ void Sim::startScenario() {
         }
     }
 
+    clearLandingSite(*scenario);
     const std::vector<CellPos> cells = scenarioNearbyCells(map_, *stockpileCell_, 6000);
     std::set<int> used;
     Rng rng(splitMix64(settings_.seed ^ 0x7363656E6172696FULL), 5);

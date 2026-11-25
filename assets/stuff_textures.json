@@ -1,9 +1,10 @@
 {
-  "source": "ambientCG (https://ambientcg.com), CC0, 2k JPG colour, DirectX normal and roughness maps",
+  "source": "ambientCG (https://ambientcg.com) and Poly Haven (https://polyhaven.com), all CC0, 2k JPG colour, DirectX normal and roughness maps",
   "swap": "To use other textures set a surface's \"source\" to \"local\" and put <surface>_color, <surface>_normal (DirectX) and <surface>_rough (.jpg or .png) in game/Content/ThirdParty/StuffTextures/, then run the SurfaceMaterials commandlet again. A stuff def names its surface in visual.surface (docs/design/building-draw.md).",
-  "fields": "source: ambientcg or local. id: the texture's name on that site. tileMetres: metres one repeat covers. tint: multiplies the colour (sRGB, as picked in a paint program). saturation: 1 as it is, 0 grey. roughness: multiplies the roughness map. metallic: 0 stone or wood, 1 bare metal.",
+  "fields": "source: ambientcg, polyhaven or local. id: the texture's name on that site (ids: Poly Haven names tried in order, the first that downloads is used). tileMetres: metres one repeat covers. tint: multiplies the colour (sRGB, as picked in a paint program). saturation: 1 as it is, 0 grey. roughness: multiplies the roughness map. metallic: 0 stone or wood, 1 bare metal.",
   "surfaces": {
-    "wood":      {"source": "ambientcg", "id": "WoodSiding008", "tileMetres": 2.0, "tint": [1.0, 1.0, 1.0],    "saturation": 1.0,  "roughness": 1.0, "metallic": 0.0},
+    "wood":      {"source": "polyhaven", "id": "wood_planks", "ids": ["wood_planks", "brown_planks_03", "weathered_brown_planks", "old_planks_02"], "tileMetres": 2.0, "tint": [1.0, 0.94, 0.86], "saturation": 1.1, "roughness": 1.0, "metallic": 0.0,
+                 "why": "sneed 2026-11-25: wooden walls looked like sandstone (ambientCG WoodSiding008 is pale painted siding); now Poly Haven's brown wood planks, warmed a little"},
     "granite":   {"source": "ambientcg", "id": "Bricks089",     "tileMetres": 2.0, "tint": [0.95, 0.92, 0.92], "saturation": 0.25, "roughness": 1.0, "metallic": 0.0},
     "limestone": {"source": "ambientcg", "id": "Bricks083",     "tileMetres": 2.0, "tint": [1.05, 1.03, 0.98], "saturation": 0.55, "roughness": 1.0, "metallic": 0.0},
     "sandstone": {"source": "ambientcg", "id": "Bricks100",     "tileMetres": 2.5, "tint": [1.0, 0.92, 0.82],  "saturation": 0.7,  "roughness": 1.0, "metallic": 0.0},
