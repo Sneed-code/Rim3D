@@ -444,19 +444,9 @@ namespace ColonyHud
 		return Left;
 	}
 
-	/**
-	 * Space the date and weather box takes above the bar's right end, with a small gap: measured from where it was last
-	 * drawn (its rows change: Step one second shows only while paused), else its three rows (time large, date, the level
-	 * row of small buttons) and padding.
-	 */
+	/** Space the date box takes above the bar's right end: none since it moved to the top right (sneed 2026-11-25), only a gap. */
 	inline float DateBoxHeight(float Scale)
 	{
-		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
-		if (DateBoxTop() > 0.0f && Viewport)
-		{
-			return FMath::Max(0.0f, AboveBar(Viewport, Scale) - DateBoxTop()) + 6.0f * Scale;
-		}
-		return 1.3f * ImGui::GetTextLineHeightWithSpacing() + ImGui::GetTextLineHeightWithSpacing() + ImGui::GetFrameHeightWithSpacing() +
-			2.0f * ImGui::GetStyle().WindowPadding.y + 6.0f * Scale;
+		return 6.0f * Scale;
 	}
 }

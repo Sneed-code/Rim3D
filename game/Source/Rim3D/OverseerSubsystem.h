@@ -8,6 +8,7 @@
 #include "OverseerSubsystem.generated.h"
 
 class AOverseerPawn;
+class UMaterialInterface;
 class USimSubsystem;
 
 /**
@@ -80,9 +81,17 @@ protected:
 private:
 	void DrawSelectionHighlight(const USimSubsystem& Bridge) const;
 	void DrawPanels(USimSubsystem& Bridge);
+	/** Outlines of people and buildings hidden behind trees, roofs and walls (sneed 2026-11-25; SeeThroughArt). */
+	void UpdateSeeThrough(const USimSubsystem& Bridge);
 
 	UPROPERTY()
 	TObjectPtr<AOverseerPawn> Pawn;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> SeeThroughMaterial;
+	bool bSeeThroughLoaded = false;
+	bool bSeeThroughOnCamera = false;
+	double NextSeeThroughMark = 0.0;
 
 	FSimPick Selection;
 	/** Things selected with the main one (Selection), in the order picked. */

@@ -1348,6 +1348,32 @@ bool UOrdersSubsystem::OrderAttackSelected(colony::Entity Target)
 	return true;
 }
 
+void UOrdersSubsystem::DrawAlarmButton(USimSubsystem& Bridge)
+{
+	// The alarm as a plain button beside the day (sneed 2026-11-25: "Draft", not a red ALARM box): drafts every colonist,
+	// or, once all are drafted, reads Stand down and sends them back to work.
+	const colony::Sim* Sim = Bridge.GetSim();
+	if (!Sim)
+	{
+		return;
+	}
+	bool bAnyColonist = false;
+	bool bAnyUndrafted = false;
+	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+	{
+		if (View.category == colony::ThingCategory::Pawn && View.faction == 1 && !View.dead && !View.downed && Sim->colonistOf(View.id))
+		{
+			bAnyColonist = true;
+			bAnyUndrafted = bAnyUndrafted || !View.drafted;
+		}
+	}
+	if (ColonyHud::Button(bAnyUndrafted ? TEXT("Draft##alarm") : TEXT("Stand down##alarm"), !bAnyUndrafted && bAnyColonist) && bAnyColonist)
+	{
+		Alarm();
+	}
+	ColonyHud::Tip(bAnyUndrafted ? TEXT("Draft every colonist") : TEXT("Send every colonist back to work"));
+}
+
 void UOrdersSubsystem::DrawDraftControls(const colony::ThingView& View)
 {
 	if (View.category != colony::ThingCategory::Pawn || View.faction != 1 || View.dead)
@@ -2039,34 +2065,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	ButtonRects.Reset();
 
-	// The alarm, top right.
-	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Alarm, Scale);
-	if (ImGui::Begin("##OrdersAlarm", nullptr, PanelFlags))
-	{
-		HudLayout::ReportRight(HudLayout::ERightSlot::Alarm);
-		bool bAnyColonist = false;
-		bool bAnyUndrafted = false;
-		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
-		{
-			if (View.category == colony::ThingCategory::Pawn && View.faction == 1 && !View.dead && !View.downed && Sim.colonistOf(View.id))
-			{
-				bAnyColonist = true;
-				bAnyUndrafted = bAnyUndrafted || !View.drafted;
-			}
-		}
-		ImGui::PushStyleColor(ImGuiCol_Button, bAnyUndrafted ? ImVec4(0.72f, 0.14f, 0.12f, 1.0f) : ImVec4(0.22f, 0.45f, 0.30f, 1.0f));
-		if (HudIcons::Button(HudIcons::Get(bAnyUndrafted ? TEXT("pawn_draft") : TEXT("pawn_undraft"), ImGui::GetFrameHeight()),
-				bAnyUndrafted ? TEXT("ALARM##alarm") : TEXT("Stand down##alarm"), false, ImVec2(0.0f, 0.0f)) && bAnyColonist)
-		{
-			Alarm();
-		}
-		ImGui::PopStyleColor();
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("%s", bAnyUndrafted ? "Draft every colonist" : "Send every colonist back to work");
-		}
-	}
-	ImGui::End();
+	// The alarm is the date box's Draft button now (DrawAlarmButton, sneed 2026-11-25).
 
 	// The Build menu (the bottom bar's Build tab), above the bar on the left. A message (what a drag did) shows in it, or on its
 	// own above the bar while the menu is closed (building in direct mode).

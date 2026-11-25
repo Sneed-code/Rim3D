@@ -134,6 +134,12 @@
       "run": [{"commandlet": "SkyArt", "args": ["-AllowCommandletRendering"]}]
     },
     {
+      "name": "see-through-art",
+      "what": "Overseer outlines of people and buildings hidden behind trees",
+      "makes": ["game/Content/Rim3D/Generated/Overseer"],
+      "run": [{"commandlet": "SeeThroughArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
       "name": "water-art",
       "what": "Water materials",
       "after": ["terrain-materials"],

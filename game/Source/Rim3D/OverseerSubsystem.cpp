@@ -1,7 +1,10 @@
 #include "OverseerSubsystem.h"
 #include "KeyBindings.h"
 
+#include "Camera/CameraComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
@@ -15,9 +18,12 @@
 #include "ColonyHudSubsystem.h"
 #include "HudLayout.h"
 
+#include "BuildingSubsystem.h"
 #include "LevelsSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "OverseerPawn.h"
+#include "PawnActor.h"
+#include "PawnSubsystem.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
 
@@ -32,6 +38,31 @@ DEFINE_LOG_CATEGORY_STATIC(LogOverseer, Log, All);
 
 namespace
 {
+	TAutoConsoleVariable<int32> GOverseerSeeThrough(
+		TEXT("Overseer.SeeThrough"), 1, TEXT("1 outlines people and buildings hidden behind trees, roofs and walls in the overseer view (SeeThroughArt)."), ECVF_Default);
+	TAutoConsoleVariable<float> GOverseerBrighter(
+		TEXT("Overseer.BrighterEV"), 0.8f, TEXT("Stops the overseer view is brighter than the third-person view (the ground under trees read as black)."), ECVF_Default);
+	const TCHAR* const OverseerSeeThroughPath = TEXT("/Game/Rim3D/Generated/Overseer/M_SeeThrough.M_SeeThrough");
+
+	/** Marks every primitive of an actor (and what hangs off it) for the see-through outline with a stencil value. */
+	void OverseerMarkSeeThrough(AActor* Actor, int32 Stencil)
+	{
+		if (!Actor)
+		{
+			return;
+		}
+		TArray<UPrimitiveComponent*> Parts;
+		Actor->GetComponents<UPrimitiveComponent>(Parts, true);
+		for (UPrimitiveComponent* Part : Parts)
+		{
+			if (Part && Part->IsVisible())
+			{
+				Part->SetRenderCustomDepth(true);
+				Part->SetCustomDepthStencilValue(Stencil);
+			}
+		}
+	}
+
 	TAutoConsoleVariable<int32> GOverseerShowUi(
 		TEXT("Overseer.UI"), 1, TEXT("1 shows the overseer's panels (speed, inspect, key hints), 0 hides them."), ECVF_Default);
 
@@ -116,6 +147,22 @@ namespace
 		if (const colony::DefDatabase* Defs = Bridge.GetDefs().get())
 		{
 			Label = Defs->get(View.def).label();
+			// A building made of something says what (sneed 2026-11-25): "wooden wall", "sandstone wall", as RimWorld's
+			// stuffAdjective (blocks drop the " blocks").
+			if (View.category == colony::ThingCategory::Building && View.stuff.valid())
+			{
+				const colony::Def& Stuff = Defs->get(View.stuff);
+				std::string Adjective = Stuff.text("stuffProps.stuffAdjective", Stuff.label());
+				const std::string Blocks = " blocks";
+				if (Adjective.size() > Blocks.size() && Adjective.compare(Adjective.size() - Blocks.size(), Blocks.size(), Blocks) == 0)
+				{
+					Adjective.resize(Adjective.size() - Blocks.size());
+				}
+				if (!Adjective.empty())
+				{
+					Label = Adjective + " " + Label;
+				}
+			}
 		}
 		if (!Label.empty() && Label[0] >= 'a' && Label[0] <= 'z')
 		{
@@ -476,10 +523,97 @@ void UOverseerSubsystem::Tick(float DeltaTime)
 		TArray<colony::Entity> Rest = Extra;
 		SelectThings(Rest);
 	}
+	UpdateSeeThrough(*Bridge);
 	DrawSelectionHighlight(*Bridge);
 	if (GOverseerShowUi.GetValueOnGameThread() != 0)
 	{
 		DrawPanels(*Bridge);
+	}
+}
+
+void UOverseerSubsystem::UpdateSeeThrough(const USimSubsystem& Bridge)
+{
+	// The material goes on the overseer camera only, so the third-person view never shows it.
+	if (!bSeeThroughLoaded)
+	{
+		bSeeThroughLoaded = true;
+		SeeThroughMaterial = LoadObject<UMaterialInterface>(nullptr, OverseerSeeThroughPath);
+		if (!SeeThroughMaterial)
+		{
+			UE_LOG(LogOverseer, Display, TEXT("No %s (art step see-through-art): no outlines through trees"), OverseerSeeThroughPath);
+		}
+	}
+	UCameraComponent* Camera = Pawn ? Pawn->GetCamera() : nullptr;
+	if (!Camera)
+	{
+		return;
+	}
+	// A touch brighter than the third-person view: from above, the ground under the canopy read as black (sneed 2026-11-25).
+	Camera->PostProcessSettings.bOverride_AutoExposureBias = true;
+	Camera->PostProcessSettings.AutoExposureBias = GOverseerBrighter.GetValueOnGameThread();
+	if (!SeeThroughMaterial)
+	{
+		return;
+	}
+	const bool bWanted = GOverseerSeeThrough.GetValueOnGameThread() != 0;
+	if (bWanted != bSeeThroughOnCamera)
+	{
+		TArray<FWeightedBlendable>& Blendables = Camera->PostProcessSettings.WeightedBlendables.Array;
+		Blendables.RemoveAll([this](const FWeightedBlendable& Blend) { return Blend.Object == SeeThroughMaterial; });
+		if (bWanted)
+		{
+			Blendables.Add(FWeightedBlendable(1.0f, SeeThroughMaterial));
+		}
+		bSeeThroughOnCamera = bWanted;
+	}
+	if (!bWanted)
+	{
+		return;
+	}
+	// New pawns, clothes and buildings come and go: mark them all again twice a second (a mark that is already set costs
+	// nothing). Stencils: 1 the colony's own, 2 someone fighting, 3 other people and animals, 4 buildings.
+	const double Now = FPlatformTime::Seconds();
+	if (Now < NextSeeThroughMark)
+	{
+		return;
+	}
+	NextSeeThroughMark = Now + 0.5;
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	if (const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
+	{
+		for (const TPair<uint32, TObjectPtr<ASimPawnActor>>& Entry : Pawns->GetPawns())
+		{
+			ASimPawnActor* Actor = Entry.Value.Get();
+			if (!IsValid(Actor))
+			{
+				continue;
+			}
+			const colony::ThingView* View = Snapshot.find(Actor->GetThing());
+			int32 Stencil = 3;
+			if (View && View->faction == 1)
+			{
+				Stencil = 1;
+			}
+			else if (View && (View->fighting || View->fightTarget != colony::kNoEntity))
+			{
+				Stencil = 2;
+			}
+			if (View && View->dead)
+			{
+				continue;
+			}
+			OverseerMarkSeeThrough(Actor, Stencil);
+			TArray<AActor*> Attached;
+			Actor->GetAttachedActors(Attached, true, true);
+			for (AActor* Child : Attached)
+			{
+				OverseerMarkSeeThrough(Child, Stencil);
+			}
+		}
+	}
+	if (const UBuildingSubsystem* Buildings = GetWorld()->GetSubsystem<UBuildingSubsystem>())
+	{
+		OverseerMarkSeeThrough(Buildings->GetDrawActor(), 4);
 	}
 }
 
@@ -621,8 +755,7 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 						ColonyHud::TextColored(ColonyHud::Accent(), FString::Printf(TEXT("and %d more selected"), Extra.Num()));
 					}
 					ImGui::Separator();
-					OverseerText(FString::Printf(TEXT("%s   #%u"), OverseerCategoryName(View->category), OverseerIdNumber(View->id)));
-					OverseerText(FString::Printf(TEXT("Cell %d, %d   ground %.1f m"), FMath::FloorToInt32(View->x), FMath::FloorToInt32(View->y), View->z));
+					// No kind and number, cell, ground height or footprint lines (sneed 2026-11-25): only what matters to play.
 					if (View->maxHitPoints > 0)
 					{
 						const FString Overlay = FString::Printf(TEXT("%d / %d"), View->hitPoints, View->maxHitPoints);
@@ -661,7 +794,6 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 							OverseerText(FString::Printf(TEXT("Stack of %d"), View->stackCount));
 							break;
 						case colony::ThingCategory::Building:
-							OverseerText(FString::Printf(TEXT("Footprint %d x %d"), View->sizeX, View->sizeY));
 							break;
 					}
 				}
@@ -693,27 +825,24 @@ void UOverseerSubsystem::DrawPanels(USimSubsystem& Bridge)
 		ImGui::End();
 	}
 
-	// Key hints, bottom right above the date box, folded behind F1 (and the bar's Keys button).
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, ColonyHud::AboveBar(Viewport, Scale) - ColonyHud::DateBoxHeight(Scale)),
-		ImGuiCond_Always, ImVec2(1.0f, 1.0f));
-	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (!USimSubsystem::IsKeyHelpShown())
+	// Key hints, bottom right, only while the key list is switched on (F1, or Menu > Key list). No folded "F1 keys" box any
+	// more (sneed 2026-11-25).
+	if (USimSubsystem::IsKeyHelpShown())
 	{
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - Margin, ColonyHud::AboveBar(Viewport, Scale) - ColonyHud::DateBoxHeight(Scale)),
+			ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+		ImGui::SetNextWindowBgAlpha(0.6f);
 		if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
 		{
-			ImGui::TextUnformatted("F1  keys");
+			ImGui::TextUnformatted("F1 hide   F3 speed   WASD pan   Q/E turn   wheel zoom");
+			ImGui::TextUnformatted("middle-drag orbit   click select");
+			ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
+			ImGui::TextUnformatted("Page Up / Page Down level above / below");
+			ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("%s take control of the selected colonist"), *Rim3DKeys::GetKeyLabel(ERim3DAction::SwitchMode))));
+			ImGui::TextUnformatted("R draft colonist / turn building   right click order");
 		}
+		ImGui::End();
 	}
-	else if (ImGui::Begin("##OverseerHints", nullptr, PanelFlags | ImGuiWindowFlags_NoInputs))
-	{
-		ImGui::TextUnformatted("F1 hide   F3 speed   WASD pan   Q/E turn   wheel zoom");
-		ImGui::TextUnformatted("middle-drag orbit   click select");
-		ImGui::TextUnformatted("F centre   Home reset   Esc deselect");
-		ImGui::TextUnformatted("Page Up / Page Down level above / below");
-		ImGui::TextUnformatted(TCHAR_TO_UTF8(*FString::Printf(TEXT("%s take control of the selected colonist"), *Rim3DKeys::GetKeyLabel(ERim3DAction::SwitchMode))));
-		ImGui::TextUnformatted("R draft colonist / turn building   right click order");
-	}
-	ImGui::End();
 
 	// The shooter feel and sound settings are pages of Settings now (Menu > Settings).
 

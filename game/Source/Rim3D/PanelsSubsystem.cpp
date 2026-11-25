@@ -677,8 +677,8 @@ void UPanelsSubsystem::DrawPanels(USimSubsystem& Bridge)
 	{
 		if (const colony::ThingView* View = Bridge.GetCurrentSnapshot().find(Overseer->GetSelection().Thing))
 		{
-			const float Left = Margin;
-			const float Top = MenuBottom + 6.0f * Scale;
+			const float Left = 0.0f;
+			const float Top = MenuBottom;  // touching the faces' box (sneed 2026-11-25)
 			if (View->category == colony::ThingCategory::Pawn && Bridge.GetSim()->colonistOf(View->id))
 			{
 				DrawColonistPanel(Bridge, *View, Left, Top, Scale);
@@ -718,7 +718,8 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>();
 	UColonyHudSubsystem* Hud = GetWorld()->GetSubsystem<UColonyHudSubsystem>();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Margin), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
+	// Flush in the top left corner, with the selected colonist's box right under it (sneed 2026-11-25: no gaps).
+	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x, Viewport->Pos.y), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
 	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(Viewport->Size.x * 0.55f, FLT_MAX));
 	if (ImGui::Begin("##PanelsMenu", nullptr, PanelFlags()))
 	{
@@ -834,15 +835,7 @@ void UPanelsSubsystem::DrawMenuAndColonistBar(USimSubsystem& Bridge, float Scale
 		{
 			PTextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), TEXT("No colonists"));
 		}
-		// The pinned resources (a star in the Inventory tab; silver by default).
-		if (Hud)
-		{
-			ImGui::Separator();
-			if (!Hud->DrawPinnedResources(Bridge))
-			{
-				PTextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), TEXT("Pin resources in the Inventory tab"));
-			}
-		}
+		// No pinned resources under the faces (sneed 2026-11-25: silver hidden); the Inventory tab lists them.
 		OutBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y - Viewport->Pos.y;
 	}
 	ImGui::End();
