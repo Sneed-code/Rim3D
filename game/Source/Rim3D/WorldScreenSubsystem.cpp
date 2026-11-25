@@ -437,6 +437,7 @@ void UWorldScreenSubsystem::SetNewGame(const TArray<FString>& Biomes)
 	bNewGame = Biomes.Num() > 0;
 	bLanded = false;
 	bCancelled = false;
+	bPickOnOpen = bNewGame;
 }
 
 bool UWorldScreenSubsystem::ConsumeLanding()
@@ -856,6 +857,11 @@ FString UWorldScreenSubsystem::WhyNotStart(int32 Tile) const
 	{
 		return TEXT("A settlement is already here.");
 	}
+	if (const int32 Near = World->nearSettlement(Tile); Near >= 0)
+	{
+		return FString::Printf(TEXT("Too close to %s: a colony must be at least 2 tiles from a settlement."),
+			*FString(UTF8_TO_TCHAR(World->settlements()[static_cast<size_t>(Near)].name.c_str())));
+	}
 	return TEXT("Too steep for a colony.");
 }
 
@@ -1014,6 +1020,20 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 	}
 
 	const colony::World* World = GetShownWorld();
+	if (bNewGame && bPickOnOpen && World)
+	{
+		// The landing map opens with a random valid site already picked (not landed: the player can click elsewhere).
+		bPickOnOpen = false;
+		if (Selected < 0 || WhyNotStart(Selected).Len() > 0)
+		{
+			PickRandomSite();
+		}
+	}
+	if (bNewGame && Selected >= 0 && WhyNotStart(Selected).IsEmpty() && ColonyHud::EnterPressed())
+	{
+		StartHere();
+		return;
+	}
 	ImGui::SetNextWindowPos(Viewport->Pos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(Viewport->Size, ImGuiCond_Always);
 	ImGui::SetNextWindowBgAlpha(0.96f);

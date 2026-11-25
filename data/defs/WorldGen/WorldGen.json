@@ -6,6 +6,7 @@
     "width": 120,
     "height": 60,
     "landFraction": 0.4,
+    "tropicsExtraTiles": 2,
     "elevation": {"seaFloorDepth": 4000, "highestPeak": 4500, "baseNoiseCells": 4, "octaves": 5},
     "temperature": {"equator": 31, "poleDrop": 44, "lapsePerKm": 6.5, "noiseSwing": 3, "waterModeration": 0.9},
     "rainfall": {"base": 80, "scale": 2600, "equatorBand": 0.55, "equatorWidth": 0.12, "midLatitudeBand": 0.35, "midLatitude": 0.65, "midLatitudeWidth": 0.15, "coastBonus": 250, "coastRadius": 3, "coldDryFactor": 0.3, "noiseCells": 5},

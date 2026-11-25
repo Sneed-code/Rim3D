@@ -370,6 +370,23 @@ namespace ColonyHud
 		PopLarge();
 	}
 
+	/** True once per frame when Enter was pressed and no text field is being typed in: the new-colony pages use it
+	 *  as "press the main button". A second ask in the same frame says no, so one press can't act on two pages. */
+	inline bool EnterPressed()
+	{
+		static uint64 LastEnterFrame = ~0ull;
+		if (ImGui::GetIO().WantTextInput || LastEnterFrame == static_cast<uint64>(GFrameCounter))
+		{
+			return false;
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+		{
+			LastEnterFrame = static_cast<uint64>(GFrameCounter);
+			return true;
+		}
+		return false;
+	}
+
 	/** A tooltip that shows after the mouse rests 1.2 s on the last item. */
 	inline void Tip(const FString& Value)
 	{

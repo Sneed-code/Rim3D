@@ -206,6 +206,10 @@ back when it ends. The command line carries `-DebugScene=<id>`: **F10**, or the 
 again (the command line without any scene's arguments, `DebugScenes::StripSceneArgs`) instead of quitting.
 The old launch files still work and run the same scenes in the same copy of the game.
 
+## Landing flow changes (2026-11-25, sneed)
+
+The scenario page no longer has "Land somewhere random": the way on is "Choose landing site". The landing map opens with a random valid site already picked (not landed; click elsewhere or press "Pick a random site"). **Enter** presses the main button on every new-colony page: "Choose landing site", "Land here" (when the picked tile is allowed), "Next: your companions" and "Land and start". It never works while a name field is being typed in, and one press only ever acts on one page. The world is made with the tropics two tiles wider on each side of the equator, and a colony cannot land on a tile next to a settlement (two tiles away is fine; the map says "Too close to <name>").
+
 ## Not done yet
 
 sneed's verdict on the Canopy look; the cargo pack as a thing to unpack; save pictures and day/wealth

@@ -206,6 +206,11 @@ struct WorldBuilder {
     float u(int x) const { return (static_cast<float>(x) + 0.5f) / static_cast<float>(w.width_); }
     float v(int y) const { return (static_cast<float>(y) + 0.5f) / static_cast<float>(w.height_); }
     float latitude(int y) const { return v(y) * 2.0f - 1.0f; }  // -1 north pole .. 1 south pole
+    // |latitude| with the tropics widened: the hot, wet belt reaches "tropicsExtraTiles" tiles further each way.
+    float tropicLatitude(int y) const {
+        const float extra = num("tropicsExtraTiles", 0.0f) * 2.0f / static_cast<float>(w.height_);
+        return std::max(0.0f, std::fabs(latitude(y)) - extra);
+    }
 
     uint64_t salt(uint64_t k) const { return splitMix64(w.seed_ ^ (k * 0x1000193ULL)); }
 
@@ -249,7 +254,7 @@ struct WorldBuilder {
         const int W = w.width_;
         const int H = w.height_;
         for (int y = 0; y < H; ++y) {
-            const float lat = std::fabs(latitude(y));
+            const float lat = tropicLatitude(y);
             const float drop = lat * std::sqrt(lat) * num("temperature.poleDrop", 52);
             for (int x = 0; x < W; ++x) {
                 WorldTile& t = w.tiles_[static_cast<size_t>(w.index(x, y))];
@@ -272,7 +277,8 @@ struct WorldBuilder {
         const int noiseCells = static_cast<int>(num("rainfall.noiseCells", 5));
         for (int y = 0; y < H; ++y) {
             const float lat = std::fabs(latitude(y));
-            const float zonal = num("rainfall.equatorBand", 0.55f) * worldBump(lat, num("rainfall.equatorWidth", 0.12f)) +
+            const float tropicLat = tropicLatitude(y);
+            const float zonal = num("rainfall.equatorBand", 0.55f) * worldBump(tropicLat, num("rainfall.equatorWidth", 0.12f)) +
                                 num("rainfall.midLatitudeBand", 0.35f) *
                                     worldBump(lat - num("rainfall.midLatitude", 0.65f), num("rainfall.midLatitudeWidth", 0.15f));
             for (int x = 0; x < W; ++x) {
@@ -652,6 +658,26 @@ const std::string& World::biomeName(const WorldTile& t) const {
     return t.biome < biomes_.size() ? biomes_[t.biome] : kNone;
 }
 
+int World::hexNeighbour(int index, int side) const {
+    const int x = tileX(index);
+    const int y = tileY(index);
+    const int odd = y & 1;
+    int nx = x;
+    int ny = y;
+    switch (side) {
+        case 0: nx = x + 1; break;
+        case 1: nx = x + odd; ny = y + 1; break;
+        case 2: nx = x - 1 + odd; ny = y + 1; break;
+        case 3: nx = x - 1; break;
+        case 4: nx = x - 1 + odd; ny = y - 1; break;
+        default: nx = x + odd; ny = y - 1; break;
+    }
+    if (ny < 0 || ny >= height_) {
+        return -1;
+    }
+    return this->index(((nx % width_) + width_) % width_, ny);
+}
+
 int World::landTileCount() const {
     int n = 0;
     for (const WorldTile& t : tiles_) {
@@ -665,8 +691,21 @@ bool World::canStartAt(int index) const {
         return false;
     }
     const WorldTile& t = tiles_[static_cast<size_t>(index)];
-    return !t.water && t.biome != kNoBiome && static_cast<int>(t.hilliness) <= maxStartHilliness_ &&
-           t.hilliness != Hilliness::Impassable && t.settlement == kNoSettlement;
+    if (t.water || t.biome == kNoBiome || static_cast<int>(t.hilliness) > maxStartHilliness_ ||
+        t.hilliness == Hilliness::Impassable || t.settlement != kNoSettlement) {
+        return false;
+    }
+    return nearSettlement(index) < 0;
+}
+
+int World::nearSettlement(int index) const {
+    for (int side = 0; side < 6; ++side) {
+        const int n = hexNeighbour(index, side);
+        if (n >= 0 && tiles_[static_cast<size_t>(n)].settlement != kNoSettlement) {
+            return static_cast<int>(tiles_[static_cast<size_t>(n)].settlement);
+        }
+    }
+    return -1;
 }
 
 bool World::chooseStartTile(int index) {
