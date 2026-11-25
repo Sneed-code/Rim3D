@@ -41,7 +41,7 @@
     },
     "Braid": {
       "count": 30000, "to": "waist", "part": "gather", "segments": 200,
-      "lift": 0.003, "volume": 0.003, "stiffness": 0.70, "gravity": 0.30, "back": 0.0,
+      "lift": 0.006, "volume": 0.004, "stiffness": 0.70, "gravity": 0.30, "back": 0.0,
       "gather": {"up": -0.045, "back": 0.004, "band": 0.014, "tail_spread": 0.0,
                  "braid": {"width": 0.021, "width_tip": 0.012, "period": 0.11, "tuft": 0.07,
                            "tie_radius": 0.0055, "tuft_radius": 0.016}},

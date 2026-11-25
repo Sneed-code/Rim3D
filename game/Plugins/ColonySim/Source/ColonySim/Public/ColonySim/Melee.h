@@ -157,6 +157,9 @@ struct MeleeRules {
     // after each (unarmedGapSteps added to the recovery).
     float unarmedWindupShare = -1.0f;  // below 0: windupShare
     int unarmedGapSteps = 0;
+    // sneed 2026-11-25 ("a tiny delay before I can swing after finishing"): the player's next punch may start this many
+    // steps before the last one's recovery ends (the fist is already back by then), cutting the rest of it.
+    int playerFistChainSteps = 0;
     // sneed 2026-11-24: a blow at a body on the ground (downed or dead: the low blows and the finishers) is quicker,
     // three where two were: its wind-up, recovery and finisher times are multiplied by this.
     float lowTimeFactor = 1.0f;

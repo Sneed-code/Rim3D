@@ -53,6 +53,12 @@ namespace CreatorPeople
 	FSimPawnLooks LooksFor(const FLook& Look, const FSimPawnLooks& From);
 	/** Puts the look on the pawn's MakeHuman body; false if its creator base is not on yet (call again next frame). */
 	bool Apply(const FLook& Look, ASimPawnActor& Pawn);
+	/** Face shape sliders (face variety, sneed 2026-11-25): the look's value Key (-1 .. 1, 0 the base's face) and the label
+	 *  to show. Every random person has a face of their own; RandomFace gives the look a new random one. */
+	int32 FaceShapeCount();
+	FString FaceShapeLabel(int32 Index);
+	FString FaceShapeKey(int32 Index);
+	void RandomFace(FLook& Look);
 	int32 HairStyleCount();
 	FString HairStyleLabel(int32 Index);
 	/** Whether the pawn's base has this hair style (bald always). */

@@ -1939,7 +1939,11 @@ bool UWeaponDrawSubsystem::Swing()
 	{
 		return false;
 	}
-	if (Me->meleePhase != colony::MeleePhase::Ready || Me->switchSlot < colony::kWeaponSlotCount || Me->reloading)
+	// Bare fists chain: the sim takes the next punch in the last MeleeRules playerFistChainSteps of a recovery (sneed 2026-11-25).
+	const int32 FistChainSteps = Bridge->GetSim() ? Bridge->GetSim()->melee().rules().playerFistChainSteps : 0;
+	const bool bChain = Me->meleePhase == colony::MeleePhase::Recovery && !Me->weapon.valid() && Me->meleeFinisher == 0 &&
+		Me->meleeStepsLeft <= FistChainSteps;
+	if ((Me->meleePhase != colony::MeleePhase::Ready && !bChain) || Me->switchSlot < colony::kWeaponSlotCount || Me->reloading)
 	{
 		return false;
 	}
@@ -2092,7 +2096,9 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 	const double RealNow = FPlatformTime::Seconds();
 	if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
 	{
-		SwingBufferedUntil = RealNow + 0.4;
+		// A click during a swing is kept until that swing can be followed (its whole recovery), so no press is lost and the
+		// next blow comes the moment it may (sneed 2026-11-25: "a tiny delay before I can swing after finishing first").
+		SwingBufferedUntil = RealNow + 1.2;
 	}
 	if ((Rim3DKeys::IsDown(PC, ERim3DAction::Attack) || RealNow < SwingBufferedUntil) && Swing())
 	{

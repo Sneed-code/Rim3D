@@ -205,6 +205,15 @@ once for every style (the grower and the import, nothing per style):
   it, never simulated), so wherever the hair parts or swings, hair shows under it, not skin. A future style gets all of
   this by being grown.
 
+## Full detail near the camera (sneed 2026-11-25)
+
+The grooms have two LODs (HairGroomsCommandlet): every strand, and from screen size 0.4 a third of them, a little thicker.
+In the colony creator and over the shoulder in game a head is small enough on screen for the second, so the scalp showed
+through there while the Debug creator, whose camera is closer, looked right. `UStrandHairSubsystem` now forces LOD 0 on
+everyone within `Pawns.StrandHairFullDetail` metres (8) and leaves Unreal's pick beyond; the undercoat (`<Style>Under`)
+always draws all of its strands. Every place that shows people (game, colony creator, Debug scenes) wears hair through
+this subsystem, so a hair fix is made once, here, in `grow_hair.py` or in the commandlet.
+
 ## Near and far (step 2)
 
 `UStrandHairSubsystem` decides who wears strands. Every MakeHuman person the creator's apply dresses (the creator, the gun

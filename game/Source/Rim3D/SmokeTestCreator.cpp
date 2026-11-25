@@ -179,6 +179,45 @@ namespace
 	enum { CreatorUnitEyeLeftClosure = 0, CreatorUnitEyeRightClosure = 3,
 		CreatorUnitMouthOpen = 20, CreatorUnitMouthPursing = 24 };
 	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid", "Beast-Strain (cat)", "Drow"};
+
+	/**
+	 * Face variety (sneed 2026-11-25): the shape of a face, apart from its expression. Each slider (-1 .. 1) is a pair of
+	 * morphs Shape<Part>Lo / Shape<Part>Hi on the creator bases, made from MakeHuman's own face modelling targets
+	 * (tools/makehuman/creator.json). They add on the mesh like every other slider, so the expression units, blinking,
+	 * talking and the fight faces all work on any face, the strand hair follows any head (grow_hair.py measures each), and
+	 * every random person gets a face of their own (CreatorRandomize). Key is the look's value name (CreatorPeople::FLook).
+	 */
+	struct FCreatorFaceShape
+	{
+		const TCHAR* Key;
+		const TCHAR* Morph;
+		const char* Label;
+	};
+	const FCreatorFaceShape CreatorFaceShapes[] = {
+		{TEXT("faceHeadWidth"), TEXT("ShapeHeadWidth"), "Narrow to wide head"},
+		{TEXT("faceJaw"), TEXT("ShapeJaw"), "Soft to strong jaw"},
+		{TEXT("faceChin"), TEXT("ShapeChin"), "Chin back to forward"},
+		{TEXT("faceCheekbones"), TEXT("ShapeCheekbones"), "Low to high cheekbones"},
+		{TEXT("faceEyeSize"), TEXT("ShapeEyeSize"), "Small to large eyes"},
+		{TEXT("faceEyeSpacing"), TEXT("ShapeEyeSpacing"), "Close to wide-set eyes"},
+		{TEXT("faceBrow"), TEXT("ShapeBrow"), "Low to high brows"},
+		{TEXT("faceNoseLength"), TEXT("ShapeNoseLength"), "Short to long nose"},
+		{TEXT("faceNoseWidth"), TEXT("ShapeNoseWidth"), "Narrow to wide nose"},
+		{TEXT("faceNoseBridge"), TEXT("ShapeNoseBridge"), "Scooped to humped nose"},
+		{TEXT("faceMouthWidth"), TEXT("ShapeMouthWidth"), "Narrow to wide mouth"},
+		{TEXT("faceLips"), TEXT("ShapeLips"), "Thin to full lips"},
+	};
+	constexpr int32 CreatorFaceShapeCount = UE_ARRAY_COUNT(CreatorFaceShapes);
+
+	/** A random face: each part spread round the average, most of them near it (the same for every random person). */
+	template <typename FRandomFn>
+	void CreatorRandomFace(float (&Shape)[CreatorFaceShapeCount], FRandomFn&& Rand)
+	{
+		for (float& Part : Shape)
+		{
+			Part = FMath::Clamp((Rand() + Rand() + Rand() - 1.5f) * 2.0f * 0.38f, -1.0f, 1.0f);
+		}
+	}
 	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
 
 	/** One character in the creator: its gender (which base), kind, slider values, and its colonist. */
@@ -194,6 +233,7 @@ namespace
 		float Weight = 0.0f;      // -1 thin .. 1 heavy
 		float Muscle = 0.0f;      // -1 soft .. 1 muscular
 		float Breasts = 0.0f;     // -1 small .. 1 large (woman's base)
+		float FaceShape[CreatorFaceShapeCount] = {};  // CreatorFaceShapes, each -1 .. 1 (0 the base's own face)
 		float ImpEars = 0.0f;
 		float ImpFace = 0.0f;
 		float OrcFace = 0.0f;
@@ -495,6 +535,8 @@ namespace
 		static const int32 Women[] = {1, 1, 2, 3, 4, 5};
 		static const int32 Men[] = {5, 5, 6, 7, 1, 3, 0};
 		P.HairStyle = P.bFemale ? Women[R.RandRange(0, UE_ARRAY_COUNT(Women) - 1)] : Men[R.RandRange(0, UE_ARRAY_COUNT(Men) - 1)];
+		// A face of their own (drawn last, so everything above stays as each seed had it before faces varied).
+		CreatorRandomFace(P.FaceShape, [&R]() { return R.FRand(); });
 	}
 
 	/** The skin material to show: the 2K one (the mesh's own) or the 4K one (MakeHumanArt makes both). */
@@ -575,6 +617,11 @@ namespace
 		Set(TEXT("ImpFace"), P.ImpFace);
 		Set(TEXT("OrcFace"), P.OrcFace);
 		Set(TEXT("OrcBody"), P.OrcBody);
+		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+		{
+			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Lo")), -P.FaceShape[f]);
+			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Hi")), P.FaceShape[f]);
+		}
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
 		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
 		Set(TEXT("NoTail"), 1.0f - P.Tail);
@@ -1809,6 +1856,23 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 				if (ImGui::BeginTabItem("Face"))
 				{
+					ImGui::SeparatorText("Shape");
+					for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+					{
+						ImGui::SliderFloat(CreatorFaceShapes[f].Label, &P.FaceShape[f], -1.0f, 1.0f, "%.2f");
+					}
+					if (ImGui::Button("Random face"))
+					{
+						CreatorRandomFace(P.FaceShape, []() { return FMath::FRand(); });
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("Average face"))
+					{
+						for (float& Part : P.FaceShape)
+						{
+							Part = 0.0f;
+						}
+					}
 					ImGui::SeparatorText("Expression");
 					for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)); ++e)
 					{
@@ -2192,6 +2256,10 @@ namespace
 		P.Weight = Look.Get(TEXT("weight"), P.Weight);
 		P.Muscle = Look.Get(TEXT("muscle"), P.Muscle);
 		P.Breasts = P.bFemale ? Look.Get(TEXT("breasts"), P.Breasts) : 0.0f;
+		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+		{
+			P.FaceShape[f] = FMath::Clamp(Look.Get(CreatorFaceShapes[f].Key, P.FaceShape[f]), -1.0f, 1.0f);
+		}
 		P.HairStyle = FMath::RoundToInt(Look.Get(TEXT("hairStyle"), static_cast<float>(P.HairStyle)));
 		P.Hair[0] = Look.Get(TEXT("hairR"), P.Hair[0]);
 		P.Hair[1] = Look.Get(TEXT("hairG"), P.Hair[1]);
@@ -2359,6 +2427,10 @@ CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
 	Keep(TEXT("weight"), P.Weight);
 	Keep(TEXT("muscle"), P.Muscle);
 	Keep(TEXT("breasts"), P.Breasts);
+	for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+	{
+		Keep(CreatorFaceShapes[f].Key, P.FaceShape[f]);
+	}
 	Keep(TEXT("hairStyle"), static_cast<float>(P.HairStyle));
 	Keep(TEXT("hairR"), P.Hair[0]);
 	Keep(TEXT("hairG"), P.Hair[1]);
@@ -2394,6 +2466,31 @@ bool CreatorPeople::Apply(const FLook& Look, ASimPawnActor& Pawn)
 	}
 	CreatorApply(P, Pawn, false);
 	return true;
+}
+
+int32 CreatorPeople::FaceShapeCount()
+{
+	return CreatorFaceShapeCount;
+}
+
+FString CreatorPeople::FaceShapeLabel(int32 Index)
+{
+	return Index >= 0 && Index < CreatorFaceShapeCount ? FString(UTF8_TO_TCHAR(CreatorFaceShapes[Index].Label)) : FString();
+}
+
+FString CreatorPeople::FaceShapeKey(int32 Index)
+{
+	return Index >= 0 && Index < CreatorFaceShapeCount ? FString(CreatorFaceShapes[Index].Key) : FString();
+}
+
+void CreatorPeople::RandomFace(FLook& Look)
+{
+	float Shape[CreatorFaceShapeCount] = {};
+	CreatorRandomFace(Shape, []() { return FMath::FRand(); });
+	for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+	{
+		Look.Values.Add(CreatorFaceShapes[f].Key, Shape[f]);
+	}
 }
 
 int32 CreatorPeople::HairStyleCount()

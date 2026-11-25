@@ -2,6 +2,20 @@
 
 Updated 2026-11-25.
 
+Hair game-wide, face variety, HUD bar and punches (sneed, 2026-11-25 evening; sim, data, art steps and Unreal): **hair**
+in the colony creator and in game showed the scalp although the Debug creator was fine: further than arm's length Unreal
+dropped the groom to its second LOD (a third of the strands). Now everyone within `Pawns.StrandHairFullDetail` (8 m) draws
+every strand and the undercoat always does, in one place (`UStrandHairSubsystem`) for game, colony creator and Debug
+scenes (`docs/design/hair-physics.md` "Full detail near the camera"). The braid lies a few millimetres higher (lift 6 mm).
+**Face variety** (`docs/design/makehuman.md` "Face shapes"): 12 face sliders (head width, jaw, chin, cheekbones, eye size and
+spacing, brows, nose length, width and bridge, mouth width, lips) as `Shape<Part>Lo/Hi` morphs from MakeHuman's own face
+targets on both creator bases; every random person gets a face of their own, the colony creator has the sliders and a
+Random face button, the Debug creator's Face tab too; expressions, fight faces and the hair fit work on any face.
+**HUD bar**: the ImGui "conflicting ID" error (all 11 tabs had the id "##tab", so clicks went nowhere) is fixed; every tab
+label is Build's size and the tabs are as wide as the longest needs; Inventory is called **Storage**; the keys and book
+buttons moved into the menu as **Keys** and **Tutorial**. **Punches**: the player's next punch can start in the last 8 steps
+of the last one's recovery (`MeleeRules.playerFistChainSteps`) and a click is kept for the whole swing.
+
 Models batch 6 (sneed, 2026-11-25; `docs/design/codex-models.md` "Batch 6"): **22 new models**. Gemini 4 Neon (high):
 the doomsday launcher, greatbow and EMP launcher (missing weapons), the grand and large sculptures (a jungle guardian with a
 sun-disc, a hornbill on a tree), the steam geyser (a low mineral-crusted vent whose pool bubbles) and the ship structural

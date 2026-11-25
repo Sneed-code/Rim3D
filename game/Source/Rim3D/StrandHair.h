@@ -101,6 +101,7 @@ private:
 		float TurnHold = 0.0f;  // seconds the hair is still held at rest after a fast turn
 		FVector LastHands[2] = {FVector::ZeroVector, FVector::ZeroVector};  // relative to the head, cm
 		bool bHaveHands = false;
+		int32 ForcedLod = -2;  // the LOD last forced on its strands (-1 Unreal's own pick by screen size, -2 not set yet)
 	};
 	TArray<FWearer> Wearers;
 	float SinceSort = 1.0f;
