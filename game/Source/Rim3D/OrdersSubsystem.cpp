@@ -783,8 +783,17 @@ FSimPick UOrdersSubsystem::PickGroundAt(const FVector2D& Screen) const
 	{
 		return FSimPick();
 	}
-	// On the level the overseer looks at (docs/design/levels-draw.md).
-	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, ULevelsSubsystem::TopShownLevel(World));
+	// On the level the overseer looks at (docs/design/levels-draw.md). With the panels over the walking view (B) every
+	// level is shown, so the ground is the player's own level instead (as the crosshair's ghost picks it).
+	int32 Level = ULevelsSubsystem::TopShownLevel(World);
+	const UOverseerSubsystem* Overseer = World->GetSubsystem<UOverseerSubsystem>();
+	const UProtagonistSubsystem* Protagonist = World->GetSubsystem<UProtagonistSubsystem>();
+	if (Overseer && !Overseer->IsOverseerCamera() && Protagonist)
+	{
+		const colony::ThingView* Self = Bridge->GetCurrentSnapshot().find(Protagonist->GetControlled());
+		Level = Self ? Self->level : 0;
+	}
+	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, Level);
 }
 
 bool UOrdersSubsystem::HandleLeftPressed(const FVector2D& Screen)
