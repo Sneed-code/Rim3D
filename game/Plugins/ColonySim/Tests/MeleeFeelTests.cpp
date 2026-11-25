@@ -356,16 +356,16 @@ TEST_CASE("Swing speed: the player's next punch starts in the last steps of the 
     const Entity other = feelTestPawn(*sim, 34.5f, 30.5f, "Melee_Mace");
     feelTestFace(*sim, hero, 1.0f, 0.0f);
     const int chain = sim->melee().rules().playerFistChainSteps;
-    REQUIRE(chain > 0);
+    FEEL_REQUIRE(chain > 0);
     std::string why;
-    REQUIRE(sim->melee().attack(hero, kNoEntity, true, &why));
+    FEEL_REQUIRE(sim->melee().attack(hero, kNoEntity, true, &why));
     // Early in the recovery: not yet.
     int steps = 0;
     while (sim->things().registry().get<Melee>(hero).phase != MeleePhase::Recovery && steps < 200) {
         sim->step();
         ++steps;
     }
-    REQUIRE(sim->things().registry().get<Melee>(hero).stepsLeft > chain);
+    FEEL_REQUIRE(sim->things().registry().get<Melee>(hero).stepsLeft > chain);
     CHECK_FALSE(sim->melee().attack(hero, kNoEntity, true, &why));
     // Within the last playerFistChainSteps: the next punch winds up at once.
     while (sim->things().registry().get<Melee>(hero).stepsLeft > chain && steps < 400) {
@@ -377,7 +377,7 @@ TEST_CASE("Swing speed: the player's next punch starts in the last steps of the 
     CHECK(sim->things().registry().get<Melee>(hero).phase == MeleePhase::Windup);
     // Only the player's bare fists: a pawn with a weapon still waits for its recovery to end.
     sim->step();
-    REQUIRE(sim->melee().attack(other, kNoEntity, true, &why));
+    FEEL_REQUIRE(sim->melee().attack(other, kNoEntity, true, &why));
     steps = 0;
     while (!(sim->things().registry().get<Melee>(other).phase == MeleePhase::Recovery &&
              sim->things().registry().get<Melee>(other).stepsLeft <= chain) && steps < 400) {
