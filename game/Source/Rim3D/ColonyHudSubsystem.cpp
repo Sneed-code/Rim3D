@@ -1,4 +1,6 @@
 #include "ColonyHudSubsystem.h"
+#include "AnimationRuntime.h"
+#include "Engine/SkeletalMesh.h"
 
 #include "GameFramework/PlayerInput.h"
 
@@ -1162,8 +1164,8 @@ void UColonyHudSubsystem::DrawDateBox(USimSubsystem& Bridge, float Scale)
 {
 	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 	const colony::Sim& Sim = *Bridge.GetSim();
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x - 12.0f * Scale, ColonyHud::AboveBar(Viewport, Scale)), ImGuiCond_Always,
-		ImVec2(1.0f, 1.0f));
+	// Fully top right, at the head of the right column (sneed 2026-11-25), with the alarm's Draft button beside the day.
+	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Date, Scale);
 	ColonyHud::HoldWidth("##HudDate", Scale);
 	if (ImGui::Begin("##HudDate", nullptr, ColonyHud::BoxFlags()))
 	{
@@ -1172,6 +1174,11 @@ void UColonyHudSubsystem::DrawDateBox(USimSubsystem& Bridge, float Scale)
 		ColonyHud::Text(FString::Printf(TEXT("%02d:%02d   Day %lld"), Time.hourOfDay(),
 			static_cast<int32>((Time.seconds % colony::kSecondsPerHour) / colony::kSecondsPerMinute), static_cast<long long>(Time.day() + 1)));
 		ColonyHud::PopLarge();
+		if (UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>())
+		{
+			ImGui::SameLine(0.0f, 18.0f * Scale);
+			Orders->DrawAlarmButton(Bridge);
+		}
 		ColonyHud::TextColored(ColonyHud::TextDim(), USkySubsystem::DescribeDate(Sim) + TEXT("   ") + USkySubsystem::DescribeClimate(Sim));
 		if (Bridge.GetSpeed() == 0)
 		{
@@ -1200,9 +1207,7 @@ void UColonyHudSubsystem::DrawDateBox(USimSubsystem& Bridge, float Scale)
 			}
 			ColonyHud::Tip(TEXT("Look at the level below (Page Down)"));
 		}
-		// Boxes that stack above it (key hints, the overlay ticks, the visitors) read this next frame.
-		ColonyHud::DateBoxTop() = ImGui::GetWindowPos().y;
-		ColonyHud::DateBoxLeft() = ImGui::GetWindowPos().x;
+		HudLayout::ReportRight(HudLayout::ERightSlot::Date);
 	}
 	ImGui::End();
 }
@@ -1656,6 +1661,12 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			continue;
 		}
+		// A new look waits for them to stand still and upright (not bent over a job or mid-stride), unless there is no
+		// picture yet.
+		if (Shot && Shot->Target && (View.posture != colony::PawnPosture::Stand || View.vx * View.vx + View.vy * View.vy > 0.04f))
+		{
+			continue;
+		}
 		ASimPawnActor* Actor = Pawns->FindPawn(View.id);
 		if (!Actor)
 		{
@@ -1707,7 +1718,23 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			Head = Mesh->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, 6.0f);
 		}
-		const FVector Forward = Actor->GetActorForwardVector();
+		// Straight at the face (sneed 2026-11-25: front on, never whatever angle the head had turned to): the head bone's turn
+		// away from its bind pose carries the face's bind direction (the actor's forward) round with it; level, so a bowed
+		// head still gets a level, front-on picture.
+		FVector Forward = Actor->GetActorForwardVector();
+		const int32 HeadBone = Mesh ? Mesh->GetBoneIndex(TEXT("head")) : INDEX_NONE;
+		if (HeadBone != INDEX_NONE && Mesh->GetSkeletalMeshAsset())
+		{
+			const FTransform RefHead = FAnimationRuntime::GetComponentSpaceTransformRefPose(Mesh->GetSkeletalMeshAsset()->GetRefSkeleton(), HeadBone);
+			const FQuat HeadWorld = Mesh->GetBoneQuaternion(TEXT("head"), EBoneSpaces::WorldSpace);
+			const FVector FaceInComponent = Mesh->GetComponentQuat().Inverse().RotateVector(Actor->GetActorForwardVector());
+			FVector Face = HeadWorld.RotateVector(RefHead.GetRotation().Inverse().RotateVector(FaceInComponent));
+			Face.Z = 0.0f;
+			if (Face.Normalize())
+			{
+				Forward = Face;
+			}
+		}
 		const FVector Eye = Head + Forward * 95.0f + FVector(0.0f, 0.0f, 4.0f);
 		MugshotActor->SetActorLocationAndRotation(Eye, (Head - Eye).Rotation());
 		MugshotCapture->ShowOnlyActors.Reset();

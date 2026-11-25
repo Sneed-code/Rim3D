@@ -78,6 +78,16 @@ namespace
 	constexpr double TsGalaxyRadius = 900000.0;
 	const FRotator TsGalaxyTurn(0.0, -14.0, 0.0);
 	constexpr float TsGalaxyGlow = 700.0f;  // the map is linear light: stars up to 1, the band about 0.1
+	// The window's piece of sky (sky_view.png, tools/title_art.py VIEW_HALF_X/Y): a flat picture square to the camera's
+	// axis at this distance, these tangent half extents (it covers the window's opening, wider than the 45 degree view),
+	// about one texel per screen pixel at 4K, so the stars are crisp dots instead of the galaxy sphere's soft blocks.
+	// Nearer than the galaxy sphere (its corners too) and farther than the planet.
+	constexpr double TsViewDistance = 760000.0;
+	constexpr double TsViewHalfX = 0.46;
+	constexpr double TsViewHalfY = 0.46 * 2240.0 / 4096.0;
+	// The night side's city lights (planet_lights.r3tx, linear light up to 1) times this (cd/m2): orange specks in the
+	// dark, faint by day.
+	constexpr float TsCityGlow = 30.0f;
 
 	// Plain colours when a map is missing (linear).
 	const FLinearColor TsOceanColour(0.02f, 0.08f, 0.20f);
@@ -124,8 +134,10 @@ namespace
 		TArray<FVector> Normals;
 		TArray<FVector2D> UVs;
 		TArray<FColor> Colours;
+		TArray<FProcMeshTangent> Tangents;  // only spheres have them (the planet's relief map runs east and north)
 
-		/** A UV sphere (u round, v from the north pole, as tools/title_art.py paints), facing out or in. */
+		/** A UV sphere (u round, v from the north pole, as tools/title_art.py paints), facing out or in. Its tangents point
+		 *  east (growing u), so the binormal Unreal derives (normal x tangent) points north: planet_normal.r3tx's y. */
 		void AddSphere(double Radius, int32 Rings, int32 Segments, bool bInside, const FLinearColor& Colour)
 		{
 			const int32 Base = Positions.Num();
@@ -140,6 +152,7 @@ namespace
 					Normals.Add(bInside ? -Dir : Dir);
 					UVs.Add(FVector2D(static_cast<double>(S) / Segments, static_cast<double>(R) / Rings));
 					Colours.Add(Colour.ToFColor(true));
+					Tangents.Add(FProcMeshTangent(FVector(-FMath::Sin(Phi), FMath::Cos(Phi), 0.0), false));
 				}
 			}
 			for (int32 R = 0; R < Rings; ++R)
@@ -215,9 +228,27 @@ namespace
 			}
 		}
 
+		/** A flat rectangle square to +X at distance X, Y from -HalfY to HalfY (left to right), Z from HalfZ (top) to -HalfZ,
+		 *  facing back along -X (towards the eye); UV (0, 0) at its top left, as a picture's first row. */
+		void AddFacingQuad(double X, double HalfY, double HalfZ)
+		{
+			const int32 Base = Positions.Num();
+			const double Corners[4][2] = {{0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}, {0.0, 1.0}};
+			for (const auto& Corner : Corners)
+			{
+				Positions.Add(FVector(X, (Corner[0] * 2.0 - 1.0) * HalfY, (1.0 - Corner[1] * 2.0) * HalfZ));
+				Normals.Add(FVector::BackwardVector);
+				UVs.Add(FVector2D(Corner[0], Corner[1]));
+				Colours.Add(FColor::White);
+			}
+			TsTriangle(Triangles, Positions, Base, Base + 1, Base + 2, FVector::BackwardVector);
+			TsTriangle(Triangles, Positions, Base, Base + 2, Base + 3, FVector::BackwardVector);
+		}
+
 		void Upload(UProceduralMeshComponent& Mesh, int32 Section) const
 		{
-			Mesh.CreateMeshSection(Section, Positions, Triangles, Normals, UVs, Colours, TArray<FProcMeshTangent>(), false);
+			Mesh.CreateMeshSection(Section, Positions, Triangles, Normals, UVs, Colours,
+				Tangents.Num() == Positions.Num() ? Tangents : TArray<FProcMeshTangent>(), false);
 		}
 	};
 
@@ -241,8 +272,8 @@ namespace
 		return OutWidth > 0 && OutHeight > 0 && OutBgra.Num() == static_cast<int64>(OutWidth) * OutHeight * 4;
 	}
 
-	/** A transient sRGB texture of BGRA8 pixels. */
-	UTexture2D* TsMakeTexture(const uint8* Bgra, int32 Width, int32 Height)
+	/** A transient sRGB texture of BGRA8 pixels (wrapping east to west unless bClampX). */
+	UTexture2D* TsMakeTexture(const uint8* Bgra, int32 Width, int32 Height, bool bClampX = false)
 	{
 		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
 		if (!Texture || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.Num() == 0)
@@ -251,12 +282,110 @@ namespace
 		}
 		Texture->SRGB = true;
 		Texture->Filter = TF_Bilinear;
-		Texture->AddressX = TA_Wrap;
+		Texture->AddressX = bClampX ? TA_Clamp : TA_Wrap;
 		Texture->AddressY = TA_Clamp;
 		FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
 		void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
 		FMemory::Memcpy(Data, Bgra, static_cast<SIZE_T>(Width) * Height * 4);
 		Mip.BulkData.Unlock();
+		Texture->UpdateResource();
+		return Texture;
+	}
+
+	/**
+	 * Reads an .r3tx map from tools/title_art.py: every mip level ready to copy, BC1 (DXT1) or BGRA8 (its layout is in
+	 * the script's header). sRGB for colour maps, linear for the relief and roughness; a relief map is marked as one.
+	 * Null if the file is missing or not one.
+	 */
+	UTexture2D* TsLoadR3tx(const FString& Path, bool bSrgb, bool bNormalMap)
+	{
+		TArray64<uint8> File;
+		if (!FPaths::FileExists(Path) || !FFileHelper::LoadFileToArray(File, *Path))
+		{
+			return nullptr;
+		}
+		int64 At = 0;
+		const auto ReadU32 = [&File, &At](uint32& Out)
+		{
+			if (At + 4 > File.Num())
+			{
+				return false;
+			}
+			FMemory::Memcpy(&Out, File.GetData() + At, 4);
+			At += 4;
+			return true;
+		};
+		uint32 Version = 0;
+		uint32 Format = 0;
+		uint32 Width = 0;
+		uint32 Height = 0;
+		uint32 Levels = 0;
+		if (File.Num() < 24 || FMemory::Memcmp(File.GetData(), "R3TX", 4) != 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Title stage: %s is not an R3TX map"), *Path);
+			return nullptr;
+		}
+		At = 4;
+		ReadU32(Version);
+		ReadU32(Format);
+		ReadU32(Width);
+		ReadU32(Height);
+		ReadU32(Levels);
+		const EPixelFormat Pixel = Format == 1 ? PF_DXT1 : (Format == 2 ? PF_B8G8R8A8 : PF_Unknown);
+		if (Version != 1 || Pixel == PF_Unknown || Width < 4 || Height < 4 || Width > 16384 || Height > 16384 || Levels < 1 || Levels > 15)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Title stage: %s has an unknown layout"), *Path);
+			return nullptr;
+		}
+		UTexture2D* Texture = UTexture2D::CreateTransient(static_cast<int32>(Width), static_cast<int32>(Height), Pixel);
+		FTexturePlatformData* Platform = Texture ? Texture->GetPlatformData() : nullptr;
+		if (!Platform || Platform->Mips.Num() == 0)
+		{
+			return nullptr;
+		}
+		for (uint32 Level = 0; Level < Levels; ++Level)
+		{
+			uint32 LevelW = 0;
+			uint32 LevelH = 0;
+			uint32 Bytes = 0;
+			if (!ReadU32(LevelW) || !ReadU32(LevelH) || !ReadU32(Bytes) || At + Bytes > File.Num())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Title stage: %s is cut short at mip %u"), *Path, Level);
+				if (Level == 0)
+				{
+					return nullptr;
+				}
+				break;
+			}
+			FTexture2DMipMap* Mip = nullptr;
+			if (Level == 0)
+			{
+				Mip = &Platform->Mips[0];
+			}
+			else
+			{
+				Mip = new FTexture2DMipMap(static_cast<int32>(LevelW), static_cast<int32>(LevelH), 1);
+				Platform->Mips.Add(Mip);
+			}
+			void* Data = Mip->BulkData.Lock(LOCK_READ_WRITE);
+			if (Level > 0)
+			{
+				Data = Mip->BulkData.Realloc(static_cast<int64>(Bytes));
+			}
+			const int64 Room = Mip->BulkData.GetBulkDataSize();
+			FMemory::Memcpy(Data, File.GetData() + At, FMath::Min<int64>(Room, static_cast<int64>(Bytes)));
+			Mip->BulkData.Unlock();
+			At += Bytes;
+		}
+		Texture->SRGB = bSrgb;
+		if (bNormalMap)
+		{
+			Texture->CompressionSettings = TC_Normalmap;
+		}
+		Texture->Filter = TF_Default;  // the world group's anisotropic filtering: the planet is seen edge-on at its limb
+		Texture->AddressX = TA_Wrap;
+		Texture->AddressY = TA_Clamp;
+		Texture->NeverStream = true;
 		Texture->UpdateResource();
 		return Texture;
 	}
@@ -393,7 +522,8 @@ void ATitleStage::Build()
 	BuildGalaxy(Pbr, Plain);
 	BuildLights();
 	PickLook();
-	UE_LOG(LogTemp, Display, TEXT("Title stage built: planet map %d, galaxy map %d, look from %s"), bPlanetMap ? 1 : 0, bGalaxyMap ? 1 : 0, *LookSource);
+	UE_LOG(LogTemp, Display, TEXT("Title stage built: planet map %d (detail %d), galaxy map %d (sharp window sky %d), look from %s"), bPlanetMap ? 1 : 0,
+		bPlanetDetail ? 1 : 0, bGalaxyMap ? 1 : 0, bSkyView ? 1 : 0, *LookSource);
 }
 
 void ATitleStage::BuildCabin(UMaterialInterface* Pbr, UMaterialInterface* Plain)
@@ -446,16 +576,35 @@ void ATitleStage::BuildPlanet(UMaterialInterface* Pbr, UMaterialInterface* Plain
 	PlanetAxis->SetRelativeLocationAndRotation(Centre, TsPlanetTilt);
 	PlanetAxis->RegisterComponent();
 
-	// The surface with the clouds laid over it (both maps the same size); without the maps, a plain blue world.
-	UTexture2D* Map = nullptr;
+	// The surface with the clouds laid over it. The 8K .r3tx maps (with their relief, roughness and city lights) first;
+	// else the older 4K PNGs (surface and cloud cover); without either, a plain blue world.
+	const FString Folder = TitleStage::ArtFolder();
+	UTexture2D* Map = TsLoadR3tx(Folder / TEXT("planet_color.r3tx"), true, false);
+	UTexture2D* Relief = nullptr;
+	UTexture2D* Rough = nullptr;
+	UTexture2D* Lights = nullptr;
+	if (Map)
+	{
+		Textures.Add(Map);
+		bPlanetMap = true;
+		Relief = TsLoadR3tx(Folder / TEXT("planet_normal.r3tx"), false, true);
+		Rough = TsLoadR3tx(Folder / TEXT("planet_rough.r3tx"), false, false);
+		Lights = TsLoadR3tx(Folder / TEXT("planet_lights.r3tx"), true, false);
+		for (UTexture2D* Extra : {Relief, Rough, Lights})
+		{
+			if (Extra)
+			{
+				Textures.Add(Extra);
+			}
+		}
+	}
 	TArray64<uint8> Surface;
 	TArray64<uint8> Clouds;
 	int32 W = 0;
 	int32 H = 0;
 	int32 CloudW = 0;
 	int32 CloudH = 0;
-	const FString Folder = TitleStage::ArtFolder();
-	if (TsLoadPng(Folder / TEXT("planet_color.png"), Surface, W, H))
+	if (!Map && TsLoadPng(Folder / TEXT("planet_color.png"), Surface, W, H))
 	{
 		if (TsLoadPng(Folder / TEXT("planet_clouds.png"), Clouds, CloudW, CloudH) && CloudW == W && CloudH == H)
 		{
@@ -476,6 +625,7 @@ void ATitleStage::BuildPlanet(UMaterialInterface* Pbr, UMaterialInterface* Plain
 			bPlanetMap = true;
 		}
 	}
+	bPlanetDetail = Relief != nullptr;
 
 	Planet = NewObject<UProceduralMeshComponent>(this, TEXT("Planet"));
 	Planet->bUseAsyncCooking = false;
@@ -484,13 +634,29 @@ void ATitleStage::BuildPlanet(UMaterialInterface* Pbr, UMaterialInterface* Plain
 	Planet->SetCastShadow(false);
 	Planet->SetupAttachment(PlanetAxis);
 	FTsMesh Sphere;
-	Sphere.AddSphere(TsPlanetRadius, 128, 256, false, TsOceanColour);
+	Sphere.AddSphere(TsPlanetRadius, 192, 384, false, TsOceanColour);
 	Sphere.Upload(*Planet, 0);
-	Planet->SetMaterial(0, MakeSurface(Pbr, Plain, TsOceanColour, 0.75f, FLinearColor::Black, 0.0f, Map));
+	UMaterialInterface* PlanetSurface = MakeSurface(Pbr, Plain, TsOceanColour, 0.75f, FLinearColor::Black, Lights ? TsCityGlow : 0.0f, Map, Lights);
+	if (UMaterialInstanceDynamic* Detail = Cast<UMaterialInstanceDynamic>(PlanetSurface))
+	{
+		// The relief catches the low sun along the terminator; the sea is smooth (the sun's glint), land and cloud rough.
+		if (Relief)
+		{
+			Detail->SetTextureParameterValue(TEXT("NormalMap"), Relief);
+		}
+		if (Rough)
+		{
+			Detail->SetTextureParameterValue(TEXT("RoughnessMap"), Rough);
+			Detail->SetScalarParameterValue(TEXT("RoughnessScale"), 1.0f);
+		}
+	}
+	Planet->SetMaterial(0, PlanetSurface);
 	Planet->RegisterComponent();
 
-	// The air: a thin glow round the limb, on rings facing the camera just in front of the planet, brightest where the
-	// sun is behind the limb; a little over the planet's edge (haze), fading out into space.
+	// The air: a glow round the limb, on rings facing the camera just in front of the planet: a haze thickening towards
+	// the edge over the lit surface, a bright thin line at the edge, fading out into space. Blue where the sun shines on
+	// the air, orange-red where the limb crosses the terminator (sunset seen from orbit), dim on the night side. Only the
+	// pieces the camera can see are made (the limb's top arc), finely, so the glow is smooth.
 	if (!Glow)
 	{
 		return;
@@ -506,33 +672,49 @@ void ATitleStage::BuildPlanet(UMaterialInterface* Pbr, UMaterialInterface* Plain
 	const FVector RingCentre = Eye + Toward * RingDistance;
 	const FRotator RingFacing = (Eye - RingCentre).Rotation();
 	AirGlow->SetRelativeLocationAndRotation(RingCentre, RingFacing);
-	const double Edges[] = {0.90, 0.95, 0.975, 0.99, 0.998, 1.004, 1.011, 1.02, 1.032, 1.05};
+	const double Edges[] = {0.86, 0.90, 0.93, 0.955, 0.972, 0.984, 0.992, 0.997, 1.0, 1.0025, 1.0055, 1.009, 1.014, 1.02, 1.028, 1.038, 1.052, 1.07};
 	constexpr int32 Bands = static_cast<int32>(UE_ARRAY_COUNT(Edges)) - 1;
-	constexpr int32 Sectors = 16;
+	constexpr int32 Sectors = 72;
 	const FVector ToSun = -TsSunTravel.GetSafeNormal();
 	const FRotationMatrix Facing(RingFacing);
+	const FLinearColor DayAir(0.40f, 0.66f, 1.0f);
+	const FLinearColor HighAir(0.22f, 0.45f, 1.0f);
+	const FLinearColor Sunset(1.0f, 0.42f, 0.16f);
 	int32 Section = 0;
-	for (int32 Band = 0; Band < Bands; ++Band)
+	for (int32 Sector = 0; Sector < Sectors; ++Sector)
 	{
-		const double Middle = (Edges[Band] + Edges[Band + 1]) * 0.5;
-		const float Opacity = Middle < 1.0
-			? 0.6f * static_cast<float>(FMath::Pow((Middle - 0.9) / 0.1, 2.2))
-			: 0.6f * static_cast<float>(FMath::Exp(-(Middle - 1.0) / 0.016));
-		const FLinearColor Tone = Middle < 1.0 ? FLinearColor(0.45f, 0.70f, 1.0f) : FLinearColor(0.28f, 0.52f, 1.0f);
-		for (int32 Sector = 0; Sector < Sectors; ++Sector)
+		const double A0 = 2.0 * UE_DOUBLE_PI * Sector / Sectors;
+		const double A1 = 2.0 * UE_DOUBLE_PI * (Sector + 1) / Sectors;
+		const double Mid = (A0 + A1) * 0.5;
+		const FVector Radial = Facing.TransformVector(FVector(0.0, FMath::Cos(Mid), FMath::Sin(Mid)));
+		// Skip what the camera never sees: the limb point's direction from the eye, against the view (45 degrees wide,
+		// looking a little down) with a margin.
+		const FVector LimbPoint = RingCentre + Radial * Limb - Eye;
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(LimbPoint.Y, LimbPoint.X));
+		const double PitchUp = FMath::RadiansToDegrees(FMath::Atan2(LimbPoint.Z, FVector2D(LimbPoint.X, LimbPoint.Y).Size()));
+		if (FMath::Abs(Yaw) > 36.0 || PitchUp < -24.0)
 		{
-			const double A0 = 2.0 * UE_DOUBLE_PI * Sector / Sectors;
-			const double A1 = 2.0 * UE_DOUBLE_PI * (Sector + 1) / Sectors;
-			const double Mid = (A0 + A1) * 0.5;
-			const FVector Radial = Facing.TransformVector(FVector(0.0, FMath::Cos(Mid), FMath::Sin(Mid)));
-			const float Lit = FMath::Clamp(static_cast<float>(FVector::DotProduct(Radial, ToSun)) * 0.9f + 0.3f, 0.06f, 1.0f);
+			continue;
+		}
+		const float SunSide = static_cast<float>(FVector::DotProduct(Radial, ToSun));
+		const float Lit = FMath::Clamp(SunSide * 0.9f + 0.3f, 0.05f, 1.0f);
+		const float Dusk = FMath::Clamp(1.0f - FMath::Abs(SunSide + 0.05f) / 0.32f, 0.0f, 1.0f);
+		for (int32 Band = 0; Band < Bands; ++Band)
+		{
+			const double Middle = (Edges[Band] + Edges[Band + 1]) * 0.5;
+			const float Opacity = Middle < 1.0
+				? 0.62f * static_cast<float>(FMath::Pow((Middle - 0.86) / 0.14, 2.6))
+				: 0.62f * static_cast<float>(FMath::Exp(-(Middle - 1.0) / 0.017));
+			FLinearColor Tone = Middle < 1.0 ? DayAir : FLinearColor::LerpUsingHSV(DayAir, HighAir, FMath::Clamp(static_cast<float>((Middle - 1.0) / 0.05), 0.0f, 1.0f));
+			Tone = FMath::Lerp(Tone, Sunset, Dusk * (Middle < 1.0 ? 0.55f : 0.8f));
+			const float Bright = FMath::Max(Lit, Dusk * 0.7f);
 			FTsMesh Piece;
-			Piece.AddRingPiece(Limb * Edges[Band], Limb * Edges[Band + 1], A0, A1, 8);
+			Piece.AddRingPiece(Limb * Edges[Band], Limb * Edges[Band + 1], A0, A1, 4);
 			Piece.Upload(*AirGlow, Section);
 			if (UMaterialInstanceDynamic* Air = UMaterialInstanceDynamic::Create(Glow, this))
 			{
-				Air->SetVectorParameterValue(TEXT("Color"), Tone * Lit);
-				Air->SetScalarParameterValue(TEXT("Opacity"), Opacity * FMath::Sqrt(Lit));
+				Air->SetVectorParameterValue(TEXT("Color"), Tone * Bright);
+				Air->SetScalarParameterValue(TEXT("Opacity"), Opacity * FMath::Sqrt(Bright));
 				AirGlow->SetMaterial(Section, Air);
 				Materials.Add(Air);
 			}
@@ -573,6 +755,36 @@ void ATitleStage::BuildGalaxy(UMaterialInterface* Pbr, UMaterialInterface* Plain
 	Galaxy->SetMaterial(0, MakeSurface(Pbr, Plain, FLinearColor::Black, 1.0f, Map ? FLinearColor::White : TsNightSky, Map ? TsGalaxyGlow : 300.0f,
 		nullptr, Map));
 	Galaxy->RegisterComponent();
+
+	// The window's piece of sky at full sharpness (sky_view.png): in front of the sphere, the same stars and band.
+	TArray64<uint8> ViewPixels;
+	int32 ViewW = 0;
+	int32 ViewH = 0;
+	UTexture2D* ViewMap = nullptr;
+	if (TsLoadPng(TitleStage::ArtFolder() / TEXT("sky_view.png"), ViewPixels, ViewW, ViewH))
+	{
+		ViewMap = TsMakeTexture(ViewPixels.GetData(), ViewW, ViewH, true);
+	}
+	if (!ViewMap)
+	{
+		return;
+	}
+	Textures.Add(ViewMap);
+	SkyView = NewObject<UProceduralMeshComponent>(this, TEXT("SkyView"));
+	SkyView->bUseAsyncCooking = false;
+	SkyView->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SkyView->SetCanEverAffectNavigation(false);
+	SkyView->SetCastShadow(false);
+	SkyView->bAffectDynamicIndirectLighting = false;
+	SkyView->SetLightingChannels(false, false, true);
+	SkyView->SetupAttachment(Root);
+	SkyView->SetRelativeLocation(FVector(0.0, 0.0, TsEyeCm));
+	FTsMesh Quad;
+	Quad.AddFacingQuad(TsViewDistance, TsViewDistance * TsViewHalfX, TsViewDistance * TsViewHalfY);
+	Quad.Upload(*SkyView, 0);
+	SkyView->SetMaterial(0, MakeSurface(Pbr, Plain, FLinearColor::Black, 1.0f, FLinearColor::White, TsGalaxyGlow, nullptr, ViewMap));
+	SkyView->RegisterComponent();
+	bSkyView = true;
 }
 
 void ATitleStage::BuildLights()

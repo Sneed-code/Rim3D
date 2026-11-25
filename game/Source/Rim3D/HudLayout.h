@@ -3,7 +3,7 @@
 // Where the overseer HUD's boxes go (sneed 2026-11-24, docs/design/ui-layout.md "Layout v2"):
 // - A window opened from the bottom bar (Work, Schedule, Assign, the Build menu...) starts at the screen's left edge and
 //   sits right on the bar, no gap and no world showing round it; it is as wide as it needs to be.
-// - The right-hand column stacks from the very top: the inspect box (or the hover readout), the alarm, the learning
+// - The right-hand column stacks from the very top: the date box (with the alarm's Draft button), the inspect box (or the hover readout), the learning
 //   helper, then the alerts. Each box reports its height after drawing; the next frame stacks on those heights, since
 //   the boxes are drawn by different subsystems in no fixed order.
 
@@ -28,8 +28,8 @@ namespace HudLayout
 	/** The right column's boxes, top to bottom. */
 	enum class ERightSlot : uint8
 	{
+		Date,     // time, day, the Draft button, date and weather (sneed 2026-11-25: top right)
 		Inspect,
-		Alarm,
 		Lessons,
 		Alerts,
 		Count

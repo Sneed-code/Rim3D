@@ -27,7 +27,7 @@
     "noonEV": 15.0,
     "follow": 0.88,
     "minEV": -1.5,
-    "maxEV": 16.0,
+    "maxEV": 15.0,
     "brighterEV": 0.75,
     "indoorBrighterEV": 5.0,
     "indoorEase": 1.5,

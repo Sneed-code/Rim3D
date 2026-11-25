@@ -60,6 +60,15 @@ rate, the hands raised into view while ready (off through a swing, whose clip mo
 hand's grip, the other hand on a two-handed grip, the shield on the left forearm (raised before the face while
 blocking). Bare fists jab when a blow lands, the hands taking turns. Melee no longer switches the view to third person.
 
+**Standing a block up** (sneed 2026-11-25: "the animation to block with fists is bad because you lean back; they should
+have a normal, even slightly leaning forward posture"). The fists' guard clip (Mixamo Center Block, held at `blockHold`
+0.55 s) rocks the chest back as if taking a blow. A hold style's `blockUpright` (degrees; the fists' is 4) stands its block
+clip up: each frame the hold layer measures the chest's lean (spine_01 to the neck, in the mesh's space) in the walk under
+it and in the pose with the clip, and where the clip leans back of the walk's lean plus `blockUpright`, turns spine_01
+forward by the difference (at most 35 degrees, never back), times the layer's weight, so it comes and goes with the guard
+and holds through the walk's sway with no pop (`USimPawnAnimInstance::SetUpperUpright`, `PawnChestLean` in
+PawnAnimInstance.cpp). The legs and hips are the walk's, so the feet don't slide.
+
 Guns in first person: the left hand rides a pump gun's fore-end back and forward (`pump` + `cycle` in guns.json), and a
 reload keeps the barrel pointing ahead by `reloadSteady` (the shotgun 0.75) so its stock doesn't swing the muzzle
 across the view.

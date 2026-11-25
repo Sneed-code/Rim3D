@@ -68,6 +68,9 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
+	/** The actor every building's mesh hangs off (the overseer marks it for its see-through outlines). */
+	AActor* GetDrawActor() const { return DrawActor; }
+
 	/** Reads the newest snapshot now and rebuilds the chunks that changed (the tick does this itself when a step has run). */
 	void Refresh();
 

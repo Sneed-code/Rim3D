@@ -14,6 +14,7 @@
 #include "ColonySim/Things.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace colony {
 
@@ -37,9 +38,66 @@ bool JobSystem::handsReach(float x, float y, int level, const CellRect& rect) {
     if (rect.level != level) {
         return false;
     }
-    const float dx = std::max({static_cast<float>(rect.minX) - x, 0.0f, x - static_cast<float>(rect.minX + rect.sizeX)});
-    const float dy = std::max({static_cast<float>(rect.minY) - y, 0.0f, y - static_cast<float>(rect.minY + rect.sizeY)});
-    return dx * dx + dy * dy <= kHandsOnReach * kHandsOnReach;
+    // In cells, from the one the colonist stands in to the nearest of the rect's, diagonals counting as one.
+    const int cx = static_cast<int>(std::floor(x));
+    const int cy = static_cast<int>(std::floor(y));
+    const int dx = std::max({rect.minX - cx, 0, cx - (rect.minX + rect.sizeX - 1)});
+    const int dy = std::max({rect.minY - cy, 0, cy - (rect.minY + rect.sizeY - 1)});
+    return dx <= kHandsOnReachCells && dy <= kHandsOnReachCells;
+}
+
+HandsOnTarget JobSystem::nextHandsOn(Entity pawn, HandsOnKind kind, float viewX, float viewY) const {
+    HandsOnTarget best;
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.all_of<Position>(pawn)) {
+        return best;
+    }
+    const bool cellWork = kind == HandsOnKind::Mine || kind == HandsOnKind::Chop || kind == HandsOnKind::Cut || kind == HandsOnKind::Harvest;
+    if (!cellWork && kind != HandsOnKind::Build) {
+        return best;
+    }
+    const Position& at = reg.get<Position>(pawn);
+    const float viewLength = std::sqrt(viewX * viewX + viewY * viewY);
+    const float vx = viewLength > 1.0e-4f ? viewX / viewLength : 0.0f;
+    const float vy = viewLength > 1.0e-4f ? viewY / viewLength : 0.0f;
+    // Off the way the player looks costs most; each metre away a little (so of two in the same way the nearer wins).
+    const auto cost = [&](float tx, float ty) {
+        const float dx = tx - at.x;
+        const float dy = ty - at.y;
+        const float distance = std::sqrt(dx * dx + dy * dy);
+        const float along = distance < 0.05f ? 1.0f : (dx * vx + dy * vy) / distance;
+        return (1.0f - along) + 0.15f * distance;
+    };
+    float bestCost = 0.0f;
+    const CellPos here = cellOf(at);
+    // Every cell in reach, in a fixed order (rows, then columns), so ties always go the same way.
+    for (int y = here.y - kHandsOnReachCells; y <= here.y + kHandsOnReachCells; ++y) {
+        for (int x = here.x - kHandsOnReachCells; x <= here.x + kHandsOnReachCells; ++x) {
+            const CellPos cell{x, y, here.level};
+            if (!map_.inBounds(cell)) {
+                continue;
+            }
+            Entity thing = kNoEntity;
+            if (!cellWork) {
+                thing = construction_.siteAt(cell);
+                if (thing == kNoEntity) {
+                    continue;
+                }
+            }
+            const HandsOnPlan plan = planHandsOn(pawn, thing, cell);
+            if (!plan.ok() || plan.kind != kind) {
+                continue;
+            }
+            const float c = cost(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f);
+            if (!best.found || c < bestCost) {
+                best.found = true;
+                best.thing = thing;
+                best.cell = cell;
+                bestCost = c;
+            }
+        }
+    }
+    return best;
 }
 
 bool JobSystem::handsOnInReach(Entity pawn, const Job& job) const {

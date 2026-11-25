@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include "ColonyHudStyle.h"
+#include "FightSubsystem.h"
 #include "KeyBindings.h"
 #include "OrdersSubsystem.h"
 #include "ProtagonistPawn.h"
@@ -36,7 +37,7 @@ namespace
 	/** The ghost only follows the crosshair this far from the colonist, in metres. */
 	constexpr double HandsBuildRangeM = 14.0;
 	// F picks up a weapon lying this near (metres), as the equip key does.
-	constexpr double HandsWeaponReachM = 2.5;
+	constexpr double HandsWeaponReachM = 3.0;  // the two cells of hands-on reach, diagonals too
 	/** Heights of what can be looked at, in cm: a tree, a bush or a flower. */
 	constexpr double HandsTreeCm = 650.0;
 	constexpr double HandsBushCm = 110.0;
@@ -247,7 +248,14 @@ void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 	const colony::Entity Pawn = Protagonist ? Protagonist->GetControlled() : colony::kNoEntity;
 	if (bDown && !bWasDown)
 	{
-		if (Plan.ok() && Plan.kind == colony::HandsOnKind::Sleep)
+		if (IsLooseWeapon(Bridge, Target.Thing, Pawn))
+		{
+			// F on a weapon lying in reach picks it up into the hands (sneed 2026-11-17: F is the one interact key). Before
+			// the plain pick-up, which would only carry it like a hauler.
+			LastCommand = Bridge.Submit(colony::EquipCommand{Pawn, Target.Thing});
+			++Stats.CommandsSent;
+		}
+		else if (Plan.ok() && Plan.kind == colony::HandsOnKind::Sleep)
 		{
 			// A bed: a press sleeps the night away (SleepCommand); nothing is held.
 			LastCommand = Bridge.Submit(colony::SleepCommand{Pawn, Target.Thing, false});
@@ -258,12 +266,9 @@ void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 			LastCommand = Bridge.Submit(colony::HandsOnCommand{Pawn, colony::HandsOnMode::Work, Target.Thing, Target.Cell});
 			++Stats.CommandsSent;
 			bInteracting = Plan.kind != colony::HandsOnKind::PickUp;
-		}
-		else if (IsLooseWeapon(Bridge, Target.Thing, Pawn))
-		{
-			// F on a weapon lying in reach picks it up into the hands (sneed 2026-11-17: F is the one interact key).
-			LastCommand = Bridge.Submit(colony::EquipCommand{Pawn, Target.Thing});
-			++Stats.CommandsSent;
+			WorkKind = Plan.kind;
+			bWorkSeen = false;
+			WorkSentStep = Bridge.GetCurrentSnapshot().steps;
 		}
 		else if (Target.bValid && !Target.bGround)
 		{
@@ -277,7 +282,60 @@ void UHandsOnSubsystem::Interact(USimSubsystem& Bridge, bool bDown)
 		Bridge.Submit(colony::HandsOnCommand{Pawn, colony::HandsOnMode::Stop, colony::kNoEntity, colony::CellPos{}});
 		++Stats.CommandsSent;
 	}
+	else if (bDown && bWasDown && bInteracting)
+	{
+		ContinueWork(Bridge, Pawn);
+	}
 	bWasDown = bDown;
+}
+
+// sneed 2026-11-25: "if I hold down F it goes to the next cell after finished (so you can rapidly cut grass etc.)". While
+// F stays held and the job is over (done, or the target went), the sim names the next target of the same kind within the
+// two cells' reach, the one the view points at first (JobSystem::nextHandsOn), and it goes in as an ordinary command. Not in
+// a fight: locked on to an enemy or fighting, letting go of the work is the safe thing.
+void UHandsOnSubsystem::ContinueWork(USimSubsystem& Bridge, colony::Entity Pawn)
+{
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	const colony::ThingView* Me = Snapshot.find(Pawn);
+	if (!Me)
+	{
+		bInteracting = false;
+		return;
+	}
+	const bool bWorking = Me->job == colony::JobType::Mine || Me->job == colony::JobType::CutPlant || Me->job == colony::JobType::HarvestPlant ||
+		Me->job == colony::JobType::BuildFrame || Me->job == colony::JobType::DeliverResources;
+	if (bWorking)
+	{
+		bWorkSeen = true;
+		return;
+	}
+	// Not started yet: the command waits for the next step (a paused game holds it). A few steps with no job is a refusal
+	// the sim had no words for, or work that was over at once.
+	if (!bWorkSeen && Snapshot.steps < WorkSentStep + 3)
+	{
+		return;
+	}
+	const bool bCellWork = WorkKind == colony::HandsOnKind::Mine || WorkKind == colony::HandsOnKind::Chop || WorkKind == colony::HandsOnKind::Cut ||
+		WorkKind == colony::HandsOnKind::Harvest || WorkKind == colony::HandsOnKind::Build;
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const AProtagonistPawn* Player = Protagonist ? Protagonist->GetBody() : nullptr;
+	if (!bCellWork || !Player || Me->fighting || Me->focusTarget != colony::kNoEntity || !Bridge.GetSim())
+	{
+		bInteracting = false;
+		return;
+	}
+	const FVector View = Player->GetViewDirection();
+	const colony::HandsOnTarget Next = Bridge.GetSim()->jobs().nextHandsOn(Pawn, WorkKind, static_cast<float>(View.X), static_cast<float>(View.Y));
+	if (!Next.found)
+	{
+		bInteracting = false;  // nothing more of its kind in reach: holding F does nothing more until it is pressed again
+		return;
+	}
+	LastCommand = Bridge.Submit(colony::HandsOnCommand{Pawn, colony::HandsOnMode::Work, Next.thing, Next.cell});
+	++Stats.CommandsSent;
+	++Stats.ChainedJobs;
+	bWorkSeen = false;
+	WorkSentStep = Snapshot.steps;
 }
 
 void UHandsOnSubsystem::PutDown()
@@ -305,18 +363,10 @@ bool UHandsOnSubsystem::HandleWheel(float Notches)
 
 void UHandsOnSubsystem::ToggleBuilding()
 {
-	UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
-	if (!Orders)
+	// B (sneed 2026-11-25): the overseer's bar over this view with Build open, the mouse placing plans under the cursor.
+	if (UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>())
 	{
-		return;
-	}
-	if (Orders->IsDirectBuilding())
-	{
-		Orders->CancelTool();
-	}
-	else
-	{
-		Orders->SetTool(EOrderTool::Build);
+		Protagonist->ToggleBuildUi();
 	}
 }
 
@@ -466,8 +516,14 @@ void UHandsOnSubsystem::DrawHud(USimSubsystem& Bridge)
 		return;
 	}
 	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	if (Protagonist && Protagonist->IsBuildUiOpen())
+	{
+		return;  // the build screen (B): the overseer's panels are up, the walking prompts keep out of the way
+	}
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
-	const colony::ThingView* Me = Protagonist ? Bridge.GetCurrentSnapshot().find(Protagonist->GetControlled()) : nullptr;
+	const UFightSubsystem* Fight = GetWorld()->GetSubsystem<UFightSubsystem>();
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	const colony::ThingView* Me = Protagonist ? Snapshot.find(Protagonist->GetControlled()) : nullptr;
 	const colony::Sim& Sim = *Bridge.GetSim();
 	const float Scale = FMath::Clamp(Viewport->Size.y / 1080.0f, 1.0f, 2.0f);
 	ColonyHud::ApplyFrameStyle(Scale);
@@ -475,83 +531,85 @@ void UHandsOnSubsystem::DrawHud(USimSubsystem& Bridge)
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
 	const ImVec2 Centre(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y * 0.5f);
 	const float Margin = 12.0f * Scale;
+	const float Gap = 6.0f * Scale;
 	const double Now = FPlatformTime::Seconds();
+	const FString Key = Rim3DKeys::GetKeyLabel(ERim3DAction::Interact);
 
-	// Under the crosshair: what F would do, or why not.
-	if (Target.bValid && !Target.bGround && Plan.kind != colony::HandsOnKind::None)
-	{
-		ImGui::SetNextWindowPos(ImVec2(Centre.x, Centre.y + 70.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-		ImGui::SetNextWindowBgAlpha(0.6f);
-		if (ImGui::Begin("##HandsPrompt", nullptr, Flags))
-		{
-			const FString Label = HandsCapital(Plan.label);
-			if (Plan.ok())
-			{
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.95f, 0.55f, 1.0f));
-				HandsText(Plan.kind == colony::HandsOnKind::Sleep ? FString::Printf(TEXT("F   %s"), *Label)
-																 : FString::Printf(TEXT("F   hold: %s"), *Label));
-			}
-			else
-			{
-				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.8f, 0.6f, 1.0f));
-				HandsText(Plan.inReach ? FString::Printf(TEXT("%s: %s"), *Label, *HandsCapital(Plan.error)) : FString::Printf(TEXT("%s: get closer"), *Label));
-			}
-			ImGui::PopStyleColor();
-		}
-		ImGui::End();
-		++Stats.PromptFrames;
-	}
-	else if (Target.bValid && !Target.bGround && !Plan.error.empty())
-	{
-		ImGui::SetNextWindowPos(ImVec2(Centre.x, Centre.y + 70.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-		ImGui::SetNextWindowBgAlpha(0.5f);
-		if (ImGui::Begin("##HandsPromptNo", nullptr, Flags))
-		{
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-			HandsText(HandsCapital(Plan.error));
-			ImGui::PopStyleColor();
-		}
-		ImGui::End();
-	}
+	// Bottom middle, stacked from the bottom up (sneed 2026-11-25: the F box goes to the bottom middle): the weapon box
+	// (UFightSubsystem), what is carried, then what F would do and the work in progress.
+	const float GunTop = Fight ? Fight->GetBottomBoxTop() : 0.0f;
+	float Bottom = GunTop > 0.0f ? GunTop - Gap : Viewport->Pos.y + Viewport->Size.y - Margin;
 
-	// Work in progress.
-	const bool bWorking = Me && (Me->job == colony::JobType::Mine || Me->job == colony::JobType::CutPlant ||
-		Me->job == colony::JobType::HarvestPlant || Me->job == colony::JobType::BuildFrame);
-	if (bWorking)
-	{
-		ImGui::SetNextWindowPos(ImVec2(Centre.x, Centre.y + 120.0f * Scale), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-		ImGui::SetNextWindowBgAlpha(0.6f);
-		if (ImGui::Begin("##HandsProgress", nullptr, Flags))
-		{
-			const char* Verb = Me->job == colony::JobType::Mine ? "Mining" : (Me->job == colony::JobType::BuildFrame ? "Building" : "Working");
-			ImGui::TextUnformatted(Verb);
-			ImGui::ProgressBar(FMath::Clamp(Me->jobProgress, 0.0f, 1.0f), ImVec2(220.0f * Scale, 14.0f * Scale), "");
-		}
-		ImGui::End();
-		++Stats.ProgressFrames;
-	}
-
-	// What is carried, bottom centre.
+	// What is carried.
 	const bool bCarrying = Me && Me->carriedCount > 0;
 	if (bCarrying || (Orders && Orders->IsDirectBuilding()))
 	{
-		ImGui::SetNextWindowPos(ImVec2(Centre.x, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ImGui::SetNextWindowPos(ImVec2(Centre.x, Bottom), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
 		ImGui::SetNextWindowBgAlpha(0.6f);
 		if (ImGui::Begin("##HandsCarry", nullptr, Flags))
 		{
 			if (bCarrying)
 			{
-				HandsText(FString::Printf(TEXT("Carrying %d %s    X: put down    F on a plan: put it in"), Me->carriedCount,
-					UTF8_TO_TCHAR(Sim.defs().get(Me->carriedDef).label().c_str())));
+				HandsText(FString::Printf(TEXT("Carrying %d %s    %s: put down    %s on a plan: put it in"), Me->carriedCount,
+					UTF8_TO_TCHAR(Sim.defs().get(Me->carriedDef).label().c_str()), *Rim3DKeys::GetKeyLabel(ERim3DAction::PutDown), *Key));
 			}
 			if (Orders && Orders->IsDirectBuilding())
 			{
 				HandsText(FString::Printf(TEXT("Building: %s"), *Orders->GetBuildSummary()));
 				ImGui::TextUnformatted("wheel: building   Q: stuff   R: turn   click: plan it   B: put away");
 			}
+			Bottom = ImGui::GetWindowPos().y - Gap;
 		}
 		ImGui::End();
 	}
+	CarryTop = Bottom;
+
+	// What F would do, or why not, with the work's progress under it. An item says it on itself instead (DrawWorldLabel).
+	const colony::ThingView* Looked = Target.bValid && !Target.bGround && Target.Thing != colony::kNoEntity ? Snapshot.find(Target.Thing) : nullptr;
+	const bool bItem = Looked && Looked->category == colony::ThingCategory::Item;
+	const bool bPrompt = Target.bValid && !Target.bGround && !bItem && (Plan.kind != colony::HandsOnKind::None || !Plan.error.empty());
+	const bool bWorking = Me && (Me->job == colony::JobType::Mine || Me->job == colony::JobType::CutPlant ||
+		Me->job == colony::JobType::HarvestPlant || Me->job == colony::JobType::BuildFrame);
+	if (bPrompt || bWorking)
+	{
+		ImGui::SetNextWindowPos(ImVec2(Centre.x, Bottom), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ImGui::SetNextWindowBgAlpha(0.6f);
+		if (ImGui::Begin("##HandsPrompt", nullptr, Flags))
+		{
+			if (bPrompt)
+			{
+				const FString Label = HandsCapital(Plan.label);
+				if (Plan.kind == colony::HandsOnKind::None)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+					HandsText(HandsCapital(Plan.error));
+				}
+				else if (Plan.ok())
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.95f, 0.55f, 1.0f));
+					HandsText(Plan.kind == colony::HandsOnKind::Sleep ? FString::Printf(TEXT("%s   %s"), *Key, *Label)
+																	 : FString::Printf(TEXT("%s   hold: %s"), *Key, *Label));
+				}
+				else
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.8f, 0.6f, 1.0f));
+					HandsText(Plan.inReach ? FString::Printf(TEXT("%s: %s"), *Label, *HandsCapital(Plan.error)) : FString::Printf(TEXT("%s: get closer"), *Label));
+				}
+				ImGui::PopStyleColor();
+				++Stats.PromptFrames;
+			}
+			if (bWorking)
+			{
+				const char* Verb = Me->job == colony::JobType::Mine ? "Mining" : (Me->job == colony::JobType::BuildFrame ? "Building" : "Working");
+				ImGui::TextUnformatted(Verb);
+				ImGui::ProgressBar(FMath::Clamp(Me->jobProgress, 0.0f, 1.0f), ImVec2(220.0f * Scale, 14.0f * Scale), "");
+				++Stats.ProgressFrames;
+			}
+		}
+		ImGui::End();
+	}
+
+	DrawWorldLabel(Bridge, Scale);
 
 	// The last thing the sim or the ghost said.
 	if (!Message.IsEmpty() && Now < MessageUntil)
@@ -566,4 +624,56 @@ void UHandsOnSubsystem::DrawHud(USimSubsystem& Bridge)
 	}
 
 	++Stats.FramesDrawn;
+}
+
+// sneed 2026-11-25: "If there's something to pick up, when I hover over it with my view it has the text on the object
+// instead." The key and what it does, over the item in the world: green when it can be done, else why not.
+void UHandsOnSubsystem::DrawWorldLabel(USimSubsystem& Bridge, float Scale)
+{
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const colony::ThingView* Item = Target.bValid && !Target.bGround && Target.Thing != colony::kNoEntity ? Bridge.GetCurrentSnapshot().find(Target.Thing) : nullptr;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	FBox Box;
+	if (!Protagonist || !Item || !PC || !Bridge.GetSim() || Item->category != colony::ThingCategory::Item || !Item->def.valid() ||
+		!SimPicking::ThingBox(Bridge, *Item, Box))
+	{
+		return;
+	}
+	FString Name = HandsCapital(Bridge.GetSim()->defs().get(Item->def).label());
+	if (Item->stackCount > 1)
+	{
+		Name = FString::Printf(TEXT("%s x%d"), *Name, Item->stackCount);
+	}
+	const FString Key = Rim3DKeys::GetKeyLabel(ERim3DAction::Interact);
+	FString Text;
+	bool bCan = false;
+	if (IsLooseWeapon(Bridge, Target.Thing, Protagonist->GetControlled()) || (Plan.kind == colony::HandsOnKind::PickUp && Plan.ok()))
+	{
+		Text = FString::Printf(TEXT("%s   Pick up %s"), *Key, *Name);
+		bCan = true;
+	}
+	else if (Plan.kind == colony::HandsOnKind::PickUp && !Plan.inReach)
+	{
+		Text = FString::Printf(TEXT("%s: get closer"), *Name);
+	}
+	else
+	{
+		Text = FString::Printf(TEXT("%s: %s"), *Name, Plan.error.empty() ? TEXT("Can't take that") : *HandsCapital(Plan.error));
+	}
+	// Just over the top of it, in the middle.
+	FVector2D Screen;
+	const FVector Over(Box.GetCenter().X, Box.GetCenter().Y, Box.Max.Z + 25.0);
+	if (!PC->ProjectWorldLocationToScreen(Over, Screen, true))
+	{
+		return;
+	}
+	const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+	const FTCHARToUTF8 Utf8(*Text);
+	const ImVec2 Size = ImGui::CalcTextSize(Utf8.Get(), Utf8.Get() + Utf8.Length());
+	const float Pad = 6.0f * Scale;
+	const ImVec2 At(Viewport->Pos.x + static_cast<float>(Screen.X) - Size.x * 0.5f, Viewport->Pos.y + static_cast<float>(Screen.Y) - Size.y - Pad);
+	ImDrawList* Draw = ImGui::GetForegroundDrawList();
+	Draw->AddRectFilled(ImVec2(At.x - Pad, At.y - Pad * 0.6f), ImVec2(At.x + Size.x + Pad, At.y + Size.y + Pad * 0.6f), IM_COL32(10, 12, 14, 165), 4.0f * Scale);
+	Draw->AddText(At, bCan ? IM_COL32(140, 242, 140, 255) : IM_COL32(220, 210, 170, 255), Utf8.Get(), Utf8.Get() + Utf8.Length());
+	++Stats.WorldLabelFrames;
 }

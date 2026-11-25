@@ -122,6 +122,26 @@ free (a building appeared there by command) the materials are given back and the
 (`sim.plants().remove`, [plants.md](plants.md)). A blueprint or a frame leaves them alone, and
 trees don't stop a plan yet (they don't block pawns either until C3).
 
+## Doors over walls
+
+sneed, 2026-11-25: "make it so doors can replace walls (either in blueprint phase or when walls are built)". As in
+RimWorld, a def with `building.canPlaceOverWall` (the door, and the autodoor through it) may be planned over a def with
+`building.isPlaceOverableWall` (the wall), both RimWorld's fields (`Construction::canReplace`):
+
+- **Over a wall's blueprint or frame**: the wall's plan is cancelled when the door's is placed (`Construction::cancel`,
+  so whatever was delivered to the frame is put back on the ground), and the door's plan takes its cell.
+- **Over a finished wall**: the wall stays standing and the door's blueprint shares its cell (the only time a site and a
+  building do; `Construction::replacing(site)`, `replacedBy(building)`). Like RimWorld's blocking thing
+  (`GenConstruct.HandleBlockingThingJob`), nothing is brought to the door while the wall stands: the Deconstruct work
+  giver lists the wall (no deconstruct mark needed), a builder takes it down with the usual deconstruct refund (half,
+  rounded at random), and then the door's materials come and it is built. Cancelling the door's plan leaves the wall.
+  No earthworks are planned (a wall's ground is level already).
+- Furniture, another plan of anything else, or a wall over a door's plan are still refused.
+
+Nothing new is saved: a site over a building is a site like any other. Unreal draws the door's ghost over the wall a
+little larger than it and turned along it (`BuildingSubsystem`, `BldOverBuilding`; the build tool's hover ghost likewise,
+`OrdersSubsystem::UpdatePreview`), so the plan shows until the door is done. Tests: `ConstructionTests.cpp` "Doors over walls".
+
 ## Floors
 
 Floors (`data/defs/Terrain/Floors.json`: wood floor, stone tiles, flagstone...) are laid by colonists

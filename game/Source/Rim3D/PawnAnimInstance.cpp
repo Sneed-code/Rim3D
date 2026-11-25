@@ -425,6 +425,8 @@ private:
 	TArray<float> BoneWeights;  // by compact pose index: 0 the legs and hips, 1 the chest, arms and head
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
 	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
+	/** The top of the chest, for how far it leans (SetUpperUpright). */
+	FCompactPoseBoneIndex Neck = FCompactPoseBoneIndex(INDEX_NONE);
 	/** How much the hips are pulled over the sim's position (PawnHipsReach), 0 to 1, eased in Evaluate. */
 	float HipsWeight = 0.0f;
 	/** The locomotion's pose smoothed (PawnKeySmooth), bone by bone in each bone's own space; this update's time, and
@@ -740,6 +742,8 @@ protected:
 		UpperBlend = Mutable->UpperBlend;
 		UpperWeight = Mutable->UpperWeight;
 		SpineBend = Mutable->SpineBend;
+		UpperUpright = Mutable->UpperUpright;
+		UpperOldUpright = Mutable->UpperOldUpright;
 	}
 
 public:
@@ -751,6 +755,8 @@ public:
 	float UpperBlend = 1.0f;
 	float UpperWeight = 0.0f;
 	float SpineBend = 0.0f;
+	float UpperUpright = -1.0f;
+	float UpperOldUpright = -1.0f;
 
 protected:
 
@@ -811,6 +817,17 @@ namespace
 		}
 		return Out;
 	}
+
+	/** The most a clip's chest is stood up (SetUpperUpright), degrees. */
+	constexpr float PawnUprightMostDegrees = 35.0f;
+
+	/** How far the chest leans forward, degrees (back is below 0): the line from spine_01 to the neck in component space,
+	 *  where the mesh faces +Y and up is +Z. */
+	float PawnChestLean(const FCompactPose& Pose, FCompactPoseBoneIndex SpineBone, FCompactPoseBoneIndex NeckBone)
+	{
+		const FVector Chest = PawnUpperComponent(Pose, NeckBone).GetTranslation() - PawnUpperComponent(Pose, SpineBone).GetTranslation();
+		return FMath::RadiansToDegrees(static_cast<float>(FMath::Atan2(Chest.Y, Chest.Z)));
+	}
 }
 
 void FSimPawnUpperNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& Context)
@@ -824,6 +841,8 @@ void FSimPawnUpperNode::CacheBones_AnyThread(const FAnimationCacheBonesContext& 
 	const int32 SpineRef = Ref.FindBoneIndex(TEXT("spine_01"));
 	Pelvis = PelvisRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(PelvisRef)) : FCompactPoseBoneIndex(INDEX_NONE);
 	Spine = SpineRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpineRef)) : FCompactPoseBoneIndex(INDEX_NONE);
+	const int32 NeckRef = Ref.FindBoneIndex(TEXT("neck_01"));
+	Neck = NeckRef != INDEX_NONE ? Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(NeckRef)) : FCompactPoseBoneIndex(INDEX_NONE);
 	if (SpineRef == INDEX_NONE)
 	{
 		return;
@@ -932,6 +951,11 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 				Stance.Pose[Bone] = Mixed;
 			}
 		}
+		// Stood up (SetUpperUpright): how far the walk's own chest leans forward, from spine_01 to the neck, before the clip.
+		const float UprightOld = P->UpperOldClip ? P->UpperOldUpright : P->UpperUpright;
+		const float UprightShare = FMath::Lerp(UprightOld >= 0.0f ? 1.0f : 0.0f, P->UpperUpright >= 0.0f ? 1.0f : 0.0f, P->UpperOldClip ? P->UpperBlend : 1.0f);
+		const bool bUpright = UprightShare > 0.001f && Neck.GetInt() != INDEX_NONE;
+		const float LocoLean = bUpright ? PawnChestLean(Output.Pose, Spine, Neck) : 0.0f;
 		// spine_01: the clip's chest direction in component space, under the walk's own hips.
 		const FQuat LocoPelvis = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
 		const FQuat ClipSpine = PawnUpperComponent(Stance.Pose, Spine).GetRotation();
@@ -945,6 +969,21 @@ void FSimPawnUpperNode::Evaluate_AnyThread(FPoseContext& Output)
 				FTransform Mixed = Output.Pose[Bone];
 				Mixed.BlendWith(Stance.Pose[Bone], W);
 				Output.Pose[Bone] = Mixed;
+			}
+		}
+		// A clip whose chest leans back of the walk's (the fists' guard, a Mixamo block that rocks back from a blow) is turned
+		// forward about spine_01 to the wanted lean, never back; with the layer's weight, so it comes and goes with the
+		// clip and nothing pops. It is worked out from the pose each frame, so it holds through the walk's own sway.
+		if (bUpright)
+		{
+			const float Forward = P->UpperUpright >= 0.0f ? P->UpperUpright : UprightOld;
+			const float Shortfall = LocoLean + Forward - PawnChestLean(Output.Pose, Spine, Neck);
+			const float Correction = FMath::Clamp(Shortfall, 0.0f, PawnUprightMostDegrees) * Weight * UprightShare;
+			if (Correction > 0.05f)
+			{
+				const FQuat PelvisRot = PawnUpperComponent(Output.Pose, Pelvis).GetRotation();
+				const FQuat Delta(FVector::XAxisVector, -FMath::DegreesToRadians(Correction));
+				Output.Pose[Spine].SetRotation((PelvisRot.Inverse() * Delta * PelvisRot * Output.Pose[Spine].GetRotation()).GetNormalized());
 			}
 		}
 	}
@@ -2180,6 +2219,9 @@ void USimPawnAnimInstance::DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy)
 
 void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, float BlendSeconds, float WeightRate, float HoldAt)
 {
+	// SetUpperUpright is for this call only; a clip keeps the value it came with while it fades out.
+	const float Upright = UpperUprightNext;
+	UpperUprightNext = -1.0f;
 	UpperWeightTarget = FMath::Clamp(Weight, 0.0f, 1.0f);
 	UpperWeightRate = FMath::Max(WeightRate, 0.1f);
 	if (Clip && Clip == UpperClip && UpperWeight <= 0.01f && HoldAt >= 0.0f)
@@ -2191,6 +2233,7 @@ void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, flo
 		if (Clip)
 		{
 			UpperHoldAt = HoldAt;
+			UpperUpright = Upright;
 		}
 		// No clip: keep the last one while the weight fades out.
 		if (!Clip)
@@ -2205,6 +2248,7 @@ void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, flo
 		UpperClip = Clip;
 		UpperTime = 0.0f;
 		UpperHoldAt = HoldAt;
+		UpperUpright = Upright;
 		UpperBlend = 1.0f;
 		UpperOldClip = nullptr;
 		return;
@@ -2212,9 +2256,11 @@ void USimPawnAnimInstance::SetUpperStance(UAnimSequence* Clip, float Weight, flo
 	UpperOldClip = UpperClip;
 	UpperOldTime = UpperTime;
 	UpperOldHoldAt = UpperHoldAt;
+	UpperOldUpright = UpperUpright;
 	UpperClip = Clip;
 	UpperTime = 0.0f;
 	UpperHoldAt = HoldAt;
+	UpperUpright = Upright;
 	UpperBlend = 0.0f;
 	UpperBlendRate = BlendSeconds > 0.0f ? 1.0f / BlendSeconds : 1000.0f;
 }

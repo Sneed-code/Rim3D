@@ -67,6 +67,11 @@ namespace Rim3DKeys
 	RIM3D_API bool WasPressed(const APlayerController* PC, ERim3DAction Action);
 	RIM3D_API bool WasReleased(const APlayerController* PC, ERim3DAction Action);
 
+	/** Turns the body's keys off (IsDown and WasPressed say no for every action but BuildMode) while the build screen is
+	 *  up over the walking view (UProtagonistSubsystem::OpenBuildUi): the mouse places walls and nobody walks or punches. */
+	RIM3D_API void SetGameKeysBlocked(bool bBlocked);
+	RIM3D_API bool AreGameKeysBlocked();
+
 	/** Lock-on focus on or off (the focus thread's setting; saved, on by default). */
 	RIM3D_API bool IsLockOnFocusEnabled();
 	RIM3D_API void SetLockOnFocusEnabled(bool bEnabled);

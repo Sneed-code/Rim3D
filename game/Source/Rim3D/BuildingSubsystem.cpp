@@ -122,6 +122,24 @@ namespace
 		return View.rotation == colony::Rot4::East || View.rotation == colony::Rot4::West;
 	}
 
+	/**
+	 * A plan or frame standing over a finished building it will replace (a door planned over a wall, RimWorld's
+	 * canPlaceOverWall; docs/design/construction.md "Doors over walls"). The sim lets a site share a cell with a building
+	 * only then. Its ghost is drawn a little larger than the wall, turned along the wall like a built door, so it shows
+	 * over it instead of hiding inside it.
+	 */
+	bool BldOverBuilding(const colony::Map& Map, const colony::ThingView& View)
+	{
+		if (View.category != colony::ThingCategory::Building || View.stage == colony::ConstructionStage::Built)
+		{
+			return false;
+		}
+		const colony::CellPos Cell{FMath::FloorToInt32(View.x), FMath::FloorToInt32(View.y), View.level};
+		return Map.inBounds(Cell) && Map.buildingAt(Cell) != colony::kNoEntity;
+	}
+	constexpr float BldOverBuildingGrow = 1.14f;  // the ghost's width and depth over a wall
+	constexpr float BldOverBuildingLift = 1.03f;  // and its height
+
 	// A linked wall's base course and cap (L4): this much wider than the wall on each side, this high, and this shade of it.
 	constexpr float BldBaseLedgeCm = 4.0f;
 	constexpr float BldBaseHeightCm = 35.0f;
@@ -967,6 +985,10 @@ void UBuildingSubsystem::Refresh()
 				++Doors;
 				H = BldCombine(H, BldDoorAlongY(Map, View) ? 1ULL : 2ULL);
 			}
+			else if (BldOverBuilding(Map, View))
+			{
+				H = BldCombine(H, BldDoorAlongY(Map, View) ? 0x0E51ULL : 0x0E52ULL);
+			}
 			if (ScanLinks[I] >= 0)
 			{
 				H = BldCombine(H, 0x11C0ULL + static_cast<uint64>(ScanLinks[I]));
@@ -1126,9 +1148,12 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 			}
 		}
 		const bool bDoorBuilt = DefLook->bDoor && View.stage == colony::ConstructionStage::Built;
+		const bool bOverBuilding = BldOverBuilding(Map, View);
 		const int32 Link = ScanLinks.IsValidIndex(ThingIndex) ? ScanLinks[ThingIndex] : -1;
-		// A linked building's arms point at its neighbours on the map, so it is never turned.
-		const float Yaw = bDoorBuilt ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f) : (Link >= 0 ? 0.0f : BldYawOf(View.rotation));
+		// A linked building's arms point at its neighbours on the map, so it is never turned. A door's plan over a wall
+		// lines up with the wall as the finished door will.
+		const float Yaw = bDoorBuilt || (DefLook->bDoor && bOverBuilding) ? (BldDoorAlongY(Map, View) ? 90.0f : 0.0f)
+																		  : (Link >= 0 ? 0.0f : BldYawOf(View.rotation));
 		FVector Location(View.x * 100.0f, View.y * 100.0f, Base * 100.0f);
 		// A finished wall's window (docs/design/windows.md); plans and frames are drawn whole.
 		const int32 Window = View.stage == colony::ConstructionStage::Built ? static_cast<int32>(View.window) : 0;
@@ -1224,7 +1249,12 @@ void UBuildingSubsystem::RebuildChunk(int32 Level, int32 ChunkX, int32 ChunkY, c
 			case colony::ConstructionStage::Blueprint:
 				if (Look.All)
 				{
-					Add(LookId, BldGhost, Look.All, true, false, false, Placed);
+					FTransform Ghost = Placed;
+					if (bOverBuilding)
+					{
+						Ghost.SetScale3D(FVector(BldOverBuildingGrow, BldOverBuildingGrow, BldOverBuildingLift));
+					}
+					Add(LookId, BldGhost, Look.All, true, false, false, Ghost);
 				}
 				break;
 		}

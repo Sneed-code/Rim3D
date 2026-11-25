@@ -142,7 +142,7 @@ void ULevelsSubsystem::SetViewLevel(int32 Level)
 int32 ULevelsSubsystem::GetTopShownLevel() const
 {
 	const UOverseerSubsystem* Overseer = GetWorld() ? GetWorld()->GetSubsystem<UOverseerSubsystem>() : nullptr;
-	return Overseer && Overseer->IsOverseerActive() ? ViewLevel : colony::Map::kLevels - 1;
+	return Overseer && Overseer->IsOverseerCamera() ? ViewLevel : colony::Map::kLevels - 1;
 }
 
 int32 ULevelsSubsystem::TopShownLevel(const UWorld* World)
@@ -448,7 +448,7 @@ bool ULevelsSubsystem::WantRoofs() const
 		return Terrain->AreRoofsShown();
 	}
 	const UOverseerSubsystem* Overseer = GetWorld() ? GetWorld()->GetSubsystem<UOverseerSubsystem>() : nullptr;
-	return !(Overseer && Overseer->IsOverseerActive());
+	return !(Overseer && Overseer->IsOverseerCamera());
 }
 
 void ULevelsSubsystem::ApplyVisibility(bool bForce)

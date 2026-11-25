@@ -730,3 +730,124 @@ TEST_CASE("Destruction: a wall taken away by a dev command is no wreck") {
     CHECK(buildCount(sim, EventType::BuildingWrecked) == 0);
     CHECK(wreckRubbleLayers(sim, CellPos{12, 12, 0}) == 0);
 }
+
+// ---- Doors over walls (docs/design/construction.md "Doors over walls", RimWorld's canPlaceOverWall) ----------------
+
+TEST_CASE("Doors over walls: a door is planned over a built wall, which stands until a builder takes it down") {
+    Sim sim = buildSim();
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "Steel", CellPos{5, 5, 0}, 5);
+    const CellPos at{14, 10, 0};
+    BUILD_REQUIRE(buildPlace(sim, "Wall", "Steel", at) != kNoEntity);
+    BUILD_REQUIRE(buildRunUntil(sim, 3000, [&] { return buildIsWall(sim, at); }) >= 0);
+    const Entity wall = sim.map().buildingAt(at);
+    BUILD_REQUIRE(wall != kNoEntity);
+    BUILD_REQUIRE(buildItemTotal(sim, "Steel") == 0);
+
+    // A wall over a wall, or a door over furniture, is still refused.
+    std::string error;
+    buildPlace(sim, "Wall", "Steel", at, Rot4::North, &error);
+    CHECK(error.find("building") != std::string::npos);
+    CHECK(sim.construction().siteAt(at) == kNoEntity);
+    buildSpawn(sim, "WoodLog", CellPos{30, 30, 0}, 50);
+    buildSpawn(sim, "Steel", CellPos{5, 6, 0}, 25);
+    const Entity table = buildSpawn(sim, "Table2x2", CellPos{20, 20, 0});
+    BUILD_REQUIRE(table != kNoEntity);
+    error.clear();
+    CHECK(buildPlace(sim, "Door", "Steel", CellPos{20, 20, 0}, Rot4::North, &error) == kNoEntity);
+    CHECK_FALSE(error.empty());
+
+    // The door's plan goes over the wall; the wall still stands under it.
+    const Entity door = buildPlace(sim, "Door", "Steel", at);
+    BUILD_REQUIRE(door != kNoEntity);
+    CHECK(sim.map().buildingAt(at) == wall);
+    CHECK(buildIsWall(sim, at));
+    CHECK(sim.construction().replacing(door) == wall);
+    CHECK(sim.construction().replacedBy(wall) == door);
+    CHECK_FALSE(sim.things().registry().all_of<MarkedForDeconstruct>(wall));
+    // The snapshot has both: the wall and the door's blueprint on the same cell.
+    Snapshot snap;
+    sim.writeSnapshot(snap);
+    const ThingView* wallView = snap.find(wall);
+    const ThingView* doorView = snap.find(door);
+    BUILD_REQUIRE(wallView != nullptr);
+    BUILD_REQUIRE(doorView != nullptr);
+    CHECK(wallView->stage == ConstructionStage::Built);
+    CHECK(doorView->stage == ConstructionStage::Blueprint);
+
+    // The builder takes the wall down first (nothing is brought to the door while it stands), then builds the door.
+    bool deliveredOverWall = false;
+    bool wallGone = false;
+    BUILD_REQUIRE(buildRunUntil(sim, 12000, [&] {
+                      const ConstructionSite* s = buildSite(sim, door);
+                      const bool standing = sim.things().exists(wall);
+                      wallGone = wallGone || !standing;
+                      deliveredOverWall = deliveredOverWall || (standing && s != nullptr && s->materialsHave() > 0);
+                      return sim.map().passage(at) == Passage::Door;
+                  }) >= 0);
+    CHECK(wallGone);
+    CHECK_FALSE(deliveredOverWall);
+    CHECK_FALSE(sim.things().exists(wall));
+    CHECK(sim.map().walkable(at));
+    // The wall's refund is a deconstruction's: 5 steel x 0.5, rounded at random. The door took the 25.
+    const int back = buildItemTotal(sim, "Steel");
+    CHECK((back == 2 || back == 3));
+    CHECK(sim.stats().failedJobs == 0);
+}
+
+TEST_CASE("Doors over walls: a wall's blueprint or frame is replaced by the door's plan, and what it had is put back") {
+    Sim sim = buildSim();
+    // A blueprint: simply replaced.
+    const Entity planned = buildPlace(sim, "Wall", "Steel", CellPos{20, 20, 0});
+    BUILD_REQUIRE(planned != kNoEntity);
+    const Entity door = buildPlace(sim, "Door", "WoodLog", CellPos{20, 20, 0});
+    BUILD_REQUIRE(door != kNoEntity);
+    CHECK(door != planned);
+    CHECK(buildSite(sim, planned) == nullptr);
+    CHECK(sim.things().registry().get<Thing>(door).def == sim.defs().idOf("Things", "Door"));
+    CHECK(sim.construction().replacing(door) == kNoEntity);
+    // A door over a door's plan, or a wall over a door's plan, is refused.
+    std::string error;
+    buildPlace(sim, "Wall", "Steel", CellPos{20, 20, 0}, Rot4::North, &error);
+    CHECK_FALSE(error.empty());
+    CHECK(sim.construction().siteAt(CellPos{20, 20, 0}) == door);
+
+    // A frame with its steel delivered: replaced, and the steel is put back on the ground.
+    buildSpawn(sim, "Human", CellPos{10, 10, 0});
+    buildSpawn(sim, "Steel", CellPos{5, 5, 0}, 5);
+    const Entity frame = buildPlace(sim, "Wall", "Steel", CellPos{14, 10, 0});
+    BUILD_REQUIRE(frame != kNoEntity);
+    BUILD_REQUIRE(buildRunUntil(sim, 3000, [&] {
+                      const ConstructionSite* s = buildSite(sim, frame);
+                      return s != nullptr && s->stage == ConstructionStage::Frame && s->hasAllMaterials();
+                  }) >= 0);
+    const Entity door2 = buildPlace(sim, "Door", "Steel", CellPos{14, 10, 0});
+    BUILD_REQUIRE(door2 != kNoEntity);
+    CHECK(buildSite(sim, frame) == nullptr);
+    sim.stepMany(5);
+    CHECK(buildItemTotal(sim, "Steel") == 5);  // nothing lost
+    sim.stepMany(600);
+    CHECK_FALSE(buildIsWall(sim, CellPos{14, 10, 0}));  // the wall never went up
+    CHECK(sim.construction().siteAt(CellPos{14, 10, 0}) == door2);
+}
+
+TEST_CASE("Doors over walls: cancelling the door keeps the wall, and a save with a door over a wall loads back") {
+    Sim sim = buildSim();
+    const Entity wall = buildSpawn(sim, "Wall", CellPos{14, 10, 0});
+    BUILD_REQUIRE(wall != kNoEntity);
+    const Entity door = buildPlace(sim, "Door", "WoodLog", CellPos{14, 10, 0});
+    BUILD_REQUIRE(door != kNoEntity);
+    const std::vector<uint8_t> bytes = saveSim(sim);
+    SaveLoadResult loaded = loadSim(bytes, buildDefs());
+    BUILD_REQUIRE(loaded.error.empty());
+    BUILD_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->stateHash() == sim.stateHash());
+    CHECK(loaded.sim->construction().replacing(door) == wall);
+
+    sim.submit(CancelBuildCommand{door});
+    sim.step();
+    CHECK(buildCount(sim, EventType::CommandFailed) == 0);
+    CHECK(sim.things().exists(wall));
+    CHECK(buildIsWall(sim, CellPos{14, 10, 0}));
+    CHECK(sim.construction().replacedBy(wall) == kNoEntity);
+}

@@ -220,6 +220,8 @@ public:
 	bool ToggleDraftSelected();
 	/** The Alarm button: drafts every colonist that isn't, or, when all are, sends them all back to work. Returns how many were changed. */
 	int32 Alarm();
+	/** The alarm as the date box's Draft / Stand down button (inside an ImGui window). */
+	void DrawAlarmButton(USimSubsystem& Bridge);
 	/** Move order for the selected, drafted colonist. */
 	bool OrderMoveSelected(colony::CellPos Cell);
 	bool OrderAttackSelected(colony::Entity Target);

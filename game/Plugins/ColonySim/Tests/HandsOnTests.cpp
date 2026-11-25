@@ -323,6 +323,89 @@ TEST_CASE("Hands-on: only the controlled pawn can use its hands, and the plan na
     CHECK(f.sim.jobs().planHandsOn(other, kNoEntity, rock).error == "you aren't controlling a colonist");
 }
 
+TEST_CASE("Hands-on: the player reaches two cells, diagonals too, and no further") {
+    HandFixture f;  // stands in cell 10, 10
+    for (const CellPos rock : {CellPos{12, 12, 0}, CellPos{8, 12, 0}, CellPos{12, 8, 0}, CellPos{13, 10, 0}, CellPos{10, 7, 0}}) {
+        f.sim.mineables().place(rock, f.def("Rock_Sandstone"));
+    }
+    CHECK(f.sim.jobs().planHandsOn(f.pawn, kNoEntity, CellPos{12, 12, 0}).inReach);
+    CHECK(f.sim.jobs().planHandsOn(f.pawn, kNoEntity, CellPos{8, 12, 0}).inReach);
+    CHECK(f.sim.jobs().planHandsOn(f.pawn, kNoEntity, CellPos{12, 8, 0}).inReach);
+    CHECK(!f.sim.jobs().planHandsOn(f.pawn, kNoEntity, CellPos{13, 10, 0}).inReach);
+    CHECK(!f.sim.jobs().planHandsOn(f.pawn, kNoEntity, CellPos{10, 7, 0}).inReach);
+    CHECK(f.work(CellPos{12, 12, 0}).empty());  // worked from where it stands, two cells off on the diagonal
+    CHECK(f.worker().job.type == JobType::Mine);
+    CHECK(f.work(CellPos{13, 10, 0}).find("too far") != std::string::npos);
+}
+
+TEST_CASE("Hands-on: holding on, the next target is the same kind of work, in reach, the way the player looks") {
+    HandFixture f;  // stands in cell 10, 10
+    const DefId grass = f.def("Plant_Grass");
+    const CellPos east{11, 10, 0};
+    const CellPos west{9, 10, 0};
+    const CellPos north{10, 12, 0};
+    const CellPos beyond{13, 10, 0};
+    for (const CellPos cell : {east, west, north, beyond}) {
+        f.sim.plants().place(cell, grass, 1.0f);
+    }
+    const CellPos tree{11, 11, 0};
+    f.sim.plants().place(tree, f.def("Plant_TreeOak"), 1.0f);
+    f.sim.mineables().place(CellPos{8, 8, 0}, f.def("Rock_Sandstone"));
+    JobSystem& jobs = f.sim.jobs();
+
+    HandsOnTarget next = jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, 1.0f, 0.0f);
+    CHECK(next.found);
+    CHECK(next.cell == east);
+    CHECK(next.thing == kNoEntity);
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, -3.0f, 0.0f).cell == west);  // any length of view
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, 0.0f, 1.0f).cell == north);  // the tree that way is other work
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Chop, 0.0f, 1.0f).cell == tree);
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Mine, 0.0f, 1.0f).cell == (CellPos{8, 8, 0}));
+    CHECK(!jobs.nextHandsOn(f.pawn, HandsOnKind::Harvest, 1.0f, 0.0f).found);
+    CHECK(!jobs.nextHandsOn(f.pawn, HandsOnKind::PickUp, 1.0f, 0.0f).found);
+    // No view: the nearest (east and west tie at a metre; the first in row order, west, wins every time).
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, 0.0f, 0.0f).cell == west);
+
+    // Cut the grass east, then keep going the way the keys would: north is nearer the view than west.
+    CHECK(f.work(east).empty());
+    HANDS_REQUIRE(f.runUntil(2000, [&] { return !f.sim.plants().has(east); }));
+    f.sim.step();
+    CHECK(f.worker().job.type == JobType::None);
+    next = jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, 1.0f, 0.0f);
+    HANDS_REQUIRE(next.found);
+    CHECK(next.cell == north);
+    CHECK(f.hand(next.thing, next.cell).empty());
+    HANDS_REQUIRE(f.runUntil(2000, [&] { return !f.sim.plants().has(north); }));
+    CHECK(jobs.nextHandsOn(f.pawn, HandsOnKind::Cut, 1.0f, 0.0f).cell == west);
+    CHECK(f.sim.plants().has(beyond));  // never out of reach
+    CHECK(f.sim.stats().failedJobs == 0);
+}
+
+TEST_CASE("Hands-on: holding on to building goes to the next frame in reach with all its materials") {
+    HandFixture f;
+    // Two walls, each given its steel by hand.
+    const auto frameAt = [&](CellPos cell) {
+        f.sim.submit(PlaceBlueprintCommand{"Wall", "Steel", cell, Rot4::North});
+        f.sim.step();
+        const Entity site = f.sim.construction().siteAt(cell);
+        const Entity steel = f.spawn("Steel", CellPos{9, 9, 0}, 5);
+        if (site == kNoEntity || steel == kNoEntity || !f.hand(steel, CellPos{}).empty() || !f.hand(site, CellPos{}).empty()) {
+            return kNoEntity;
+        }
+        return site;
+    };
+    const Entity a = frameAt(CellPos{12, 10, 0});
+    const Entity b = frameAt(CellPos{10, 12, 0});
+    HANDS_REQUIRE(a != kNoEntity);
+    HANDS_REQUIRE(b != kNoEntity);
+    CHECK(!f.sim.jobs().nextHandsOn(f.pawn, HandsOnKind::Cut, 1.0f, 0.0f).found);
+    const HandsOnTarget toA = f.sim.jobs().nextHandsOn(f.pawn, HandsOnKind::Build, 1.0f, 0.0f);
+    const HandsOnTarget toB = f.sim.jobs().nextHandsOn(f.pawn, HandsOnKind::Build, 0.0f, 1.0f);
+    CHECK(toA.found);
+    CHECK(toA.thing == a);
+    CHECK(toB.thing == b);
+}
+
 TEST_CASE("Hands-on: a hands-on job survives a save and load, and the game goes on the same") {
     HandFixture f;
     const CellPos rock{12, 10, 0};

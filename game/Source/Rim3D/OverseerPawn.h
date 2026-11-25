@@ -28,6 +28,8 @@ class RIM3D_API AOverseerPawn : public APawn
 public:
 	AOverseerPawn();
 
+	UCameraComponent* GetCamera() const { return Camera; }
+
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 

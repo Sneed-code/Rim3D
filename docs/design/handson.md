@@ -25,8 +25,9 @@ it for the prompt and sends the same two numbers back in the command).
 | a blueprint or frame, carrying a material it needs | puts the material in; what it doesn't need is put down | `DeliverResources`, started at its last step |
 | a frame with all its materials | builds it | `BuildFrame` |
 
-Refused, with a plain-words reason shown on screen: the target is out of reach (`kHandsOnReach`, 2 m
-from the edge of the cell or footprint), another colonist holds it, the hands are full (work other than
+Refused, with a plain-words reason shown on screen: the target is out of reach (`kHandsOnReachCells`, **two cells**
+from the cell the colonist stands in to the nearest cell of the target, diagonals too: a 5 by 5 square round the feet;
+sneed 2026-11-25, the player only), another colonist holds it, the hands are full (work other than
 delivering needs empty hands), a plan that still needs materials, a colonist who is down.
 
 **Reach, not walking.** The job has `handsOn` set: its go-to steps end at once and every step checks that
@@ -40,7 +41,15 @@ colonists to finish. A mark that was already there stays.
 
 **Holding.** F down sends `HandsOnCommand{pawn, Work, thing, cell}` once, F up sends `Stop`. Progress
 persists where the job keeps it: the damage on a rock stays, a tree starts again (as when a colonist is
-called away). The job ends by itself when the work is done; holding F on does not start another.
+called away). The job ends by itself when the work is done.
+
+**Holding on** (sneed 2026-11-25: "if I hold down F it goes to the next cell after finished, so you can rapidly cut
+grass"). While F stays held and the job is over, `UHandsOnSubsystem::ContinueWork` asks the sim for the next target
+(`JobSystem::nextHandsOn(pawn, kind, viewX, viewY)`): the same kind of work (mine, chop, cut, pick or build; a tree is
+not grass), that the colonist can do now from where it stands, within the two cells. The one nearest the way the camera
+looks wins (cost: one minus the cosine off the view, plus 0.15 a metre; ties go to the first cell in row order), and it
+goes in as an ordinary `HandsOnCommand`, so it replays like any other. Nothing of the kind left in reach, or a fight
+(locked on, or fighting): F does nothing more until it is pressed again. Picking up and putting materials in don't chain.
 
 ## Carrying and putting down
 
@@ -49,15 +58,22 @@ stack goes on the cell under the crosshair if that is within reach, free or hold
 and not held by another colonist, else on the nearest free cell around the feet. Letting go of the colonist
 (Tab, or it goes down) puts it down at the feet (`JobSystem::putDown`).
 
-## The build ghost
+## The build screen
 
-**B** takes the architect menu's Build tool in hand, in direct mode. The ghost is the same grid-snapped
-see-through mesh as in the overseer view, aimed by the crosshair (`UOrdersSubsystem::IsDirectBuilding`,
-the cell comes from `UHandsOnSubsystem`), green where it can stand and red where it can't. Within 14 m of the
-colonist only. Wheel picks the building, Q the stuff, R turns it, the left button plans it
-(`PlaceBlueprintCommand`, as the overseer's click), B or the right button or Esc puts it away. While it is in
-hand the gun is quiet (the left button and R are the ghost's). Colonists build the plan as usual, or the
-player delivers and builds it by hand.
+**B** in direct mode (sneed 2026-11-25: "it shows me my UI, like overseer mode, with build open by default; when I click
+and drag walls I don't move; B just toggles the overseer interface without the view") brings up the overseer's panels
+over the walking view: the bottom bar with the **Build** menu open, the order tools, the inspect panel. The camera stays
+where it is (`UOverseerSubsystem::SetUiOverDirectView`: `IsOverseerActive` is true for the panels and tools, while
+`IsOverseerCamera` stays false, so the levels cutaway and the roofs stay as walking has them). The mouse cursor comes up
+in the middle of the screen, where the crosshair was. Clicks go where the overseer camera's would
+(`UProtagonistSubsystem::UpdateBuildUi`): a tool in hand plans under the cursor, picked through this camera (click, or
+drag for a wall line), the right button puts the tool away, R turns, a click with no tool selects. The body's keys are
+off (`Rim3DKeys::SetGameKeysBlocked`): no walking, turning, punching or shooting, so dragging walls never moves the
+colonist. **B** again or **Esc** goes back to walking (the tool is put away). Leaving direct mode, dying, a load or a
+take-over close it too. Colonists build the plans as usual, or the player delivers and builds them by hand.
+
+The old crosshair ghost (`UOrdersSubsystem::IsDirectBuilding`, the wheel, Q, R and click on a building in hand) is still
+in the code but no key reaches it.
 
 ## Looking
 
@@ -68,10 +84,14 @@ Nothing behind the colonist's head counts (the third person camera hangs behind 
 
 ## Screen
 
-Under the crosshair: `F  hold: chop poplar tree` in green when it can be done, or the reason in grey (`get
-closer`, `the wall needs materials: pick some up and bring them`). A progress bar while the job runs
-(`ThingView::jobProgress`: a swing of the pick, a plant, a frame). What is carried and the ghost's keys at
-the bottom. Messages from the sim (a refused command) near the top of the crosshair.
+Bottom middle (sneed 2026-11-25, moved from under the crosshair): `F  hold: Chop poplar tree` in green when it can be
+done, or the reason in grey (`get closer`, `the wall needs materials: pick some up and bring them`), with a progress bar
+under it while the job runs (`ThingView::jobProgress`: a swing of the pick, a plant, a frame). It stacks on what is
+carried, which stacks on the weapon box (`UFightSubsystem::GetBottomBoxTop`; bare fists with nothing else to say have
+no weapon box). The key is the one bound to Interact. **An item looked at says it on itself**: `F   Pick up Steel x35`
+drawn over it in the world (projected from the top of its box), green when it can be taken, else why not (`Steel: get
+closer`, `Steel: Your hands are full`). F on a weapon in reach takes it into the hands (`EquipCommand`), ahead of the
+plain pick-up. Messages from the sim (a refused command) near the top of the crosshair.
 
 ## Save and replay
 
