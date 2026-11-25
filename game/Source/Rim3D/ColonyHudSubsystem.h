@@ -140,6 +140,8 @@ public:
 	void SetPeopleForTest(int32 Selected, int32 Tab) { PeopleSelected = Selected; PeopleTab = Tab; MainMenuPage = Selected == 0 ? 3 : 4; }
 	void SetPeopleClothesForTest(bool bOn) { bPeopleClothes = bOn; }
 	void SetPeopleSpinForTest(float Rate) { PeopleSpinRate = Rate; }
+	/** The right-button orbit of the character screen's camera, degrees round the body (smoke test). */
+	void SetPeopleOrbitForTest(float Degrees) { PeopleOrbit = Degrees; }
 	/** Start on the people page, as the button does. */
 	void LandColonyForTest();
 
@@ -350,6 +352,7 @@ private:
 	TWeakObjectPtr<APointLight> PeopleLamp;  // a soft key light by the camera (cosmetic)
 	colony::Entity PeopleViewFor = colony::kNoEntity;  // the pawn the clear view below was picked for
 	float PeopleViewYaw = 0.0f;  // degrees off the body's facing where the camera stands, picked clear of trees
+	float PeopleOrbit = 0.0f;    // degrees the camera is carried round the body by holding the right mouse button
 	float PickPeopleView(colony::Entity Pawn) const;
 	int32 NewSeed = 42;
 	int32 NewMapSize = 512;
