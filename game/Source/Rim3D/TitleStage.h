@@ -21,9 +21,10 @@ namespace colony { class Sim; }
  * the current character in some glitterworld wear looking at the viewer with a world at her back and the galaxy
  * background"). Cosmetic only, nothing in the sim: a starship cabin built at run time (floor, window frame, glowing
  * strips), the player's character standing in it facing the camera in sleek lumen-world clothes, and through the window
- * a lit planet (surface and cloud maps, a thin glowing rim of air) over a galaxy (an inside-out sphere with a glowing
- * map). The maps are PNGs made by tools/title_art.py (art step `title-art`) in game/Saved/TitleArt; without them the
- * planet and sky are plain colours. Its own sun, cabin lights and a fixed exposure; the sky subsystem steps aside
+ * a lit planet (an 8K surface with clouds, relief, a glinting sea and city lights on the night side, a glowing rim of
+ * air) over a galaxy (an inside-out sphere with a glowing map, and in front of it a sharp flat picture of the piece of
+ * sky the window shows). The maps are made by tools/title_art.py (art step `title-art`) in game/Saved/TitleArt; without
+ * them the planet and sky are plain colours. Its own sun, cabin lights and a fixed exposure; the sky subsystem steps aside
  * (USkySubsystem::SetStageMode) while it stands. Placed high above the map (UColonyHudSubsystem::UpdateTitleStage).
  *
  * Local axes: the camera looks along +X from (0, 0, eye height), +Y is screen right, the window is ahead.
@@ -57,6 +58,9 @@ public:
 	/** Whether the planet and galaxy maps from tools/title_art.py were found (else plain colours). */
 	bool HasPlanetMap() const { return bPlanetMap; }
 	bool HasGalaxyMap() const { return bGalaxyMap; }
+	/** Whether the 8K planet's relief map (planet_normal.r3tx) and the window's crisp sky (sky_view.png) were found. */
+	bool HasPlanetDetail() const { return bPlanetDetail; }
+	bool HasSkyView() const { return bSkyView; }
 	/** Where her look came from: "remembered" (the last game's character), "save" (read from the newest save) or "default". */
 	const FString& GetLookSource() const { return LookSource; }
 
@@ -87,6 +91,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Galaxy;
 	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SkyView;
+	UPROPERTY()
 	TObjectPtr<UDirectionalLightComponent> Sun;
 	UPROPERTY()
 	TArray<TObjectPtr<UPointLightComponent>> Lamps;
@@ -106,6 +112,8 @@ private:
 	bool bDressed = false;
 	bool bPlanetMap = false;
 	bool bGalaxyMap = false;
+	bool bPlanetDetail = false;
+	bool bSkyView = false;
 	bool bPawnFirstFrame = true;
 	float Age = 0.0f;
 };
