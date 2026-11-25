@@ -559,10 +559,10 @@ void UOverseerSubsystem::UpdateSeeThrough(const USimSubsystem& Bridge)
 	if (bWanted != bSeeThroughOnCamera)
 	{
 		TArray<FWeightedBlendable>& Blendables = Camera->PostProcessSettings.WeightedBlendables.Array;
-		Blendables.RemoveAll([this](const FWeightedBlendable& Blend) { return Blend.Object == SeeThroughMaterial; });
+		Blendables.RemoveAll([this](const FWeightedBlendable& Blend) { return Blend.Object.Get() == SeeThroughMaterial.Get(); });
 		if (bWanted)
 		{
-			Blendables.Add(FWeightedBlendable(1.0f, SeeThroughMaterial));
+			Blendables.Add(FWeightedBlendable(1.0f, SeeThroughMaterial.Get()));
 		}
 		bSeeThroughOnCamera = bWanted;
 	}
