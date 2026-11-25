@@ -1,5 +1,5 @@
 {
-  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph.",
+  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph. Shape<Part>Lo/Hi (sneed 2026-11-25, face variety): MakeHuman's own face modelling targets, one pair per face slider (SmokeTestCreator.cpp CreatorFaceShapes); every person's face is a blend of them, so they work with every expression unit, the hair fit (grow_hair.py measures any slider that moves the skull) and the gore.",
   "bases": [
     {
       "name": "CreatorFemale",
@@ -536,6 +536,141 @@
             "l-ear-lobe-decr": 0.6,
             "r-ear-lobe-decr": 0.6
           }
+        },
+        "ShapeHeadWidthLo": {
+          "targets": {
+            "head-scale-horiz-decr": 0.8
+          }
+        },
+        "ShapeHeadWidthHi": {
+          "targets": {
+            "head-scale-horiz-incr": 0.8
+          }
+        },
+        "ShapeJawLo": {
+          "targets": {
+            "chin-width-decr": 1.0,
+            "chin-bones-decr": 0.8
+          }
+        },
+        "ShapeJawHi": {
+          "targets": {
+            "chin-width-incr": 1.0,
+            "chin-bones-incr": 0.8
+          }
+        },
+        "ShapeChinLo": {
+          "targets": {
+            "chin-prominent-decr": 1.0,
+            "chin-height-decr": 0.6
+          }
+        },
+        "ShapeChinHi": {
+          "targets": {
+            "chin-prominent-incr": 1.0,
+            "chin-height-incr": 0.6
+          }
+        },
+        "ShapeCheekbonesLo": {
+          "targets": {
+            "l-cheek-bones-decr": 1.0,
+            "r-cheek-bones-decr": 1.0
+          }
+        },
+        "ShapeCheekbonesHi": {
+          "targets": {
+            "l-cheek-bones-incr": 1.0,
+            "r-cheek-bones-incr": 1.0
+          }
+        },
+        "ShapeEyeSizeLo": {
+          "targets": {
+            "l-eye-scale-decr": 0.7,
+            "r-eye-scale-decr": 0.7
+          }
+        },
+        "ShapeEyeSizeHi": {
+          "targets": {
+            "l-eye-scale-incr": 0.7,
+            "r-eye-scale-incr": 0.7
+          }
+        },
+        "ShapeEyeSpacingLo": {
+          "targets": {
+            "l-eye-trans-in": 0.8,
+            "r-eye-trans-in": 0.8
+          }
+        },
+        "ShapeEyeSpacingHi": {
+          "targets": {
+            "l-eye-trans-out": 0.8,
+            "r-eye-trans-out": 0.8
+          }
+        },
+        "ShapeBrowLo": {
+          "targets": {
+            "eyebrows-trans-down": 1.0
+          }
+        },
+        "ShapeBrowHi": {
+          "targets": {
+            "eyebrows-trans-up": 1.0
+          }
+        },
+        "ShapeNoseLengthLo": {
+          "targets": {
+            "nose-scale-vert-decr": 1.0
+          }
+        },
+        "ShapeNoseLengthHi": {
+          "targets": {
+            "nose-scale-vert-incr": 1.0
+          }
+        },
+        "ShapeNoseWidthLo": {
+          "targets": {
+            "nose-scale-horiz-decr": 1.0,
+            "nose-nostrils-width-decr": 0.8
+          }
+        },
+        "ShapeNoseWidthHi": {
+          "targets": {
+            "nose-scale-horiz-incr": 1.0,
+            "nose-nostrils-width-incr": 0.8
+          }
+        },
+        "ShapeNoseBridgeLo": {
+          "targets": {
+            "nose-curve-concave": 0.8,
+            "nose-hump-decr": 0.6
+          }
+        },
+        "ShapeNoseBridgeHi": {
+          "targets": {
+            "nose-hump-incr": 1.0
+          }
+        },
+        "ShapeMouthWidthLo": {
+          "targets": {
+            "mouth-scale-horiz-decr": 1.0
+          }
+        },
+        "ShapeMouthWidthHi": {
+          "targets": {
+            "mouth-scale-horiz-incr": 1.0
+          }
+        },
+        "ShapeLipsLo": {
+          "targets": {
+            "mouth-upperlip-volume-decr": 1.0,
+            "mouth-lowerlip-volume-decr": 1.0
+          }
+        },
+        "ShapeLipsHi": {
+          "targets": {
+            "mouth-upperlip-volume-incr": 1.0,
+            "mouth-lowerlip-volume-incr": 1.0
+          }
         }
       }
     },
@@ -1068,6 +1203,141 @@
             "r-ear-wing-decr": 0.4,
             "l-ear-lobe-decr": 0.6,
             "r-ear-lobe-decr": 0.6
+          }
+        },
+        "ShapeHeadWidthLo": {
+          "targets": {
+            "head-scale-horiz-decr": 0.8
+          }
+        },
+        "ShapeHeadWidthHi": {
+          "targets": {
+            "head-scale-horiz-incr": 0.8
+          }
+        },
+        "ShapeJawLo": {
+          "targets": {
+            "chin-width-decr": 1.0,
+            "chin-bones-decr": 0.8
+          }
+        },
+        "ShapeJawHi": {
+          "targets": {
+            "chin-width-incr": 1.0,
+            "chin-bones-incr": 0.8
+          }
+        },
+        "ShapeChinLo": {
+          "targets": {
+            "chin-prominent-decr": 1.0,
+            "chin-height-decr": 0.6
+          }
+        },
+        "ShapeChinHi": {
+          "targets": {
+            "chin-prominent-incr": 1.0,
+            "chin-height-incr": 0.6
+          }
+        },
+        "ShapeCheekbonesLo": {
+          "targets": {
+            "l-cheek-bones-decr": 1.0,
+            "r-cheek-bones-decr": 1.0
+          }
+        },
+        "ShapeCheekbonesHi": {
+          "targets": {
+            "l-cheek-bones-incr": 1.0,
+            "r-cheek-bones-incr": 1.0
+          }
+        },
+        "ShapeEyeSizeLo": {
+          "targets": {
+            "l-eye-scale-decr": 0.7,
+            "r-eye-scale-decr": 0.7
+          }
+        },
+        "ShapeEyeSizeHi": {
+          "targets": {
+            "l-eye-scale-incr": 0.7,
+            "r-eye-scale-incr": 0.7
+          }
+        },
+        "ShapeEyeSpacingLo": {
+          "targets": {
+            "l-eye-trans-in": 0.8,
+            "r-eye-trans-in": 0.8
+          }
+        },
+        "ShapeEyeSpacingHi": {
+          "targets": {
+            "l-eye-trans-out": 0.8,
+            "r-eye-trans-out": 0.8
+          }
+        },
+        "ShapeBrowLo": {
+          "targets": {
+            "eyebrows-trans-down": 1.0
+          }
+        },
+        "ShapeBrowHi": {
+          "targets": {
+            "eyebrows-trans-up": 1.0
+          }
+        },
+        "ShapeNoseLengthLo": {
+          "targets": {
+            "nose-scale-vert-decr": 1.0
+          }
+        },
+        "ShapeNoseLengthHi": {
+          "targets": {
+            "nose-scale-vert-incr": 1.0
+          }
+        },
+        "ShapeNoseWidthLo": {
+          "targets": {
+            "nose-scale-horiz-decr": 1.0,
+            "nose-nostrils-width-decr": 0.8
+          }
+        },
+        "ShapeNoseWidthHi": {
+          "targets": {
+            "nose-scale-horiz-incr": 1.0,
+            "nose-nostrils-width-incr": 0.8
+          }
+        },
+        "ShapeNoseBridgeLo": {
+          "targets": {
+            "nose-curve-concave": 0.8,
+            "nose-hump-decr": 0.6
+          }
+        },
+        "ShapeNoseBridgeHi": {
+          "targets": {
+            "nose-hump-incr": 1.0
+          }
+        },
+        "ShapeMouthWidthLo": {
+          "targets": {
+            "mouth-scale-horiz-decr": 1.0
+          }
+        },
+        "ShapeMouthWidthHi": {
+          "targets": {
+            "mouth-scale-horiz-incr": 1.0
+          }
+        },
+        "ShapeLipsLo": {
+          "targets": {
+            "mouth-upperlip-volume-decr": 1.0,
+            "mouth-lowerlip-volume-decr": 1.0
+          }
+        },
+        "ShapeLipsHi": {
+          "targets": {
+            "mouth-upperlip-volume-incr": 1.0,
+            "mouth-lowerlip-volume-incr": 1.0
           }
         }
       }

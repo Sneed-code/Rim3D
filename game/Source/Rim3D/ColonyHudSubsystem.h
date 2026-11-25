@@ -73,8 +73,8 @@ struct FHudStats
 /**
  * The overseer's screen layout (docs/design/ui-layout.md), ImGui:
  *
- * - The bottom bar, full width: Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Inventory;
- *   at the far right the speed buttons, the key help (book), Factions, the learning helper (book) and Menu. A click opens a tab's window above the bar,
+ * - The bottom bar, full width: Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Storage (EHudTab::Inventory);
+ *   at the far right the speed buttons, Factions and Menu (which holds Tutorial and Keys). A click opens a tab's window above the bar,
  *   a second click closes it; the open tab stays lit. Build, Work, Schedule, Quests and World are drawn by the subsystems
  *   that already had them (Orders, Panels, QuestPanel, WorldScreen); this one opens and closes them and draws the rest.
  * - The date, time, weather and the level looked at, just above the bar's right end.

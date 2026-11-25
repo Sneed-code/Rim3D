@@ -192,6 +192,20 @@ follow. The creator's Face tab has expressions made of them (smile, grin, frown,
 disgusted, in pain, pout, asleep) with a strength, the 34 units for fine tuning, an automatic blink and talking.
 `-CreatorFace=<name>` for pictures.
 
+## Face shapes (face variety, sneed 2026-11-25)
+
+Each creator base carries 12 face shape sliders as morph pairs `Shape<Part>Lo` / `Shape<Part>Hi` (creator.json), built from
+MakeHuman's own modelling targets: head width (`head-scale-horiz`), jaw (`chin-width`, `chin-bones`), chin
+(`chin-prominent`, `chin-height`), cheekbones, eye size (`*-eye-scale`), eye spacing (`*-eye-trans-in/out`), brows
+(`eyebrows-trans`), nose length, width and bridge (`nose-curve-concave`, `nose-hump`), mouth width and lips. The eyes,
+lashes, brows and teeth are fitted to each variant at export, so they move with the face. In the game they are sliders
+like the body's (`SmokeTestCreator.cpp` `CreatorFaceShapes`, look values `face<Part>`, -1 .. 1): random people get a
+random face (three-dice spread, most near the average), the colony creator's Looks has the sliders and Random face, the
+Debug creator's Face tab too. Morphs add up, so the expression units (`Face_*`), blinking, talking and the fight faces
+work on every face; at the far ends of eye size an eye may not close fully on a blink, which is why eye size is kept to
+70% of MakeHuman's target. The strand hair follows any head: `grow_hair.py` measures every slider that moves the skull
+(`head_morphs` in grooms.json), these included. People from earlier games (a seed in their look) get their random face too.
+
 ## Eyes, wrinkles, brows and lashes
 
 `M_MH_Eye` (MakeHumanArt, for the eye slots): glossy wet surface, the iris set back behind the cornea by parallax

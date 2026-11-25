@@ -106,6 +106,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     whole("unarmedMinWindup", r.unarmedMinWindup);
     num("unarmedWindupShare", r.unarmedWindupShare);
     whole("unarmedGapSteps", r.unarmedGapSteps);
+    whole("playerFistChainSteps", r.playerFistChainSteps);
     num("lowTimeFactor", r.lowTimeFactor);
     r.playerStepIn = def->flag("playerStepIn", r.playerStepIn);
     r.stepInFreesFeet = def->flag("stepInFreesFeet", r.stepInFreesFeet);
@@ -222,6 +223,7 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
     }
     r.unarmedWindupShare = std::clamp(r.unarmedWindupShare, 0.0f, 1.0f);
     r.unarmedGapSteps = std::max(0, r.unarmedGapSteps);
+    r.playerFistChainSteps = std::max(0, r.playerFistChainSteps);
     r.lowTimeFactor = std::max(0.05f, r.lowTimeFactor);
     r.commitSteps = std::max(0, r.commitSteps);
     r.guardBlocks = std::max(1, r.guardBlocks);
@@ -721,11 +723,16 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");
     }
-    if (const Melee* m = reg.try_get<Melee>(pawn); m != nullptr && m->phase != MeleePhase::Ready) {
-        return fail("not ready to swing yet");
-    }
     bool weapon = false;
     const ToolSet* set = toolsOf(pawn, weapon, fists);
+    if (const Melee* m = reg.try_get<Melee>(pawn); m != nullptr && m->phase != MeleePhase::Ready) {
+        // The player's bare fists chain: the next punch may start in the last playerFistChainSteps of the recovery.
+        const bool chain = player && !weapon && set != nullptr && m->phase == MeleePhase::Recovery && m->finisher == 0 &&
+                           m->stepsLeft <= rules_.playerFistChainSteps;
+        if (!chain) {
+            return fail("not ready to swing yet");
+        }
+    }
     if (set == nullptr) {
         return fail("that pawn has nothing to fight with");
     }

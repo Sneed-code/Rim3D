@@ -18,8 +18,8 @@ https://claude.ai/artifact/QXsccQCbcwoBLcugZisa6N. sneed will add more as they s
 Full width along the bottom, like RimWorld. Left to right:
 
 **Build** (RimWorld's Architect; the word is Build) · Work · Schedule · Assign · Animals · Mechs ·
-Wildlife · Research · Quests · World · **Inventory** (new). Far right: the speed buttons (pause, 1, 2,
-3), then the learning helper (book), Factions and Menu icons. The date, time and weather sit just
+Wildlife · Research · Quests · World · **Storage** (new; was "Inventory"). Far right: the speed buttons (pause, 1, 2,
+3), then the Factions and Menu icons. Keys and Tutorial (the learning helper) are entries of the Menu (sneed 2026-11-25). The date, time and weather sit just
 above the right end of the bar.
 
 Clicking a tab opens its window above the bar; clicking it again closes it. The open tab stays lit.
@@ -83,9 +83,9 @@ Decided: the layout **stays ImGui**, with one shared look (`ColonyHudStyle.h`: t
 one border and radius, two text sizes, 1.2 s tooltips). Every subsystem that draws ImGui calls
 `ColonyHud::ApplyFrameStyle`. `UColonyHudSubsystem` owns the layout:
 
-- **Bottom bar** (`ColonyHudSubsystem.cpp`): the 11 tabs at equal width, Quests shows unseen offers
-  in amber; at the right Ship (once a reactor exists), Pause/1x/2x/3x, Keys (the hint box), Factions
-  and Menu (Settings, Message log, Key list, Quit). One click opens a tab, a second closes it. Build,
+- **Bottom bar** (`ColonyHudSubsystem.cpp`): the 11 tabs at one width, the widest label's with its icon (text is never shrunk), Quests shows unseen offers
+  in amber; at the right Ship (once a reactor exists), Pause/1x/2x/3x, Factions
+  and Menu (Settings, Message log, Tutorial, Keys, Quit). One click opens a tab, a second closes it. Build,
   Work, Schedule, Quests and World are still drawn by Orders, Panels, QuestPanel and WorldScreen; the
   bar opens and closes them. Console `Hud.Tab <name>`, `Hud.UI 0|1`.
 - **Date box** above the bar's right end: time, day, season, temperature, weather, Step while paused,
@@ -155,8 +155,7 @@ stock), seen from the south-west and above, taken once per def by a show-only sc
 night; `Orders.TileIconsLit 1` lights it by the world instead, `Orders.TileIcons 0` goes back to the
 drawn footprints. Floors and orders keep their drawn icons.
 
-**Bar icons** (2026-11-20): the speed buttons (pause bars, one to three play arrows), Keys (a
-keyboard), the learning helper (an open book), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
+**Bar icons** (2026-11-20): the speed buttons (pause bars, one to three play arrows), Factions (a flag) and Menu (three lines) are clean line icons drawn by ImGui on
 square-ish buttons, amber when on; their names are in the tooltips. Ship stays a word.
 
 **Icons** (2026-11-24): painted icons, one style (hand-painted, semi-realistic, bold silhouette, thin dark outline, no
@@ -176,8 +175,7 @@ a stockpile (until there is one), building, the Work tab, then on their moment: 
 under 30%), beds (rest under 30%), strangers attack (draft), someone is down, playing as a colonist and
 research (from day 1), traders and visitors, prisoners, tame animals, cold (outdoors under 0 C) and heat
 (over 35 C). The first unlearned lesson whose moment has come shows, with "Learning helper n / 16".
-**Got it** marks it learned for good; **Hide the helper** or the book icon on the bar (between Keys and
-Factions, amber while on) turns it off. Both are saved with the HUD's settings (`Rim3D.Hud` keys
+**Got it** marks it learned for good; **Hide the helper** or the Tutorial entry of the Menu (lit while on) turns it off. Both are saved with the HUD's settings (`Rim3D.Hud` keys
 `Lessons` and `LessonsOn`), not with the colony.
 
 ## Canopy in game (2026-11-22)

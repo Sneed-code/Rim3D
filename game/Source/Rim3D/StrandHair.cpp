@@ -77,6 +77,12 @@ namespace
 		TEXT("Seconds the hair stays held after the body's turn slows below Pawns.StrandHairTurnHold (the drawn turn eases out)."));
 	TAutoConsoleVariable<int32> GStrandHairBreasts(TEXT("Pawns.StrandHairBreasts"), 1,
 		TEXT("1: a collision capsule in each breast, on its bone, sized to this person's bust (hair no longer through the chest)."));
+	TAutoConsoleVariable<float> GStrandHairFullDetail(TEXT("Pawns.StrandHairFullDetail"), 8.0f,
+		TEXT("Metres from the camera within which strand hair always draws every strand (its first LOD). Further off Unreal picks ")
+		TEXT("the LOD by screen size, and its second LOD keeps only a third of the strands: in the colony creator and over the ")
+		TEXT("shoulder the head was small enough on screen for that, so the scalp showed through while the Debug creator, closer ")
+		TEXT("in, was fine (sneed 2026-11-25). The undercoat always draws all of its strands. 0: Unreal's pick everywhere."));
+
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
 		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
 
@@ -231,6 +237,9 @@ namespace
 		if (Under->GroomAsset != Wanted)
 		{
 			Under->SetGroomAsset(Wanted);
+			// Every strand, at any distance: it is short and cheap, and it is what keeps the scalp from showing through
+			// where the style's own strands are thinned out further off (sneed 2026-11-25).
+			Under->SetForcedLOD(0);
 		}
 		Under->SetRelativeTransform(FTransform::Identity);
 		Under->SetVisibility(Hair.IsVisible());
@@ -1164,6 +1173,19 @@ void UStrandHairSubsystem::Tick(float DeltaTime)
 		if (bWant != Wearer.bStrands)
 		{
 			Show(Wearer, bWant);
+		}
+		// Near the camera every strand is drawn (Pawns.StrandHairFullDetail): the same for the game, the colony creator and
+		// the Debug scenes, since they all wear hair through this subsystem.
+		if (UGroomComponent* Strands = Wearer.bStrands ? Wearer.Strands.Get() : nullptr)
+		{
+			const float FullCm = FMath::Max(0.0f, GStrandHairFullDetail.GetValueOnGameThread()) * 100.0f;
+			const float Away = static_cast<float>(FVector::Dist(Wearer.Body->GetComponentLocation(), Eye));
+			const int32 Lod = Away < FullCm ? 0 : -1;
+			if (Lod != Wearer.ForcedLod)
+			{
+				Strands->SetForcedLOD(Lod);
+				Wearer.ForcedLod = Lod;
+			}
 		}
 	}
 }

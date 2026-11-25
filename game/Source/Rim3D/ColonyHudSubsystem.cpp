@@ -89,7 +89,7 @@ namespace
 		TEXT("UI.LogBoxes"), 0, TEXT("1 logs each box's width (BOXWIDTH) and stops boxes holding their widths, to measure them."), ECVF_Default);
 
 	FAutoConsoleCommandWithWorldAndArgs GHudTabCommand(
-		TEXT("Hud.Tab"), TEXT("Hud.Tab <name> opens a tab of the bottom bar (Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Inventory); no name closes it."),
+		TEXT("Hud.Tab"), TEXT("Hud.Tab <name> opens a tab of the bottom bar (Build, Work, Schedule, Assign, Animals, Mechs, Wildlife, Research, Quests, World, Storage); no name closes it."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UColonyHudSubsystem* Hud = World ? World->GetSubsystem<UColonyHudSubsystem>() : nullptr;
@@ -344,7 +344,7 @@ const TCHAR* UColonyHudSubsystem::TabLabel(EHudTab Tab)
 		case EHudTab::Research: return TEXT("Research");
 		case EHudTab::Quests: return TEXT("Quests");
 		case EHudTab::World: return TEXT("World");
-		case EHudTab::Inventory: return TEXT("Inventory");
+		case EHudTab::Inventory: return TEXT("Storage");  // sneed 2026-11-25: was "Inventory"; the enum and the icon name keep the old word
 		default: return TEXT("");
 	}
 }
@@ -869,7 +869,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			const ImVec2 Max = ImGui::GetItemRectMax();
 			ButtonRects.Add(Label, FBox2D(FVector2D(Min.x, Min.y), FVector2D(Max.x, Max.y)));
 		};
-		// A bar button with a drawn icon: 0 pause, 1-3 that many play arrows, 4 keyboard, 5 flag, 6 menu lines, 7 an open book.
+		// A bar button with a drawn icon: 0 pause, 1-3 that many play arrows, 5 flag, 6 menu lines (Keys and the learning helper moved into the menu, sneed 2026-11-25).
 		const auto IconButton = [&](const TCHAR* Name, int32 Icon, bool bActive) -> bool
 		{
 			const bool bPressed = ColonyHud::Button(FString::Printf(TEXT("##icon%s"), Name), bActive, ImVec2(ImGui::GetFrameHeight() * 1.35f, ColonyHud::BarButtonHeight()));
@@ -898,24 +898,6 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 					X += Each;
 				}
 			}
-			else if (Icon == 4)
-			{
-				// A keyboard: its outline, two rows of keys and the space bar.
-				const ImVec2 A(Mid.x - R * 1.5f, Mid.y - R * 0.9f);
-				const ImVec2 B(Mid.x + R * 1.5f, Mid.y + R * 0.9f);
-				Draw->AddRect(A, B, Ink, 2.0f * Scale, Line, 0);
-				const float Key = R * 0.32f;
-				for (int32 Row = 0; Row < 2; ++Row)
-				{
-					for (int32 Col = 0; Col < 5; ++Col)
-					{
-						const float KX = A.x + R * 0.38f + Col * R * 0.52f;
-						const float KY = A.y + R * 0.35f + Row * R * 0.5f;
-						Draw->AddRectFilled(ImVec2(KX, KY), ImVec2(KX + Key, KY + Key), Ink, 1.0f);
-					}
-				}
-				Draw->AddRectFilled(ImVec2(Mid.x - R * 0.7f, B.y - R * 0.5f), ImVec2(Mid.x + R * 0.7f, B.y - R * 0.5f + Key), Ink, 1.0f);
-			}
 			else if (Icon == 5)
 			{
 				// A flag on its pole.
@@ -923,19 +905,6 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 				Draw->AddLine(ImVec2(PoleX, Mid.y - R * 1.1f), ImVec2(PoleX, Mid.y + R * 1.1f), Ink, Line);
 				Draw->AddQuadFilled(ImVec2(PoleX, Mid.y - R * 1.05f), ImVec2(PoleX + R * 1.7f, Mid.y - R * 0.75f), ImVec2(PoleX + R * 1.7f, Mid.y + R * 0.05f),
 					ImVec2(PoleX, Mid.y - R * 0.15f), Ink);
-			}
-			else if (Icon == 7)
-			{
-				// An open book: two pages meeting at the spine, a line of text on each.
-				const ImVec2 Spine0(Mid.x, Mid.y - R * 0.7f);
-				const ImVec2 Spine1(Mid.x, Mid.y + R * 0.95f);
-				Draw->AddQuad(ImVec2(Mid.x - R * 1.4f, Mid.y - R * 0.95f), Spine0, Spine1, ImVec2(Mid.x - R * 1.4f, Mid.y + R * 0.7f), Ink, Line);
-				Draw->AddQuad(Spine0, ImVec2(Mid.x + R * 1.4f, Mid.y - R * 0.95f), ImVec2(Mid.x + R * 1.4f, Mid.y + R * 0.7f), Spine1, Ink, Line);
-				for (int32 Page = -1; Page <= 1; Page += 2)
-				{
-					Draw->AddLine(ImVec2(Mid.x + Page * R * 0.35f, Mid.y - R * 0.2f), ImVec2(Mid.x + Page * R * 1.05f, Mid.y - R * 0.35f), Ink, Line * 0.8f);
-					Draw->AddLine(ImVec2(Mid.x + Page * R * 0.35f, Mid.y + R * 0.25f), ImVec2(Mid.x + Page * R * 1.05f, Mid.y + R * 0.1f), Ink, Line * 0.8f);
-				}
 			}
 			else
 			{
@@ -948,13 +917,13 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			return bPressed;
 		};
 
-		// The right-hand group: speed, key help, the learning helper, Factions, Menu (and Ship while there is one). Measured first so the tabs fit.
+		// The right-hand group: speed, Factions, Menu (and Ship while there is one). Measured first so the tabs fit.
 		UShipPanelSubsystem* Ship = GetWorld()->GetSubsystem<UShipPanelSubsystem>();
 		const bool bShip = Ship && Ship->HasShip();
 		const TCHAR* const Speeds[] = {TEXT("Pause"), TEXT("1x"), TEXT("2x"), TEXT("3x")};
-		// Speed, Keys, Factions and Menu are drawn as clean line icons on square-ish buttons (their names in the tooltips); Ship stays a word.
+		// Speed, Factions and Menu are drawn as clean line icons on square-ish buttons (their names in the tooltips); Ship stays a word.
 		const float IconWidth = ImGui::GetFrameHeight() * 1.35f;
-		float RightWidth = 8.0f * (IconWidth + Style.ItemSpacing.x);
+		float RightWidth = 6.0f * (IconWidth + Style.ItemSpacing.x);
 		if (bShip)
 		{
 			RightWidth += ImGui::CalcTextSize("Ship").x + 2.0f * Style.FramePadding.x + Style.ItemSpacing.x;
@@ -964,9 +933,19 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 		// The tabs, equal widths, from the left.
 		const EHudTab Open = GetOpenTab();
 		const int32 TabCount = static_cast<int32>(EHudTab::Count) - 1;
-		const float TabsWidth = ImGui::GetContentRegionAvail().x - RightWidth;
-		const float TabWidth = FMath::Clamp((TabsWidth - Style.ItemSpacing.x * (TabCount - 1)) / TabCount, 40.0f * Scale, 150.0f * Scale);
+		const float TabHeight = ColonyHud::BarButtonHeight();
 		UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>();
+		// Every tab is as wide as the widest label (with its icon and padding) needs, so no label is ever drawn smaller than Build's
+		// (sneed 2026-11-25). Quests is measured with a waiting count, the longest it can read.
+		float TabWidth = 0.0f;
+		for (int32 MeasureIndex = 1; MeasureIndex <= TabCount; ++MeasureIndex)
+		{
+			const EHudTab MeasureTab = static_cast<EHudTab>(MeasureIndex);
+			const FString Measured = MeasureTab == EHudTab::Quests ? FString(TEXT("Quests (9)")) : FString(TabLabel(MeasureTab));
+			const float MeasuredText = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Measured)).x;
+			const float MeasuredIcon = FMath::Max(ImGui::GetTextLineHeight() * 1.25f, TabHeight * 0.80f);
+			TabWidth = FMath::Max(TabWidth, MeasuredIcon + Style.ItemInnerSpacing.x + MeasuredText + 2.0f * Style.FramePadding.x + 6.0f * Scale);
+		}
 		for (int32 Index = 1; Index <= TabCount; ++Index)
 		{
 			const EHudTab Tab = static_cast<EHudTab>(Index);
@@ -983,24 +962,12 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			{
 				ImGui::PushStyleColor(ImGuiCol_Button, ColonyHud::EmberDark());
 			}
-			// On a narrow window a label that would be cut off is drawn smaller to fit its tab.
-			const float LabelWidth = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
-			const float TabHeight = ColonyHud::BarButtonHeight();
-			// The tab's painted icon sits left of its label; HudIcons::Button shrinks a label that would not fit beside it.
-			UTexture* TabIcon = HudIcons::Get(TEXT("tab_") + FString(TabLabel(Tab)).ToLower(), TabHeight);
-			const bool bShrink = !TabIcon && LabelWidth > TabWidth;
-			if (bShrink)
-			{
-				ImGui::PushFont(nullptr, Style.FontSizeBase * FMath::Max(0.55f, TabWidth / LabelWidth));
-			}
+			// The tab's painted icon sits left of its label. The icon file keeps its old name "tab_inventory" for the Storage tab.
+			UTexture* TabIcon = HudIcons::Get(Tab == EHudTab::Inventory ? FString(TEXT("tab_inventory")) : TEXT("tab_") + FString(TabLabel(Tab)).ToLower(), TabHeight);
 			if (TabIcon ? HudIcons::Button(TabIcon, Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight))
 					: ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight)))
 			{
 				ToggleTab(Tab);
-			}
-			if (bShrink)
-			{
-				ImGui::PopFont();
 			}
 			if (bEmber)
 			{
@@ -1026,7 +993,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 				case EHudTab::Research: ColonyHud::Tip(TEXT("Pick what the researchers study next")); break;
 				case EHudTab::Quests: ColonyHud::Tip(TEXT("Offers waiting for an answer, quests under way and finished ones")); break;
 				case EHudTab::World: ColonyHud::Tip(TEXT("The world map (M)")); break;
-				case EHudTab::Inventory: ColonyHud::Tip(TEXT("Everything the colony has on the map. A star pins it to the top left")); break;
+				case EHudTab::Inventory: ColonyHud::Tip(TEXT("Storage: everything the colony has on the map. A star pins it to the top left")); break;
 				default: break;
 			}
 			ImGui::SameLine();
@@ -1063,24 +1030,6 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			ColonyHud::Tip(Speed == 0 ? FString(TEXT("Pause (Space)")) : FString::Printf(TEXT("Speed %d (%d)"), Speed, Speed));
 			ImGui::SameLine();
 		}
-		if (IconButton(TEXT("Keys"), 4, USimSubsystem::IsKeyHelpShown()))
-		{
-			if (IConsoleVariable* KeyHelp = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.KeyHelp")))
-			{
-				KeyHelp->Set(USimSubsystem::IsKeyHelpShown() ? 0 : 1, ECVF_SetByCode);
-			}
-		}
-		Record(TEXT("Keys"));
-		ColonyHud::Tip(TEXT("Keys: show or hide the list of keys"));
-		ImGui::SameLine();
-		if (IconButton(TEXT("Helper"), 7, bLessonsOn))
-		{
-			bLessonsOn = !bLessonsOn;
-			SavePrefs();
-		}
-		Record(TEXT("Helper"));
-		ColonyHud::Tip(FString::Printf(TEXT("Learning helper: short lessons as things happen (%d learned)"), LearnedLessons.Num()));
-		ImGui::SameLine();
 		UTradePanelSubsystem* Trade = GetWorld()->GetSubsystem<UTradePanelSubsystem>();
 		if (IconButton(TEXT("Factions"), 5, Trade && Trade->IsFactionsOpen()) && Trade)
 		{
@@ -1126,7 +1075,15 @@ void UColonyHudSubsystem::DrawMenuPopup(USimSubsystem& Bridge, float Scale)
 		Panels->SetLogOpen(!Panels->IsLogOpen());
 		ImGui::CloseCurrentPopup();
 	}
-	if (ColonyHud::Button(TEXT("Key list"), USimSubsystem::IsKeyHelpShown(), ImVec2(Width, 0.0f)))
+	// Keys and Tutorial used to be icon buttons on the bar; they live in this menu now (sneed 2026-11-25).
+	if (ColonyHud::Button(TEXT("Tutorial"), bLessonsOn, ImVec2(Width, 0.0f)))
+	{
+		bLessonsOn = !bLessonsOn;
+		SavePrefs();
+		ImGui::CloseCurrentPopup();
+	}
+	ColonyHud::Tip(FString::Printf(TEXT("Tutorial: the learning helper's short lessons as things happen (%d learned)"), LearnedLessons.Num()));
+	if (ColonyHud::Button(TEXT("Keys"), USimSubsystem::IsKeyHelpShown(), ImVec2(Width, 0.0f)))
 	{
 		if (IConsoleVariable* KeyHelp = IConsoleManager::Get().FindConsoleVariable(TEXT("UI.KeyHelp")))
 		{

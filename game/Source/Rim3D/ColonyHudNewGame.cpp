@@ -1713,6 +1713,19 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 	{
 		Slider(TEXT("Older"), TEXT("older"), 0.0f, 0.8f);
 	}
+	// The face's own shape (face variety, sneed 2026-11-25): a random one to start, then each part by hand. The same
+	// sliders the Debug creator has, drawn in game with the same CreatorApply.
+	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
+	if (NgButton(TEXT("Random face"), false, ImVec2(-1.0f, 0.0f)))
+	{
+		CreatorPeople::RandomFace(Look);
+		bLive = bSend = true;
+	}
+	for (int32 FaceIndex = 0; FaceIndex < CreatorPeople::FaceShapeCount(); ++FaceIndex)
+	{
+		const FString FaceKey = CreatorPeople::FaceShapeKey(FaceIndex);
+		Slider(*CreatorPeople::FaceShapeLabel(FaceIndex), *FaceKey, -1.0f, 1.0f);
+	}
 	const float Swatch = 26.0f * Scale;
 	const auto Swatches = [&](const TCHAR* Label, const TCHAR* Prefix, const float (*Colours)[3], int32 Count, const CreatorPeople::FLook& Against)
 	{
