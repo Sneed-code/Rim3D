@@ -71,7 +71,7 @@
     "comps": [{ "type": "Rottable", "daysToRotStart": 14 }]
   },
   {
-    "defName": "MealSurvivalPack", "visual": {"pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.24, 0.17, 0.05], "color": [0.3, 0.43, 0.28]}, {"shape": "box", "size": [0.16, 0.05, 0.005], "at": [0, 0, 0.05], "color": [0.9, 0.9, 0.85]}]}, "parent": "ItemBase", "label": "packaged survival meal", "stackLimit": 10,
+    "defName": "MealSurvivalPack", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/MealSurvivalPack/SM_MealSurvivalPack.SM_MealSurvivalPack", "pieces": 4, "layer": 0.05, "parts": [{"shape": "box", "size": [0.24, 0.17, 0.05], "color": [0.3, 0.43, 0.28]}, {"shape": "box", "size": [0.16, 0.05, 0.005], "at": [0, 0, 0.05], "color": [0.9, 0.9, 0.85]}]}, "parent": "ItemBase", "label": "packaged survival meal", "stackLimit": 10,
     "stats": {
       "maxHitPoints": 50, "marketValue": 24, "mass": 0.3, "flammability": 1.0, "deteriorationRate": 0.25,
       "nutrition": 0.9, "workToMake": 648
@@ -83,7 +83,7 @@
   },
   {
     "defName": "Pemmican", "parent": "ItemBase", "label": "pemmican", "stackLimit": 75,
-    "visual": {"pieces": 3, "layer": 0.1, "parts": [{"shape": "box", "size": [0.14, 0.08, 0.05], "color": [0.42, 0.22, 0.16]}]},
+    "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Pemmican/SM_Pemmican.SM_Pemmican", "pieces": 3, "layer": 0.1, "parts": [{"shape": "box", "size": [0.14, 0.08, 0.05], "color": [0.42, 0.22, 0.16]}]},
     "stats": { "maxHitPoints": 50, "marketValue": 1.1, "mass": 0.025, "flammability": 0.5, "deteriorationRate": 2, "nutrition": 0.05 },
     "thingCategories": ["Foods", "PreparedFood"],
     "ingestible": { "foodType": "Meal", "preferability": "MealAwful", "maxNumToIngestAtOnce": 1 },
@@ -115,7 +115,7 @@
     "ingestible": { "foodType": "Meal", "preferability": "MealSimple", "maxNumToIngestAtOnce": 1 }
   },
   {
-    "defName": "MealNutrientPaste", "visual": { "pieces": 3, "layer": 0.05, "parts": [{ "shape": "cylinder", "radius": 0.11, "height": 0.04, "color": [0.55, 0.5, 0.35] }] },
+    "defName": "MealNutrientPaste", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/MealNutrientPaste/SM_MealNutrientPaste.SM_MealNutrientPaste",  "pieces": 3, "layer": 0.05, "parts": [{ "shape": "cylinder", "radius": 0.11, "height": 0.04, "color": [0.55, 0.5, 0.35] }] },
     "parent": "MealBase", "label": "nutrient paste meal",
     "stats": { "marketValue": 10 },
     "comps": [{ "type": "Rottable", "daysToRotStart": 0.75 }],
@@ -127,7 +127,7 @@
     "stats": { "marketValue": 20 },
     "ingestible": { "foodType": "Meal", "preferability": "MealFine", "maxNumToIngestAtOnce": 1 }
   },
-  {"defName": "MedicineLumen", "parent": "ItemBase", "label": "lumen medicine", "stackLimit": 25, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.18, 0.12, 0.06], "color": [0.75, 0.9, 1.0]}]}, "thingCategories": ["Medicine"], "stats": {"maxHitPoints": 60, "marketValue": 90, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2, "medicalPotency": 1.6, "medicalQualityMax": 1.3}, "unverified": ["stats.marketValue", "stats.medicalPotency", "stats.medicalQualityMax"]},
+  {"defName": "MedicineLumen", "parent": "ItemBase", "label": "lumen medicine", "stackLimit": 25, "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/MedicineLumen/SM_MedicineLumen.SM_MedicineLumen", "pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.18, 0.12, 0.06], "color": [0.75, 0.9, 1.0]}]}, "thingCategories": ["Medicine"], "stats": {"maxHitPoints": 60, "marketValue": 90, "mass": 0.5, "flammability": 0.7, "deteriorationRate": 2, "medicalPotency": 1.6, "medicalQualityMax": 1.3}, "unverified": ["stats.marketValue", "stats.medicalPotency", "stats.medicalQualityMax"]},
   {"defName": "PegLeg", "parent": "ItemBase", "label": "peg leg", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.3, 0.1, 0.1], "color": [0.5, 0.35, 0.2]}]}, "thingCategories": ["BodyPartsArtificial"], "stats": {"maxHitPoints": 80, "marketValue": 60, "mass": 2.0, "flammability": 0.5}, "unverified": ["stats.marketValue"]},
   {"defName": "OrganKidney", "parent": "ItemBase", "label": "kidney", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.1, 0.1, 0.1], "color": [0.55, 0.12, 0.12]}]}, "stats": {"maxHitPoints": 15, "marketValue": 0, "mass": 0.3, "flammability": 0.5}, "unverified": ["stats.marketValue"], "ours": ["visual"]},
   {"defName": "OrganLung", "parent": "ItemBase", "label": "lung", "stackLimit": 1, "visual": {"pieces": 3, "layer": 0.08, "parts": [{"shape": "box", "size": [0.1, 0.1, 0.1], "color": [0.55, 0.12, 0.12]}]}, "stats": {"maxHitPoints": 15, "marketValue": 0, "mass": 0.3, "flammability": 0.5}, "unverified": ["stats.marketValue"], "ours": ["visual"]},

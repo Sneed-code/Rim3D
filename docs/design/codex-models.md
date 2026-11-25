@@ -59,6 +59,19 @@ megascreen TV, replacing the Poly Haven stand-ins in `assets/placeholder_art.jso
 - Moving benches: `visual.moving` rules `working` (a pawn on a bill or butchering stands within reach of it) and
   `fueled` (fuel in it), next to `always`, `running`, `on`, `off`.
 
+### Batch 6 (2026-11-25)
+
+sneed asked for 15 on Codex 6.2 Sol (high first for the harder ones, then medium for simple ones) and 7 on Neon high
+(the most detailed props, buildings and missing weapons). Neon: `Gun_DoomsdayLauncher`, `Gun_Greatbow`, `Gun_EMPLauncher`
+(guns.json), `SculptureGrand`, `SculptureLarge`, `SteamGeyser` (parts `Water`, `Bubbles`, `Throat`, clip `Bubbling`
+always; kept under 0.35 m so the geothermal generator sits over it), `ShipStructuralBeam` (parts `StatusLights`,
+`JackFeet`, clip `Idle` always; its one-shot `Settle` is unused). Codex high: `Gun_ShortBow`, `Gun_Pila` (guns.json),
+`SculptureSmall`, `MedicineLumen`; medium: `Grenade_Frag`, `MealSurvivalPack`, `Pemmican`, `Beer`, `MealNutrientPaste`,
+`Chemfuel`, `Kibble`, `FenceGate`, `Column`, `MeditationSpot`, `AnimalSleepingSpot` (all `visual.mesh`). The whole batch
+took about 70 minutes on the PC (3 Neon and 3 Codex jobs at a time). Also wired: `Gun_RecurveBow` (batch 4) and
+`Gun_IncendiaryLauncher` / `Gun_SmokeLauncher` on the GrenadeLauncher model. Bows and the pila use grip (0,0,0) and the
+Bow/blade hand frame; their in-hand turn is unverified. Sculptures and the column ignore the stuff tint (one stone look).
+
 ## How a model is made
 
 `tools/codex_assets/`: `_common.md` is the brief every job shares (GLB in metres, +Z up, real scale, PBR BaseColor /
@@ -95,4 +108,3 @@ Without these steps the defs' box parts are drawn, as before (the `buildings` sm
   them as separate objects (`Head`, `Gun`, `Barrel`, pivots in each README) for a later turret-drawing task.
 - The rocket launcher's rockets don't leave the tubes as it fires; the launcher's trigger doesn't move.
 - The molotov in flight is still the projectile shape; its glass is opaque.
-- The incendiary, smoke and EMP launchers have no guns.json entry yet (they could share the GrenadeLauncher model).

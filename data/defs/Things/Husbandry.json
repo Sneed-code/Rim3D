@@ -15,7 +15,7 @@
     "description": "A gate in a fence. People walk through it; animals can't.",
     "size": [1, 1], "passability": "PassThroughOnly", "fillPercent": 0.25, "designationCategory": "Structure",
     "costStuffCount": 25,
-    "visual": { "parts": [
+    "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/FenceGate/SM_FenceGate.SM_FenceGate",  "parts": [
       { "shape": "box", "size": [0.1, 0.1, 1.2], "at": [-0.45, 0, 0], "stuff": true },
       { "shape": "box", "size": [0.1, 0.1, 1.2], "at": [0.45, 0, 0], "stuff": true },
       { "shape": "box", "size": [0.8, 0.06, 0.12], "at": [0, 0, 0.3], "stuff": true },
@@ -32,7 +32,7 @@
     "description": "A marked spot where a tame animal sleeps.",
     "size": [1, 1], "passability": "Standable", "designationCategory": "Furniture",
     "costs": { "WoodLog": 1 },
-    "visual": { "parts": [{ "shape": "box", "size": [0.8, 0.8, 0.02], "color": [0.55, 0.47, 0.32] }] },
+    "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/AnimalSleepingSpot/SM_AnimalSleepingSpot.SM_AnimalSleepingSpot",  "parts": [{ "shape": "box", "size": [0.8, 0.8, 0.02], "color": [0.55, 0.47, 0.32] }] },
     "stats": { "maxHitPoints": 40, "workToBuild": 72, "flammability": 1.0, "bedRestEffectiveness": 0.8 },
     "building": { "animalBed": true },
     "unverified": ["costs", "stats.maxHitPoints", "stats.workToBuild", "stats.bedRestEffectiveness"],

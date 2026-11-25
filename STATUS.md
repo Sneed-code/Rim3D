@@ -1,6 +1,14 @@
 # Status
 
-Updated 2026-11-24.
+Updated 2026-11-25.
+
+Models batch 6 (sneed, 2026-11-25; `docs/design/codex-models.md` "Batch 6"): **22 new models**. Gemini 4 Neon (high):
+the doomsday launcher, greatbow and EMP launcher (missing weapons), the grand and large sculptures (a jungle guardian with a
+sun-disc, a hornbill on a tree), the steam geyser (a low mineral-crusted vent whose pool bubbles) and the ship structural
+beam (blinking status lights). Codex 6.2 Sol, high: short bow, pila, small sculpture (jaguar), best medicine; medium: frag
+grenade, survival meals, pemmican, beer, nutrient paste meal, chemfuel can, kibble, fence gate, column, meditation spot,
+animal sleeping spot. Also in `assets/guns.json` now: the recurve bow (made in batch 4) and the incendiary and smoke
+launchers (on the grenade launcher model). Bow and pila hold points are first guesses.
 
 HUD batch (sneed, 2026-11-24; Unreal only, `docs/design/ui-layout.md` "Layout v2" onward): bar windows (Work,
 Schedule, Build...) sit flush on the screen's left edge and on the bar; the terrain/inspect box moved fully top right, with
