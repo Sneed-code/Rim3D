@@ -81,10 +81,13 @@ void USmokeTestSubsystem::BuildWorldMapPhases()
 		{
 			Fail(TEXT("worldmap_setup: the sim has a world already"));
 		}
-		// Tile maths: the tile under a pixel.
-		if (UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, 100.0f + 8.0f * 3 + 1.0f, 50.0f + 8.0f * 2 + 1.0f) != World->index(3, 2) ||
+		// Tile maths: the hexagon under a pixel (its middle, and a point a little off it, odd row shifted), off the map none.
+		const FVector2D Middle = UWorldScreenSubsystem::TileCentre(*World, 100.0f, 50.0f, 8.0f, World->index(3, 2));
+		const FVector2D OddMiddle = UWorldScreenSubsystem::TileCentre(*World, 100.0f, 50.0f, 8.0f, World->index(3, 1));
+		if (UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, static_cast<float>(Middle.X), static_cast<float>(Middle.Y)) != World->index(3, 2) ||
+			UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, static_cast<float>(OddMiddle.X) + 1.5f, static_cast<float>(OddMiddle.Y) - 1.5f) != World->index(3, 1) ||
 			UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, 99.0f, 60.0f) != -1 ||
-			UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, 100.0f + 8.0f * World->width() + 1.0f, 60.0f) != -1)
+			UWorldScreenSubsystem::TileAt(*World, 100.0f, 50.0f, 8.0f, 100.0f + 8.0f * (World->width() + 1) + 1.0f, 60.0f) != -1)
 		{
 			Fail(TEXT("worldmap_setup: TileAt picks the wrong tile"));
 		}

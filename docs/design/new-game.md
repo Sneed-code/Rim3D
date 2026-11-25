@@ -126,18 +126,31 @@ leaving the title (New colony's landing, a load, a debug scene, the people pages
   padded jacket looked bulky in the first PC picture):
   the garments' tint (custom primitive data), no wear, and a lower `Roughness` on their own material instances. The
   garment material has no emissive, so the glowing accents are the cabin's.
-- **Through the window**: a planet 2 km across seen 35 degrees wide, its limb just under the middle of the picture,
-  the surface map with the cloud map laid over it, turning slowly; a thin rim of air (rings of `M_BuildingGhost` just in
-  front of the planet, brightest on the sun's side); and the galaxy, a 9 km sphere seen from inside with the galaxy map
-  as glow, on its own light channel so the sun leaves it black.
+- **Through the window** (sneed 2026-11-25: "stars high res ... the world far more detailed"): a planet 2 km across
+  seen 35 degrees wide, its limb just under the middle of the picture, turning slowly: an 8K surface (clouds with storm
+  spirals and their shadows, mountain ranges with snowy crests, rivers, shelves and lagoons, ice caps) with mip levels
+  and anisotropic filtering (it is seen edge-on at the limb), a relief map that catches the low sun along the
+  terminator (the sphere's tangents run east, so the map's y is north), a roughness map so the sea glints and land and
+  cloud stay matte, and city lights glowing orange on the night side (dimmed under cloud, faint by day). A rim of air
+  in front of it (rings of `M_BuildingGhost`, only the arc the camera sees, finely cut): a haze thickening to the limb,
+  a bright edge, blue on the sun's side, orange-red where the limb crosses the terminator, dim at night. Behind, the
+  galaxy, a 9 km sphere seen from inside with the galaxy map as glow, on its own light channel so the sun leaves it
+  black; in front of the sphere a flat picture of just the piece of sky the window shows (`sky_view.png`, square to
+  the camera 7.6 km out, wider than the view), about one texel per screen pixel at 4K, so the stars are crisp round
+  dots of many brightnesses and colours over the Milky Way's star clouds and dust lanes instead of the sphere's blurry
+  blocks.
 - **Light**: the stage's own sun from screen right and a little behind her (a rim on her, the planet half lit), a soft
   key up left of the camera, a cyan glow from the sill and a warm light over her hair. The exposure is held at 9 EV
   (no auto exposure); the sky's lights, atmosphere, fog, clouds, stars and exposure are put away
   (`USkySubsystem::SetStageMode`).
 - **Camera**: 45 degrees wide, 1.38 m up, drifting a few centimetres and a fraction of a degree.
-- **Maps**: `tools/title_art.py` (art step `title-art`, run through Blender's Python for numpy) paints
-  `planet_color.png`, `planet_clouds.png` and `galaxy.png` (4096 x 2048, equirectangular, seeded) into
-  `game/Saved/TitleArt/`. The game reads them at run time; without them the planet is plain blue and space plain dark.
+- **Maps**: `tools/title_art.py` (art step `title-art`, run through Blender's Python for numpy, a few minutes) paints
+  into `game/Saved/TitleArt/` (seeded): `planet_color.r3tx` (8192 x 4096 BC1 with every mip, 21 MB),
+  `planet_normal.r3tx` (4096 x 2048), `planet_rough.r3tx` (2048 x 1024), `planet_lights.r3tx` (4096 x 2048 BC1),
+  `sky_view.png` (4096 x 2240) and `galaxy.png` (2048 x 1024). `.r3tx` is our own tiny file of ready mip levels (layout
+  in the script), copied straight into textures (`TsLoadR3tx`), so the 8K planet loads in a blink and costs little
+  video memory. Without the `.r3tx` files the older `planet_color.png` + `planet_clouds.png` are used; without any, the
+  planet is plain blue and space plain dark.
 
 ## Smoke test `newgame`
 
