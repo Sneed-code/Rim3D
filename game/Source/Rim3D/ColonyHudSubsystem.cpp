@@ -944,7 +944,8 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			const FString Measured = MeasureTab == EHudTab::Quests ? FString(TEXT("Quests (9)")) : FString(TabLabel(MeasureTab));
 			const float MeasuredText = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Measured)).x;
 			const float MeasuredIcon = FMath::Max(ImGui::GetTextLineHeight() * 1.25f, TabHeight * 0.80f);
-			TabWidth = FMath::Max(TabWidth, MeasuredIcon + Style.ItemInnerSpacing.x + MeasuredText + 2.0f * Style.FramePadding.x + 6.0f * Scale);
+			// Snug: the small pad HudIcons::Button leaves either side, no more (sneed 2026-11-25).
+			TabWidth = FMath::Max(TabWidth, MeasuredIcon + Style.ItemInnerSpacing.x + MeasuredText + 2.0f * Style.FramePadding.y);
 		}
 		for (int32 Index = 1; Index <= TabCount; ++Index)
 		{

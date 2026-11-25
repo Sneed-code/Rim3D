@@ -30,6 +30,12 @@ UGroomComponent* StrandHairAttach(USkeletalMeshComponent* Body, UGroomAsset* Gro
 /** The groom asset of that name in the PawnFaces folder (e.g. "GA_Hair_Long"), or null. */
 UGroomAsset* StrandHairFind(const FString& Name);
 
+/** How thick each guide strand is to the groom physics' collision (cm, the same the whole length of the strand; the
+ *  HairGroomsCommandlet sets it on every groom). Unreal's default tapered from 1 mm at the root to 0.1 mm at the tips,
+ *  so the lower half of long hair passed 0.1 mm from the shapes. The physics asset's shapes are made this much smaller
+ *  than grow_hair.py's, so shape plus thickness lands exactly on the barrier grow_hair.py fitted (just outside the skin). */
+inline constexpr float StrandHairGuideRadiusCm = 0.2f;
+
 /** Where the HairGrooms commandlet puts our own grooms, and their names. */
 inline const TCHAR* const StrandHairGrownFolder = TEXT("/Game/Rim3D/Generated/Grooms");
 inline FString StrandHairGrownName(const FString& Base, const FString& Style) { return TEXT("GA_") + Base + TEXT("_") + Style; }

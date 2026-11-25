@@ -1044,7 +1044,9 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			MovedStrands->SetRelativeTransform(OnHead);
 			if (FStructProperty* Settings = FindFProperty<FStructProperty>(UGroomComponent::StaticClass(), TEXT("SimulationSettings")))
 			{
-				Settings->ImportText_Direct(TEXT("(bOverrideSettings=False)"), Settings->ContainerPtrToValuePtr<void>(MovedStrands), MovedStrands, PPF_None);
+				// The body's spine_03 frame (Pawns.StrandHairInertia) is gone with the body: in the head's frame, feeling all of it.
+				Settings->ImportText_Direct(TEXT("(bOverrideSettings=False,SimulationSetup=(bLocalSimulation=True,LinearVelocityScale=1.0,AngularVelocityScale=1.0,LocalBone=\"head\"))"),
+					Settings->ContainerPtrToValuePtr<void>(MovedStrands), MovedStrands, PPF_None);
 			}
 			MovedStrands->ResetCollisionComponents();
 			MovedStrands->SetPhysicsAsset(nullptr);

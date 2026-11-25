@@ -146,18 +146,22 @@ namespace
 		return nullptr;
 	}
 
-	bool GroomsMake(const FString& File, const FString& Name, UMaterialInterface* HairMaterial, bool bSimulate)
+	bool GroomsMake(const FString& File, const FString& Name, UMaterialInterface* HairMaterial, bool bSimulate, int32 FileGuides)
 	{
 		UGroomAsset* Groom = GroomsImport(File, Name);
 		if (!Groom)
 		{
 			return false;
 		}
-		// Guides for the physics, made from the strands (the file has none): one strand in 20 drives its neighbours, and
-		// each strand follows its one nearest guide. Blended between guides, a strand whose guides lay either side of the
-		// body (one over the shoulder, one down the back) was drawn straight through the chest (PC 2026-11-22, #450).
-		GroomsSet(Groom, TEXT("HairGroupsInterpolation"),
-			TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05,bUseUniqueGuide=True)))"));
+		// Guides for the physics: grow_hair.py writes them into the file (groom_guide 1), the innermost strand of each patch
+		// of hair, so every drawn strand lies on or over the guide it follows and none is pushed under the skin when its
+		// guide is pressed onto the body (sneed 2026-11-25). Each strand follows its one nearest guide: blended between
+		// guides, a strand whose guides lay either side of the body (one over the shoulder, one down the back) was drawn
+		// straight through the chest (PC 2026-11-22, #450). A file with none (an older grow, a still style): made from the
+		// strands, one in 20.
+		GroomsSet(Groom, TEXT("HairGroupsInterpolation"), FileGuides > 0
+			? TEXT("((InterpolationSettings=(GuideType=Imported,bUseUniqueGuide=True)))")
+			: TEXT("((InterpolationSettings=(GuideType=Generated,HairToGuideDensity=0.05,bUseUniqueGuide=True)))"));
 		// Full strands near; further off a second LOD with a third of the strands, a little thicker so it stays as full.
 		GroomsSet(Groom, TEXT("HairGroupsLOD"),
 			TEXT("((LODs=((CurveDecimation=1.000000,VertexDecimation=1.000000,ScreenSize=1.000000,ThicknessScale=1.000000),")
@@ -199,6 +203,21 @@ namespace
 			// Stiff near the scalp, as real hair is where it leaves the skin, softer towards the tips (5 times Unreal's
 			// default bend stiffness at the root, 3/4 of it at the tips), so the roots keep their lie as the head turns
 			// and stops while the lengths still swing.
+			// Each guide is StrandHairGuideRadiusCm thick to the collision, the whole of its length: Unreal's default tapers from
+			// 1 mm at the root to 0.1 mm at the tip, so long hair's lower half lay on the shapes themselves. The game makes
+			// its shapes that much smaller than grow_hair.py's barrier (StrandHair.cpp), so guide plus shape meet the barrier.
+			FHairCollisionConstraint& Collide = Physics.MaterialConstraints.CollisionConstraint;
+			Collide.CollisionRadius = StrandHairGuideRadiusCm;
+			Collide.SolveCollision = true;
+			Collide.ProjectCollision = true;
+			if (FRichCurve* Curve = Collide.RadiusScale.GetRichCurve())
+			{
+				Curve->Reset();
+				Curve->AddKey(0.0f, 1.0f);
+				Curve->AddKey(1.0f, 1.0f);
+			}
+			UE_LOG(LogHairGrooms, Display, TEXT("  physics collision thickness %.2f cm root to tip, guides %s"), Collide.CollisionRadius,
+				FileGuides > 0 ? *FString::Printf(TEXT("from the file (%d)"), FileGuides) : TEXT("made from the strands"));
 			FHairBendConstraint& Bend = Physics.MaterialConstraints.BendConstraint;
 			Bend.BendStiffness = 0.05f;
 			if (FRichCurve* Curve = Bend.BendScale.GetRichCurve())
@@ -271,7 +290,21 @@ int32 UHairGroomsCommandlet::Main(const FString& Params)
 						bHat ? TEXT("under a hat the plain style shows") : (bUnder ? TEXT("the style is worn with no undercoat") : TEXT("that style keeps its wig")));
 					continue;
 				}
-				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial, !bUnder && !Still.Contains(StyleValue->AsString()));
+				// How many guides grow_hair.py wrote into the file (grooms.json), so the import uses them.
+				int32 FileGuides = 0;
+				{
+					FString Manifest;
+					TSharedPtr<FJsonObject> Grown;
+					const TSharedPtr<FJsonObject>* GrownStyles = nullptr;
+					const TSharedPtr<FJsonObject>* Entry = nullptr;
+					if (FFileHelper::LoadFileToString(Manifest, *(FPaths::GetPath(File) / TEXT("grooms.json"))) &&
+						FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Manifest), Grown) && Grown.IsValid() &&
+						Grown->TryGetObjectField(TEXT("styles"), GrownStyles) && (*GrownStyles)->TryGetObjectField(Style, Entry))
+					{
+						(*Entry)->TryGetNumberField(TEXT("guides"), FileGuides);
+					}
+				}
+				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial, !bUnder && !Still.Contains(StyleValue->AsString()), FileGuides);
 				Made += bOk ? 1 : 0;
 				Failed += bOk ? 0 : 1;
 			}

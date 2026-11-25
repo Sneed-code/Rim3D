@@ -47,10 +47,23 @@ ARM_BONES = ("upperarm_l", "lowerarm_l", "hand_l", "upperarm_r", "lowerarm_r", "
 # At most this many collision shapes: Unreal's hair simulation reads fewer than 100 shapes from a physics asset
 # (PHYSICS_ASSET_MAX_PRIMITIVES, UE 5.8), and the game adds a couple for the bust (StrandHair.cpp).
 MAX_COLLISION_SHAPES = 94
-# Of them, the head's: spheres following the scalp, this far (m) inside the skin. Hair is grown at least
-# MIN_CLEARANCE off the scalp, so resting hair never starts inside them.
-HEAD_COLLISION_SHAPES = 16
-HEAD_MARGIN = 0.0015
+# Of them, the head's: spheres following the scalp. The collision is a barrier just OUTSIDE the skin (sneed 2026-11-25:
+# "why is it so hard to have a system that avoids hair clipping"): shapes 4 mm inside the skin, with gaps between them,
+# let hair sink 4 mm into the scalp and 7 mm into the back (median; 7 mm and 1 cm for 1 in 10 points) whenever anything
+# pressed it there, a start, a stop or the shoulder blades moving. Now the head's spheres stand up to HEAD_MARGIN out of
+# the scalp (hair lies at least MIN_CLEARANCE off it, so never inside them) and the body's up to BODY_MARGIN out of the
+# skin, the hair over the body is grown outside them (SHAPE_CLEAR, clear_of_shapes), and the gaps are smaller: hair can
+# sink 0.9 mm into the scalp (2.4 mm for 1 in 10 points) and none into the back (3.5 mm for 1 in 10), measured on
+# CreatorFemale. Negative margins are outside the skin.
+HEAD_COLLISION_SHAPES = 26
+HEAD_MARGIN = -0.001
+BODY_MARGIN = -0.006
+SHAPE_CLEAR = 0.001
+# One guide (a strand the physics moves; the drawn strands follow their nearest one) for this many strands. The guides
+# are chosen from the innermost strands of each patch of hair (choose_guides), so every drawn strand lies on or over its
+# guide: when the guide is pressed onto the barrier, no drawn strand is pushed under it into the skin (with Unreal's own
+# guides, any strand, hair lying under a guide sank by the layer's thickness, up to 8 mm).
+GUIDE_SHARE = 0.05
 # Strands on the head lie in a layer this thick at most (m) over MIN_CLEARANCE, most of them near the scalp, the way
 # real hair lies: the old layer (a style's lift + volume, up to 2.6 cm, most strands near its outside) made short
 # styles a helmet standing off the head with the scalp showing through its sparse inside (sneed 2026-11-25).
@@ -170,6 +183,60 @@ def head_morphs(body, keys):
     return out
 
 
+def scalp_ids(body, below=3.0):
+    """The skin vertices hair grows from (inside the hairline, `below` degrees lower to take in its edge), not the ears."""
+    v = body.verts
+    az, el, r = scalp_frame(body, v)
+    lateral = np.abs(v[:, 0] - body.skull[0])
+    inside = (el > hairline_elevation(az) - below) & (r < body.skull_r * 1.35) & (v[:, 2] > body.head[2] - 0.01)
+    inside &= ~((lateral > body.skull_r * 0.93) & (el < 22))
+    return np.nonzero(inside)[0]
+
+
+def vertex_normals(verts, tris):
+    n = np.zeros_like(verts)
+    face = np.cross(verts[tris[:, 1]] - verts[tris[:, 0]], verts[tris[:, 2]] - verts[tris[:, 0]])
+    for k in range(3):
+        np.add.at(n, tris[:, k], face)
+    return n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
+
+
+def head_axes(body, keys):
+    """How each shape key moves the scalp, for the game to move the hair with it exactly (sneed 2026-11-25: raising the
+    brows and widening the head put skin through the hair). The skull sphere's growth (head_morphs) fits a slider that
+    scales the head evenly, but the head width slider widens it 16% and leaves its height alone, so the sides came out
+    through the hair by 7 mm, and the brow slider moves the forehead under the hairline 7 mm up. So per slider: the
+    best scale along each axis about the skull centre and the move (least squares over the scalp's vertices), and what
+    that still leaves: how far each scalp vertex then stands out past where the hair goes (mm, along its normal). The
+    game adds the sliders up by each person's weights (the leftovers add up the same way, vertex by vertex) and lifts
+    the hair by the largest leftover, so no skin is ever left outside it.
+    Returns ({name: [sx, sy, sz, tx, ty, tz]} in Unreal's axes, t in cm; scalp points (cm from the skull centre, Unreal
+    axes) and normals; {name: [mm per point]}), keeping only sliders that move the scalp by more than 0.05 mm."""
+    ids = scalp_ids(body)
+    normals = vertex_normals(body.verts, body.tris)[ids]
+    P = body.verts[ids]
+    c = body.skull
+    flip = np.array([1.0, -1.0, 1.0])
+    axes, left = {}, {}
+    for name, kv in keys:
+        D = kv[ids] - P
+        if np.abs(D).max() < 5e-5:
+            continue
+        s = np.zeros(3)
+        t = np.zeros(3)
+        for a in range(3):
+            A = np.c_[P[:, a] - c[a], np.ones(len(P))]
+            s[a], t[a] = np.linalg.lstsq(A, D[:, a], rcond=None)[0]
+        res = np.einsum("ij,ij->i", D - ((P - c) * s + t), normals) * 1000.0
+        axes[name] = [round(float(x), 5) for x in s] + [round(float(x), 4) for x in t * 100.0 * flip]
+        left[name] = [round(float(x), 2) for x in res]
+        log("slider %s moves the scalp up to %.1f mm; scale %s, leaves %.1f mm out, %.1f mm in" % (
+            name, np.linalg.norm(D, axis=1).max() * 1000, np.round(s, 3), res.max(), -res.min()))
+    points = [[round(float(x), 3) for x in p] for p in (P - c) * 100.0 * flip]
+    norms = [[round(float(x), 3) for x in n] for n in normals * flip]
+    return axes, points, norms, left
+
+
 class Body:
     def __init__(self, verts, tris, head, neck, arms=None, bone_of=None):
         self.verts, self.tris, self.head, self.neck = verts, tris, head, neck
@@ -248,8 +315,9 @@ def collision_part(bone):
 
 
 def head_collision(body, inside, budget, margin, rng, target=0.002):
-    """Spheres inside the skull following the scalp: candidates 1.2 to 8 cm under the scalp (along its normal), each as
-    big as stays `margin` inside the skin; the one that most cuts how deep hair could sink into the scalp (measured at
+    """Spheres in the skull following the scalp: candidates 1.2 to 8 cm under the scalp (along its normal), each as big
+    as reaches `margin` short of the skin (negative: that far out of it); the one that most cuts how deep hair could
+    sink into the scalp (measured at
     the scalp's vertices, anywhere hair grows or could swing onto) is taken, with its mirror image, until `budget`.
     Returns [("sphere", "head", c, c, r, 0)]."""
     v = body.verts
@@ -307,28 +375,29 @@ def head_collision(body, inside, budget, margin, rng, target=0.002):
         current = np.minimum(current, D[best])
         base = totals[best]
         picked.extend(pair(*cands[best]))
-    log("head collision: %d spheres %.1f mm inside the scalp; hair can sink into the scalp (mm) median %.1f, 90%% %.1f, worst %.1f"
-        % (len(picked), margin * 1000, np.median(current) * 1000, np.percentile(current, 90) * 1000, current.max() * 1000))
+    log("head collision: %d spheres reaching %.1f mm out of the scalp; hair can sink into the scalp (mm) median %.1f, 90%% %.1f, worst %.1f"
+        % (len(picked), -margin * 1000, np.median(current) * 1000, np.percentile(current, 90) * 1000, current.max() * 1000))
     return [("sphere", "head", c, c, float(rad), np.zeros(3)) for c, rad in picked]
 
 
 def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET, seed=3):
-    """Shapes for the groom's physics to collide with, all inside the skin, so hair grown lying on the skin starts clear
-    of them and only meets them when it swings or the body moves into it. The body's own physics asset wraps each bone
+    """Shapes for the groom's physics to collide with, reaching a little out of the skin (HEAD_MARGIN, BODY_MARGIN): hair
+    is grown clear of them (clear_of_shapes), so it only meets them when it swings or the body moves into it, and then
+    stops on the skin instead of sinking into it. The body's own physics asset wraps each bone
     in a capsule standing centimetres proud of the scalp and back, so the hair started inside it and was thrown out into
     a puffball (PC, 2026-11-21).
 
     The head keeps 12 spheres filling the cranium. Below it (neck, shoulders, chest, back, both arms, down to the waist)
     the shapes are picked to leave no gaps (sneed 2026-11-22: hair still through the body): the old spheres in a few
     columns let a strand sink 2 cm (up to 5 cm) into the back before anything stopped it. Candidates are spheres and
-    capsules a little under the skin (1.5 to 5 cm in, along the skin's normal), each as big as stays `margin` inside the
-    surface; then the one that most cuts how deep hair could sink into the skin (measured at the skin's vertices, the
+    capsules a little under the skin (1.5 to 5 cm in, along the skin's normal), each as big as reaches `margin` short of the
+    surface (negative: that far out of it); then the one that most cuts how deep hair could sink into the skin (measured at the skin's vertices, the
     back and shoulder tops counting double) is taken, again and again, up to `budget` shapes in all. Each shape belongs
     to one bone's skin (its vertices' largest skin weight: torso, neck, a clavicle, an upper arm or a forearm), so it
     moves with that bone, and only counts for that skin.
     Returns [(kind, part, a, b, radius, out)] in metres: kind "sphere" (a == b) or "capsule" (a to b); out is the outward
     normal of the skin it was placed under (zero for the head's), which the game uses to grow it out to worn clothes."""
-    margin = 0.004
+    margin = BODY_MARGIN
     rng = np.random.default_rng(seed)
     bvh = body.bvh
     shapes = []
@@ -383,6 +452,11 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
     skin_part = np.array([names.index(parts[i]) for i in skin])
     weight = np.where((normals[skin, 1] > 0.3) | (normals[skin, 2] > 0.4), 2.0, 1.0)  # the back and shoulder tops
 
+    def reach(owner):
+        """How far short of the skin a shape on this part stops (negative: out of it). The neck's only HEAD_MARGIN: the
+        hair at the nape grows out of it and lies as close as on the scalp."""
+        return HEAD_MARGIN if names[owner] == "neck" else margin
+
     # Candidates: points 1.5 to 5 cm under the skin, as spheres and as capsules joining two of them 3 to 16 cm apart.
     # Left and right match: candidates are made on the left half (and the middle) and each is taken with its mirror image.
     mid_x = body.head[0]
@@ -404,14 +478,14 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
             tree.insert(Vector(q), k)
         tree.balance()
         for k, q in enumerate(pts):
-            cands.append((owner[k], q, q, inside(q) - margin, outs[k]))
+            cands.append((owner[k], q, q, inside(q) - reach(owner[k]), outs[k]))
             near = [j for (_, j, dist) in tree.find_range(Vector(q), 0.16) if j > k and dist >= 0.03 and owner[j] == owner[k]]
             for j in (rng.choice(near, size=min(6, len(near)), replace=False) if near else []):
                 a, b = q, pts[j]
                 r = min(inside(a + s * (b - a)) for s in np.linspace(0.0, 1.0, 7))
                 if r > 0.0:
                     out = outs[k] + outs[j]
-                    cands.append((owner[k], a, b, r - margin, out / max(np.linalg.norm(out), 1e-9)))
+                    cands.append((owner[k], a, b, r - reach(owner[k]), out / max(np.linalg.norm(out), 1e-9)))
     cands = [c for c in cands if c[3] > 0.008]
 
     # How deep (m) hair could sink into each skin vertex before meeting each candidate: its distance to the shape, less
@@ -474,8 +548,8 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
     if "neck" in names:
         a, b = body.neck + 0.15 * (body.head - body.neck), body.head - 0.1 * (body.head - body.neck)
         r = min(inside(a + s_ * (b - a)) for s_ in np.linspace(0.0, 1.0, 7))
-        if r - margin > 0.01:
-            core.append((names.index("neck"), a, b, r - margin, np.zeros(3)))
+        if r - HEAD_MARGIN > 0.01:
+            core.append((names.index("neck"), a, b, r - HEAD_MARGIN, np.zeros(3)))
     for owner, a, b, r, out in core:
         mine = sample_part == owner
         ab = b - a
@@ -935,9 +1009,84 @@ def comb(body, style, pts, end_idx, roots, rng, seg_len):
     return out
 
 
+def clear_of_shapes(pts, end_idx, shapes, clear=SHAPE_CLEAR):
+    """Every point of the hair (not its root) moved out of the body's collision shapes to `clear` past their surface, so
+    the hair at rest never starts inside the barrier the physics keeps it out of (which would throw it out, or let it
+    fight the shapes). The head's spheres are left out: the scalp hair lies at least MIN_CLEARANCE off the skin, past them.
+    Returns the points and how many moved."""
+    pts = pts.copy()
+    n, k1, _ = pts.shape
+    valid = np.arange(k1)[None, :] <= end_idx[:, None]
+    valid[:, 0] = False
+    moved = np.zeros((n, k1), bool)
+    body_shapes = [sh for sh in shapes if sh[1] != "head"]
+    for _ in range(2):  # where two shapes overlap, out of one can be into the other
+        for _, _, a, b, r, out in body_shapes:
+            reach = r + clear
+            lo = np.minimum(a, b) - reach
+            hi = np.maximum(a, b) + reach
+            near = valid & np.all((pts > lo) & (pts < hi), axis=2)
+            if not near.any():
+                continue
+            ii, kk = np.nonzero(near)
+            q = pts[ii, kk]
+            ab = b - a
+            tt = np.clip(((q - a) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
+            on = a + tt[:, None] * ab
+            d = q - on
+            dist = np.linalg.norm(d, axis=1)
+            hit = dist < reach
+            if not hit.any():
+                continue
+            fallback = out if np.linalg.norm(out) > 0.5 else np.array([0.0, 1.0, 0.0])
+            dirs = np.where((dist > 1e-6)[:, None], d / np.maximum(dist, 1e-9)[:, None], fallback)
+            q[hit] = on[hit] + dirs[hit] * reach
+            pts[ii, kk] = q
+            moved[ii[hit], kk[hit]] = True
+    return pts, int(moved.sum())
+
+
+def choose_guides(body, pts, end_idx, roots, rng, share=GUIDE_SHARE):
+    """The strands the physics will move (Unreal "guides"; the drawn strands each follow their nearest one): the hair is
+    split into patches round random strands, and each patch's guide is its innermost strand (the least distance to the
+    skin along its length), so every drawn strand lies on or over its guide. Returns their indices."""
+    n = len(pts)
+    count = max(32, int(n * share))
+    seeds = rng.choice(n, size=min(n, count), replace=False)
+    tree = KDTree(len(seeds))
+    for j, i in enumerate(seeds):
+        tree.insert(Vector(roots[i]), j)
+    tree.balance()
+    patch = np.array([tree.find(Vector(r))[1] for r in roots])
+    # How far each strand lies off the skin: the mean over 8 points from just past the root to its tip.
+    depth = np.empty(n)
+    for i in range(n):
+        ks = np.unique(np.linspace(1, max(1, end_idx[i]), 8).astype(int))
+        total = 0.0
+        for k in ks:
+            loc, _, _, dist = body.bvh.find_nearest(Vector(pts[i, k]), 0.2)
+            total += dist if loc is not None else 0.2
+        depth[i] = total / len(ks)
+    best = {}
+    for i in range(n):
+        p = patch[i]
+        if p not in best or depth[i] < depth[best[p]]:
+            best[p] = i
+    guides = np.array(sorted(best.values()))
+    log("guides: %d (one per %.0f strands), innermost of their patch: %.1f mm off the skin on average (all strands %.1f mm)"
+        % (len(guides), n / max(1, len(guides)), depth[guides].mean() * 1000, depth.mean() * 1000))
+    return guides
+
+
 # ---- writing --------------------------------------------------------------------------------------------------------------
 
-def make_curves(name, pts, end_idx, origin, style):
+def make_curves(name, pts, end_idx, origin, style, guides=None):
+    """The strands as Blender hair curves (relative to `origin`). `guides` (indices): copies of those strands are added at
+    the end with the curve attribute groom_guide 1 (the drawn strands have 0), which Unreal's groom import reads as the
+    guides its physics moves (the HairGroomsCommandlet then uses them instead of picking its own)."""
+    if guides is not None and len(guides):
+        pts = np.concatenate([pts, pts[guides]])
+        end_idx = np.concatenate([end_idx, end_idx[guides]])
     curves = bpy.data.hair_curves.new(name)
     sizes = (end_idx + 1).tolist()
     curves.add_curves(sizes)
@@ -949,6 +1098,10 @@ def make_curves(name, pts, end_idx, origin, style):
     radius = np.concatenate([np.linspace(style["width_root"], style["width_tip"], s) * 0.5 for s in sizes]).astype(np.float32)
     attr = curves.attributes.get("radius") or curves.attributes.new("radius", "FLOAT", "POINT")
     attr.data.foreach_set("value", radius)
+    if guides is not None and len(guides):
+        flag = np.zeros(len(sizes), dtype=np.int32)
+        flag[len(sizes) - len(guides):] = 1
+        curves.attributes.new("groom_guide", "INT", "CURVE").data.foreach_set("value", flag)
     obj = bpy.data.objects.new(name, curves)
     bpy.context.scene.collection.objects.link(obj)
     return obj, len(flat)
@@ -1075,6 +1228,13 @@ def main():
     body = Body(verts, tris, head, neck, arms, bone_of)
     morphs = head_morphs(body, keys)
     log("head-changing sliders:", len(morphs), "of", len(keys))
+    axes, scalp_points, scalp_normals, scalp_left = head_axes(body, keys)
+    shapes = collision_shapes(body)
+    # Styles too short to move keep no physics (assets/hair_grooms.json "still"): they need no guides.
+    try:
+        still = set(json.load(open(os.path.join(HERE, "..", "..", "assets", "hair_grooms.json"))).get("still", []))
+    except (OSError, ValueError):
+        still = set()
     os.makedirs(a.out, exist_ok=True)
     manifest = {"body": os.path.basename(a.body), "head": head.tolist(), "neck": neck.tolist(),
                 "neck_to_head_cm": float(np.linalg.norm(head - neck) * 100),
@@ -1083,10 +1243,17 @@ def main():
                 "skull_from_head_cm": [round(float(v), 3) for v in ((body.skull - head) * 100.0 * np.array([1, -1, 1]))],
                 "skull_radius_cm": round(body.skull_r * 100.0, 3),
                 "head_morphs": morphs,
+                # The same per axis, with what each slider leaves standing out of the hair at each scalp point (head_axes):
+                # the game moves the hair by the axes and lifts it by the largest leftover. Points are cm from the skull centre.
+                "head_axes": axes,
+                "scalp_points_cm": scalp_points,
+                "scalp_normals": scalp_normals,
+                "scalp_left_mm": scalp_left,
                 # What the groom's physics collides with (StrandHair.cpp builds a physics asset from them): spheres and
                 # capsules inside the skin, ends from the head bone in Unreal's axes and cm; part head, neck, torso or a
                 # bone (clavicle_l, upperarm_l, lowerarm_r...) picks the bone. A sphere has only "centre_cm".
-                "collision": [collision_entry(shape, head) for shape in collision_shapes(body)],
+                # They reach a little out of the skin (HEAD_MARGIN, BODY_MARGIN): the barrier hair stops at.
+                "collision": [collision_entry(shape, head) for shape in shapes],
                 "styles": {}}
     log("collision shapes:", len(manifest["collision"]), [(c["part"], c["radius_cm"]) for c in manifest["collision"]])
     hat = json.load(open(a.config)).get("hat")
@@ -1102,11 +1269,18 @@ def main():
         rng = np.random.default_rng([a.seed, sum(map(ord, name.removesuffix("Hat").removesuffix("Under"))), 1 if name.endswith("Under") else 0])
         pts, end_idx, roots, seg_len = grow(body, style, rng, a.count_scale)
         pts = comb(body, style, pts, end_idx, roots, rng, seg_len)
-        obj, npts = make_curves(name, pts, end_idx, head, style)
+        base = name.removesuffix("Hat").removesuffix("Under")
+        simulated = not name.endswith("Under") and base not in still
+        if simulated:  # a still groom never moves, so it never meets the shapes: it stays where it was grown
+            pts, moved = clear_of_shapes(pts, end_idx, shapes)
+            log(name, "points moved clear of the body's collision shapes:", moved)
+        guides = choose_guides(body, pts, end_idx, roots, rng) if simulated else None
+        obj, npts = make_curves(name, pts, end_idx, head, style, guides)
         path = os.path.join(a.out, name + ".abc")
         export_abc(obj, path)
         lengths = (end_idx * seg_len)
         manifest["styles"][name] = {"file": name + ".abc", "strands": int(len(pts)), "points": int(npts),
+                                    "guides": int(len(guides)) if guides is not None else 0,
                                     "longest_cm": round(float(lengths.max()) * 100, 1),
                                     "lowest_tip_cm_below_head": round(float((head[2] - pts[np.arange(len(pts)), end_idx][:, 2]).max()) * 100, 1)}
         log(name, manifest["styles"][name])

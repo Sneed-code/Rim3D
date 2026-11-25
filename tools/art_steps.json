@@ -241,7 +241,7 @@
     {
       "name": "hair-grooms",
       "what": "Bring the grown strand hair into the game",
-      "inputs": ["assets/hair_grooms.json"],
+      "inputs": ["assets/hair_grooms.json", "game/Source/Rim3DEditor/HairGroomsCommandlet.cpp"],
       "after": ["hair-grow", "makehuman-bodies"],
       "raw": ["game/Saved/Grooms"],
       "makes": ["game/Content/Rim3D/Generated/Grooms"],

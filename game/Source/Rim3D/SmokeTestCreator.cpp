@@ -2215,6 +2215,18 @@ FSimPawnLooks CreatorPeople::DefaultLooks(bool bFemale, const FSimPawnLooks& Fro
 	return Looks;
 }
 
+namespace
+{
+	/** Whether the people the game and the colony creator dress wear the 4K skin (Pawns.Skin4K, on by default; sneed
+	 *  2026-11-23). These applies passed "2K", so every look applied put the 2K skin back over the 4K one the pawn had just
+	 *  been given (sneed 2026-11-25: "the colony maker make humans are all 4k textures?"). */
+	bool CreatorPeopleWant4K()
+	{
+		static IConsoleVariable* Skin4K = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.Skin4K"));
+		return !Skin4K || Skin4K->GetInt() != 0;
+	}
+}
+
 bool CreatorPeople::ApplyDefault(bool bFemale, ASimPawnActor& Pawn)
 {
 	FCreatorPerson Person;
@@ -2226,7 +2238,7 @@ bool CreatorPeople::ApplyDefault(bool bFemale, ASimPawnActor& Pawn)
 		return false;
 	}
 	Person.bBlink = false;
-	CreatorApply(Person, Pawn, false);
+	CreatorApply(Person, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 
@@ -2238,7 +2250,7 @@ bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
 		return false;
 	}
 	Person.bBlink = false;
-	CreatorApply(Person, Pawn, false);
+	CreatorApply(Person, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 
@@ -2464,7 +2476,7 @@ bool CreatorPeople::Apply(const FLook& Look, ASimPawnActor& Pawn)
 	{
 		return false;
 	}
-	CreatorApply(P, Pawn, false);
+	CreatorApply(P, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 

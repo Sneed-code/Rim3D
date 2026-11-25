@@ -178,15 +178,19 @@ namespace HudIcons
 		const float Height = Size.y > 0.0f ? Size.y : ImGui::GetFrameHeight();
 		const float IconSide = FMath::Max(TextSize.y * 1.25f, Height * 0.80f);
 		const float Gap = Shown.IsEmpty() ? 0.0f : Style.ItemInnerSpacing.x;
-		const float Width = Size.x > 0.0f ? Size.x : IconSide + Gap + TextSize.x + 2.0f * Style.FramePadding.x;
+		// Snug (sneed 2026-11-25: "each button has a gap before the icon ... remove that so they are snug"): the icon sits a
+		// small pad (the frame's vertical padding) from the left edge, the label right after it, the same pad at the end.
+		const float Pad = Style.FramePadding.y;
+		const float Width = Size.x > 0.0f ? Size.x : Pad + IconSide + Gap + TextSize.x + Pad;
 		const bool bClicked = ColonyHud::Button(Id, bActive, ImVec2(Width, Height));
 		const ImVec2 Min = ImGui::GetItemRectMin();
 		const ImVec2 Max = ImGui::GetItemRectMax();
 		ImDrawList* DrawList = ImGui::GetWindowDrawList();
-		// Icon and label centred together, always at the font's own size (sneed 2026-11-25: buttons grow, text never shrinks).
+		// Icon then label from the left edge, always at the font's own size (sneed 2026-11-25: buttons grow, text never
+		// shrinks). With no label the icon is centred.
 		const float FontSize = ImGui::GetFontSize();
 		const float Total = IconSide + Gap + TextSize.x;
-		const float Left = (Min.x + Max.x - Total) * 0.5f;
+		const float Left = Shown.IsEmpty() ? (Min.x + Max.x - Total) * 0.5f : Min.x + Pad;
 		const float MidY = (Min.y + Max.y) * 0.5f;
 		Draw(DrawList, Icon, ImVec2(Left + IconSide * 0.5f, MidY), IconSide);
 		if (!Shown.IsEmpty())

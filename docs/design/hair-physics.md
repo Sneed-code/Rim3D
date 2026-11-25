@@ -168,8 +168,8 @@ each side (two more at the shoulders), each at the middle of the body's depth wi
 inside the surface. The game builds a physics asset from them once per body mesh (head spheres on `head`, the neck on
 `neck_01`, the rest on the nearest spine bone) and the groom collides with that alone. Hair at rest never touches them;
 hair swinging into the body is pushed back out at the skin. Buzz has no physics at all (`hair_grooms.json` "still").
-`Pawns.StrandHairCollision` 1 fitted (default), 0 nothing, 2 the body's own asset (to compare). Head sliders do not
-resize the spheres (the 4 mm keeps a slightly smaller head clear).
+`Pawns.StrandHairCollision` 1 fitted (default), 0 nothing, 2 the body's own asset (to compare). (Since 2026-11-25 the
+shapes reach just out of the skin and the head's follow the head sliders: "One barrier, for good" below.)
 
 Short, Messy and Bob are still too (sneed 2026-11-25, character screen: "the hair seems to sink into the scalp
 revealing a lot of it"): under Unreal's groom physics these short styles, grown standing a little off the scalp, sagged
@@ -337,7 +337,8 @@ Needs the `hair-grow` art step again (new `grooms.json`; `update-and-play.bat` r
 sub-steps and 10 iterations (Unreal's default 5 and 5 let bare-skinned long hair pass the shell as the body turned on
 the spot mid-walk; `HairGroomsCommandlet`). Right after a quick 180-degree turn on the spot the bare-skinned long hair dipped into the back or whipped round the
 side for a moment (PC strandwalk frames), then lay back on the back. Simulating it in the chest's frame
-(`Pawns.StrandHairTurnFollow`, Unreal's local simulation) was tried at 0.25: the swings went stiff and the hair stayed
+(`Pawns.StrandHairTurnFollow`, Unreal's local simulation; it also overrode the groom's own settings, which silently
+thinned the collision and softened the bends: see "One barrier, for good") was tried at 0.25: the swings went stiff and the hair stayed
 sunk after turns, so it is off by default. Turning the body at half the speed (360 degrees a second, PR #450 round 1) made no difference, nor did holding the
 hair at rest through every turn (round 2; held rigid, hair on a bowed head lies inside the chest). Seen from above
 (round 3) the hair went into the torso, tips showing through the back. Two causes in the groom itself: Unreal's solver
@@ -358,3 +359,46 @@ they are shadow or rendering, not hair through the body. Dressed bodies are clea
 shapes stand 3 cm further out). `-CreatorRecord=1` with the demo also saves every other frame of the walk
 (`strandwalk_NNNN.png`). `-CreatorStrandWalkPitch=-70` holds the walk's view still, from one side and looking down
 at that pitch, so a turn shows whether the hair goes round the body or through it.
+
+## One barrier, for good (sneed, 2026-11-25)
+
+sneed: "why is it so hard to have a system that avoids hair clipping issues? even when i change brow height it seems to
+clip. also the longer hair still clips shoulder blades ... when i stop and start the acceleration of long hair still
+makes my hair clip my skull". Measured on CreatorFemale (cloud, `bpy`, the PC's own body and grooms.json), there were
+three holes, each a different one from the ones fixed before:
+
+- **The barrier was inside the body, with gaps.** The shapes stood 1.5 mm (head) and 4 mm (body) inside the skin, and
+  between them hair could sink 3.8 mm into the scalp and 6.6 mm into the back (median; 6.9 mm and 1 cm for 1 point in
+  10) before anything stopped it. Unreal also gave each guide a collision thickness tapering from 1 mm at the root to
+  0.1 mm at the tip, so the lower half of long hair lay on the shapes themselves. Now `grow_hair.py` fits the shapes to
+  reach **out** of the skin: the head's 26 spheres up to 1 mm (`HEAD_MARGIN`), the neck's the same, the body's up to
+  6 mm (`BODY_MARGIN`). Hair can sink 0.9 mm into the scalp (2.4 mm for 1 in 10) and none into the back (median -1.2 mm,
+  3.5 mm for 1 in 10). Every guide is 2 mm thick to the collision from root to tip (`StrandHairGuideRadiusCm`, set by
+  `HairGroomsCommandlet`), and the game makes each physics shape 2 mm smaller, so shape plus thickness lands exactly on
+  the fitted barrier. The hair is grown outside it (`clear_of_shapes`: every point of a simulated style 1 mm past the
+  body's shapes), so resting hair never starts inside it: it can only meet it when it swings or the body moves.
+- **Drawn strands under their guide.** Unreal moves only the guides (one strand in 20) and draws each strand at its rest
+  offset from its nearest guide. Its own guides were any strands, so a strand lying under its guide (the hair layer is
+  up to 8 mm deep) went that far into the skin whenever the guide was pressed onto the body. Now `grow_hair.py` writes
+  the guides itself (`choose_guides`, curve attribute `groom_guide` 1, extra copies so every strand is still drawn): the
+  hair is split into patches round random strands and each patch's guide is its innermost strand, so every drawn strand
+  lies on or over its guide. The commandlet imports them (`GuideType=Imported` when `grooms.json` says the file has
+  guides).
+- **The sliders moved skin out from under the hair.** The hair followed the head sliders by the skull sphere's even
+  growth. The head width slider widens the head 16% and leaves its height alone, so the sides came 7 mm out through the
+  hair; the brow slider moves the forehead under the hairline 7 mm up. Now `grow_hair.py` (`head_axes`) fits each
+  slider's scalp movement as a scale along each axis about the skull centre plus a move (head width: 0.2 mm left over),
+  and keeps what that leaves at each scalp vertex (mm out along the skin's normal: brow 3.1 mm, the imp, orc and
+  masculine faces 4 to 7 mm). The game adds the sliders up by each person's weights, leftovers point by point, and
+  grows the hair about the skull centre until it clears the largest leftover less the 1 mm the hair lies off the scalp
+  (`StrandHairHeadShapeOf`; log `STRANDHAIR head sliders on ...`), so skin is never left outside the hair, for any slider
+  added later too. The head's collision spheres move and shrink with it (a physics asset per head shape to the mm).
+- **Start and stop.** Walking and running reach full speed in about a tenth of a second (a jolt of 6 to 7 g at the
+  start), which flung long hair through the barrier. The hair is now simulated in the upper chest's frame feeling 30% of
+  the body's starts and stops (`Pawns.StrandHairInertia`, Unreal's local simulation `LinearVelocityScale`) and all of its
+  turning. The 2026-11-22 trial of local simulation went through the component's `bOverrideSettings`, which also replaced
+  the groom's bend stiffness and collision thickness with the component's defaults (soft, 0.01 mm): it swung stiffly and
+  sank. Only `SimulationSetup` is set now (Unreal reads it either way). A severed head simulates in its own head's frame.
+
+Still grooms (Buzz, the afro) and the undercoats are left where they were grown (they never move, so never meet the
+shapes). Needs the `hair-grow` and `hair-grooms` art steps again (`update-and-play.bat` runs them).
