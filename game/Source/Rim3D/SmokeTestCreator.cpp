@@ -590,6 +590,8 @@ namespace
 			Anim->SetSoftTissueEnabled(P.bJiggle);
 			Anim->SetBreastJiggle(P.BreastJiggle);
 			Anim->SetBodySoftness(P.Weight, P.Muscle, P.Older);
+			// The tail bones swing only under a tail on show (the imp's, or the Beast-Strain's furred one on the same bones).
+			Anim->SetTailAmount(P.Kind == ECreatorKind::Beast ? 1.0f : P.Tail);
 		}
 		Set(TEXT("GenitalLarge"), P.Genital);
 		Set(TEXT("GenitalSmall"), -P.Genital);
@@ -2210,9 +2212,90 @@ namespace
 		case 3: P.Pubic = 1; P.bShaved = true; break;
 		default: P.Pubic = 1; break;
 		}
+		// The rest of the old creator's choices (sneed 2026-11-25: "genital size, tattoos, jewellery ... that we had in the
+		// old character creator"): only what the player picks, never generated.
+		P.Genital = FMath::Clamp(Look.Get(TEXT("genital"), P.Genital), -1.0f, 1.0f);
+		P.Pigment = FMath::Clamp(Look.Get(TEXT("pigment"), P.Pigment), 0.0f, 1.0f);
+		for (int32 j = 0; j < CreatorJewelCount; ++j)
+		{
+			const int32 Worn = FMath::RoundToInt(Look.Get(*FString::Printf(TEXT("jewel%d"), j), 0.0f));  // metal + 1, 0 none
+			P.Jewels[j] = Worn > 0;
+			P.Metal[j] = FMath::Clamp(Worn - 1, 0, static_cast<int32>(UE_ARRAY_COUNT(CreatorMetalNames)) - 1);
+		}
+		TArray<FString> AreaNames;
+		CreatorAreas(P.Looks.MakeHuman).GetKeys(AreaNames);
+		AreaNames.Sort();
+		for (int32 m = 0; m < 4; ++m)
+		{
+			FCreatorMark& Mark = P.Marks[m];
+			const auto Value = [&Look, m](const TCHAR* Field, float Default)
+			{
+				return Look.Get(*FString::Printf(TEXT("mark%d%s"), m, Field), Default);
+			};
+			const int32 Design = FMath::RoundToInt(Value(TEXT("Design"), -1.0f));
+			const int32 AreaIndex = FMath::RoundToInt(Value(TEXT("Area"), 0.0f));
+			Mark.bOn = Design >= 0 && Design < 16 && AreaNames.IsValidIndex(AreaIndex);
+			if (!Mark.bOn)
+			{
+				continue;
+			}
+			Mark.Design = Design;
+			Mark.Area = AreaNames[AreaIndex];
+			Mark.Size = FMath::Clamp(Value(TEXT("Size"), Mark.Size), 3.0f, 40.0f);
+			Mark.Angle = Value(TEXT("Angle"), Mark.Angle);
+			Mark.Opacity = FMath::Clamp(Value(TEXT("Opacity"), Mark.Opacity), 0.0f, 1.0f);
+			Mark.Colour[0] = Value(TEXT("R"), Mark.Colour[0]);
+			Mark.Colour[1] = Value(TEXT("G"), Mark.Colour[1]);
+			Mark.Colour[2] = Value(TEXT("B"), Mark.Colour[2]);
+		}
 		P.bBlink = false;
 		return P;
 	}
+}
+
+int32 CreatorPeople::JewelCount()
+{
+	return CreatorJewelCount;
+}
+
+FString CreatorPeople::JewelLabel(int32 Index)
+{
+	return Index >= 0 && Index < CreatorJewelCount ? FString(UTF8_TO_TCHAR(CreatorJewels[Index].Label)) : FString();
+}
+
+int32 CreatorPeople::MetalCount()
+{
+	return UE_ARRAY_COUNT(CreatorMetalNames);
+}
+
+FString CreatorPeople::MetalLabel(int32 Index)
+{
+	return Index >= 0 && Index < MetalCount() ? FString(UTF8_TO_TCHAR(CreatorMetalNames[Index])) : FString();
+}
+
+int32 CreatorPeople::MarkDesignCount()
+{
+	return UE_ARRAY_COUNT(CreatorMarkNames);
+}
+
+FString CreatorPeople::MarkDesignLabel(int32 Index)
+{
+	return Index >= 0 && Index < MarkDesignCount() ? FString(UTF8_TO_TCHAR(CreatorMarkNames[Index])) : FString();
+}
+
+bool CreatorPeople::MarkDesignTakesColour(int32 Index)
+{
+	const int32 Kind = CreatorMarkKind(Index);
+	return Kind == 0 || Kind == 3;  // tattoo ink and paint; scars and brands are the skin's own
+}
+
+TArray<FString> CreatorPeople::MarkAreas(const FLook& Look)
+{
+	const FCreatorPerson P = CreatorPeopleMake(Look.Seed, Look.bFemale);
+	TArray<FString> AreaNames;
+	CreatorAreas(P.Looks.MakeHuman).GetKeys(AreaNames);
+	AreaNames.Sort();
+	return AreaNames;
 }
 
 FString CreatorPeople::Encode(const FLook& Look)
@@ -2284,6 +2367,8 @@ CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
 	Keep(TEXT("skinG"), P.Skin[1]);
 	Keep(TEXT("skinB"), P.Skin[2]);
 	Keep(TEXT("pubic"), 1.0f);
+	Keep(TEXT("genital"), P.Genital);
+	Keep(TEXT("pigment"), P.Pigment);
 	return Out;
 }
 

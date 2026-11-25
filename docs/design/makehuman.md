@@ -71,6 +71,10 @@ yellow eyes; its red is the pawn's skin colour, like any colonist's (the tests u
 (`Pawns.MakeHumanTailPhysics`) is off: AnimDynamics let it sag and kink, so it stays as modelled until it has a
 rotational spring of its own.
 
+**Fine pubic hair (sneed 2026-11-25).** The grown pubic hairs are thinner (0.34 mm at the root, was 0.6), on ten points
+each instead of five (a smooth curl, no straight pieces) and taper to a fine point instead of a cut end; 4,500 of them
+(was 3,000) keep the patch as full. Density, coverage, trimmed and shaved work as before.
+
 **Pubic hair** (MakeHuman's `natural_pubic_hair`) sits too high on these bodies, stopping well above where the legs
 meet: `lower_pubic_hair` squeezes it to 60% of its height, narrows its top, and moves it down so its lowest point is
 2.5 cm over the crotch (the lowest body point on its middle line), laid back onto the skin (`pubic_top_share`,

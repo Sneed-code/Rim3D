@@ -190,6 +190,26 @@ namespace
 			// back as it turns (PC 2026-11-22, #450). 32 makes them about 2.5 cm. Set by text so a renamed field is a
 			// log line, not a broken build.
 			GroomsPhysicsSet(Physics, TEXT("StrandsParameters"), TEXT("(StrandsSize=Size32)"));
+			// The grown shape is the rest shape, held against gravity (sneed 2026-11-25: hair sank onto and into the scalp,
+			// showing it, on every style but the bob, which had its physics off and so was stiff). Gravity preloading makes
+			// the solver work out the pull that holds the rest pose up under gravity, so hair stands where it was grown and
+			// swings from there; the same for every style, so a new style needs nothing of its own. (Unreal's Groom Springs
+			// solver, the default; set by text so a renamed field is a log line, not a broken build.)
+			GroomsPhysicsSet(Physics, TEXT("SolverSettings"), TEXT("(GravityPreloading=1.0)"));
+			// Stiff near the scalp, as real hair is where it leaves the skin, softer towards the tips (5 times Unreal's
+			// default bend stiffness at the root, 3/4 of it at the tips), so the roots keep their lie as the head turns
+			// and stops while the lengths still swing.
+			FHairBendConstraint& Bend = Physics.MaterialConstraints.BendConstraint;
+			Bend.BendStiffness = 0.05f;
+			if (FRichCurve* Curve = Bend.BendScale.GetRichCurve())
+			{
+				Curve->Reset();
+				Curve->AddKey(0.0f, 1.0f);
+				Curve->AddKey(0.15f, 0.6f);
+				Curve->AddKey(0.4f, 0.25f);
+				Curve->AddKey(1.0f, 0.15f);
+			}
+			UE_LOG(LogHairGrooms, Display, TEXT("  physics bend stiffness %.3f, scale 1.0 at the root to 0.15 at the tips"), Bend.BendStiffness);
 		}
 		Groom->PostEditChange();
 		UE_LOG(LogHairGrooms, Display, TEXT("Groom %s from %s: %d groups, %d materials, physics %s"), *Groom->GetName(), *File, Groom->GetNumHairGroups(),
@@ -238,18 +258,20 @@ int32 UHairGroomsCommandlet::Main(const FString& Params)
 	{
 		for (const TSharedPtr<FJsonValue>& StyleValue : Root->GetArrayField(TEXT("styles")))
 		{
-			// Each style and its under-a-hat version (<Style>Hat; grow_hair.py makes one for every style but Buzz).
-			for (const FString& Style : {StyleValue->AsString(), StyleValue->AsString() + TEXT("Hat")})
+			// Each style, its under-a-hat version (<Style>Hat; grow_hair.py makes one for every style but Buzz) and its
+			// undercoat (<Style>Under: short strands flat on the scalp, worn under the style, never simulated).
+			for (const FString& Style : {StyleValue->AsString(), StyleValue->AsString() + TEXT("Hat"), StyleValue->AsString() + TEXT("Under")})
 			{
 				const bool bHat = Style.EndsWith(TEXT("Hat"));
+				const bool bUnder = Style.EndsWith(TEXT("Under"));
 				const FString File = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Grooms") / Base->AsString() / (Style + TEXT(".abc")));
 				if (!IFileManager::Get().FileExists(*File))
 				{
 					UE_LOG(LogHairGrooms, Display, TEXT("No %s: grow it with tools/makehuman/grow_hair.py (%s)"), *File,
-						bHat ? TEXT("under a hat the plain style shows") : TEXT("that style keeps its wig"));
+						bHat ? TEXT("under a hat the plain style shows") : (bUnder ? TEXT("the style is worn with no undercoat") : TEXT("that style keeps its wig")));
 					continue;
 				}
-				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial, !Still.Contains(StyleValue->AsString()));
+				const bool bOk = GroomsMake(File, StrandHairGrownName(Base->AsString(), Style), HairMaterial, !bUnder && !Still.Contains(StyleValue->AsString()));
 				Made += bOk ? 1 : 0;
 				Failed += bOk ? 0 : 1;
 			}

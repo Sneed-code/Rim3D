@@ -124,7 +124,7 @@
         "pigment_mask": "female",
         "pubic_grow": {
           "female": true,
-          "count": 3000,
+          "count": 4500,
           "curl": 1.0
         },
         "wrinkles": {
@@ -303,14 +303,14 @@
         "PubicStraight": {
           "pubic_grow": {
             "female": true,
-            "count": 3000,
+            "count": 4500,
             "curl": 0.12
           }
         },
         "PubicShort": {
           "pubic_grow": {
             "female": true,
-            "count": 3000,
+            "count": 4500,
             "curl": 1.0,
             "trim": 0.35
           }
@@ -341,7 +341,7 @@
         "PubicStubble": {
           "pubic_grow": {
             "female": true,
-            "count": 3000,
+            "count": 4500,
             "curl": 0.0,
             "trim": 0.07
           }
@@ -654,7 +654,7 @@
         "pubic_above_crotch": 0.05,
         "pubic_grow": {
           "female": false,
-          "count": 3000,
+          "count": 4500,
           "curl": 1.0
         },
         "wrinkles": {
@@ -836,14 +836,14 @@
         "PubicStraight": {
           "pubic_grow": {
             "female": false,
-            "count": 3000,
+            "count": 4500,
             "curl": 0.12
           }
         },
         "PubicShort": {
           "pubic_grow": {
             "female": false,
-            "count": 3000,
+            "count": 4500,
             "curl": 1.0,
             "trim": 0.35
           }
@@ -874,7 +874,7 @@
         "PubicStubble": {
           "pubic_grow": {
             "female": false,
-            "count": 3000,
+            "count": 4500,
             "curl": 0.0,
             "trim": 0.07
           }

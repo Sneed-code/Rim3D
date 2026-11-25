@@ -83,6 +83,10 @@ struct FMakeHumanTailNode : public FAnimNode_SkeletalControlBase
 	FTransform LastComponent;
 	bool bStarted = false;
 	float LargestAngle = 0.0f;       // degrees at the tip since the last read (tests)
+	/** How much tail is drawn (the creator's tail slider: 0 none .. 1 full). The bones only move with a tail on show: a
+	 *  hidden tail is its tube folded into its root by a morph but still skinned along the bones, so swinging them pulled
+	 *  a thin skin-coloured spike out of the lower back on every turn (sneed 2026-11-25, "a chopstick out of the pelvis"). */
+	float Amount = 0.0f;
 
 	virtual void UpdateInternal(const FAnimationUpdateContext& Context) override;
 	virtual void EvaluateSkeletalControl_AnyThread(FComponentSpacePoseContext& Output, TArray<FBoneTransform>& OutBoneTransforms) override;
@@ -282,6 +286,8 @@ public:
 	bool IsSoftTissueEnabled() const { return GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled; }
 	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
 	void SetBreastJiggle(float Amount);
+	/** How much tail the body shows (0 none, the default: the tail bones stay still .. 1 a full tail that swishes). */
+	void SetTailAmount(float Amount);
 	/** How soft the body's flesh is, from the creator's sliders (Weight -1 thin .. 1 heavy, Muscle -1 soft .. 1
 	 *  muscular; older is a little looser): a heavy soft body's belly, thighs, arms and buttocks wobble more and
 	 *  slower, a lean muscular one's hardly at all. */

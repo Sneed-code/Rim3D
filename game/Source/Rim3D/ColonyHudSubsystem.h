@@ -255,6 +255,8 @@ private:
 	void SubmitPeopleLook(colony::Entity Pawn, int32 Slot, const CreatorPeople::FLook& Look);
 	/** The character screens' parts (ColonyHudNewGame.cpp): names, the looks sliders, the trait shop and skills. */
 	void DrawPeopleNames(const colony::DefDatabase& Defs, const colony::Colonist& Colonist, colony::Entity Picked, int32 Slot, float Scale);
+	void DrawPeopleMarks(CreatorPeople::FLook& Look, const CreatorPeople::FLook& Full, bool& bLive, bool& bSend, float Scale);
+	void DrawPeopleJewellery(CreatorPeople::FLook& Look, const CreatorPeople::FLook& Full, bool& bLive, bool& bSend, float Scale);
 	void DrawPeopleLooks(const colony::Sim& Sim, colony::Entity Picked, int32 Slot, bool bYou, float Scale);
 	void DrawTraitShop(const colony::Sim& Sim, const colony::Colonist& Colonist, int32 Slot, float Scale);
 
@@ -353,6 +355,9 @@ private:
 	colony::Entity PeopleViewFor = colony::kNoEntity;  // the pawn the clear view below was picked for
 	float PeopleViewYaw = 0.0f;  // degrees off the body's facing where the camera stands, picked clear of trees
 	float PeopleOrbit = 0.0f;    // degrees the camera is carried round the body by holding the right mouse button
+	bool bPeopleOrbiting = false;        // a right-button orbit under way (started over the open middle)
+	bool bPeopleHadCursor = false;
+	FVector2D PeopleLastCursor = FVector2D::ZeroVector;
 	float PickPeopleView(colony::Entity Pawn) const;
 	int32 NewSeed = 42;
 	int32 NewMapSize = 512;
