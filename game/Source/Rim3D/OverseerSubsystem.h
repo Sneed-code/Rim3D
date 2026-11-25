@@ -8,6 +8,7 @@
 #include "OverseerSubsystem.generated.h"
 
 class AOverseerPawn;
+class UMaterialInterface;
 class USimSubsystem;
 
 /**
@@ -30,12 +31,22 @@ public:
 	/** Spawns the camera pawn over the middle of the map and makes the first player control it. */
 	AOverseerPawn* EnterOverseerMode();
 	AOverseerPawn* GetOverseerPawn() const;
-	/** True while the overseer view is the one in use (not while the player walks a colonist). */
+	/** True while the overseer's screen is in use: its view, or its panels over the walking view (the build screen, B in
+	 *  direct mode). The bar, the panels and the order tools all go by this. */
 	bool IsOverseerActive() const;
+	/** True only while the overseer's own top-down camera is the view (the levels cutaway and the roofs go by this). */
+	bool IsOverseerCamera() const;
 	/** Hides the overseer's panels while another view has the player controller (direct mode,
 	 *  U9). The camera pawn stays, with its focus, distance and the selection. EnterOverseerMode
 	 *  brings it back. */
-	void LeaveOverseerMode() { bActive = false; }
+	void LeaveOverseerMode() { bActive = false; bUiOverDirect = false; }
+	/**
+	 * The overseer's panels (bar, Build menu, order tools, inspect) over the walking view, which keeps its camera
+	 * (sneed 2026-11-25: "B just toggles the overseer interface without the view"; UProtagonistSubsystem::OpenBuildUi).
+	 * The camera pawn is made if there is none but not given the player controller. False if it could not be made.
+	 */
+	bool SetUiOverDirectView(bool bOn);
+	bool IsUiOverDirectView() const;
 
 	/** The first (main) thing or cell selected; the inspect panel shows it. More things may be selected with it. */
 	const FSimPick& GetSelection() const { return Selection; }
@@ -78,11 +89,21 @@ protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
 private:
+	/** Spawns the camera pawn (not possessed) if there is none. */
+	bool MakeCameraPawn();
 	void DrawSelectionHighlight(const USimSubsystem& Bridge) const;
 	void DrawPanels(USimSubsystem& Bridge);
+	/** Outlines of people and buildings hidden behind trees, roofs and walls (sneed 2026-11-25; SeeThroughArt). */
+	void UpdateSeeThrough(const USimSubsystem& Bridge);
 
 	UPROPERTY()
 	TObjectPtr<AOverseerPawn> Pawn;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> SeeThroughMaterial;
+	bool bSeeThroughLoaded = false;
+	bool bSeeThroughOnCamera = false;
+	double NextSeeThroughMark = 0.0;
 
 	FSimPick Selection;
 	/** Things selected with the main one (Selection), in the order picked. */
@@ -93,4 +114,5 @@ private:
 	FVector2D BoxEnd = FVector2D::ZeroVector;
 	int32 PanelFramesDrawn = 0;
 	bool bActive = false;
+	bool bUiOverDirect = false;
 };

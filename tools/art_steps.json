@@ -39,10 +39,10 @@
     },
     {
       "name": "title-art",
-      "what": "Paint the title screen's planet, clouds and galaxy (game/Saved/TitleArt; Blender's Python has numpy)",
+      "what": "Paint the title screen's planet (8K surface, relief, sea glint, city lights), the window's sharp stars and the galaxy (game/Saved/TitleArt; Blender's Python has numpy; a few minutes)",
       "inputs": ["tools/title_art.py"],
       "needs": ["blender"],
-      "makes": ["game/Saved/TitleArt/planet_color.png", "game/Saved/TitleArt/planet_clouds.png", "game/Saved/TitleArt/galaxy.png"],
+      "makes": ["game/Saved/TitleArt/planet_color.r3tx", "game/Saved/TitleArt/planet_normal.r3tx", "game/Saved/TitleArt/planet_rough.r3tx", "game/Saved/TitleArt/planet_lights.r3tx", "game/Saved/TitleArt/sky_view.png", "game/Saved/TitleArt/galaxy.png"],
       "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/title_art.py", "--"]}]
     },
     {
@@ -132,6 +132,12 @@
       "what": "Night sky material",
       "after": ["night-sky"],
       "run": [{"commandlet": "SkyArt", "args": ["-AllowCommandletRendering"]}]
+    },
+    {
+      "name": "see-through-art",
+      "what": "Overseer outlines of people and buildings hidden behind trees",
+      "makes": ["game/Content/Rim3D/Generated/Overseer"],
+      "run": [{"commandlet": "SeeThroughArt", "args": ["-AllowCommandletRendering"]}]
     },
     {
       "name": "water-art",

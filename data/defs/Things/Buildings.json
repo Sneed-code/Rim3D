@@ -13,8 +13,9 @@
     "passability": "Impassable", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 5,
     "stats": { "maxHitPoints": 300, "workToBuild": 194.4, "flammability": 1.0 },
-    "building": { "holdsRoof": true, "dragShape": "Outline", "takesWindow": true },
-    "ours": ["building.holdsRoof", "building.dragShape", "building.takesWindow: a window can be cut in it (docs/design/windows.md)"]
+    "building": { "holdsRoof": true, "dragShape": "Outline", "takesWindow": true, "isPlaceOverableWall": true },
+    "ours": ["building.holdsRoof", "building.dragShape", "building.takesWindow: a window can be cut in it (docs/design/windows.md)"],
+    "note": "building.isPlaceOverableWall is RimWorld's: a door (building.canPlaceOverWall) can be planned over it and replaces it (docs/design/construction.md)."
   },
   {
     "defName": "AncientWall", "visual": {"link": {"thickness": 0.5}, "parts": [{"shape": "box", "size": [0, 0, 2.2], "color": [0.42, 0.4, 0.37]}]}, "parent": "BuildingBase", "label": "ancient wall",
@@ -36,9 +37,10 @@
     "thingClass": "Building_Door", "fillPercent": 1.0, "designationCategory": "Structure",
     "costStuffCount": 25,
     "stats": { "maxHitPoints": 160, "workToBuild": 1224, "flammability": 1.0 },
-    "building": { "holdsRoof": true },
+    "building": { "holdsRoof": true, "canPlaceOverWall": true },
     "unverified": ["fillPercent"],
-    "ours": ["building.holdsRoof"]
+    "ours": ["building.holdsRoof"],
+    "note": "building.canPlaceOverWall is RimWorld's: a door can be planned over a wall, which a builder takes down before building the door (docs/design/construction.md)."
   },
   {
     "defName": "Bed", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Bed/SM_Bed.SM_Bed", "parts": [{"shape": "box", "size": [0, 0, 0.22], "stuff": true}, {"shape": "box", "size": [-0.14, -0.14, 0.18], "at": [0, 0, 0.22], "color": [0.85, 0.83, 0.78]}, {"shape": "box", "size": [-0.2, 0.9, 0.04], "at": [0, -0.3, 0.4], "color": [0.35, 0.5, 0.7]}, {"shape": "box", "size": [0.55, 0.34, 0.1], "at": [0, 0.62, 0.4], "color": [0.95, 0.95, 0.97]}, {"shape": "box", "size": [0, 0.08, 0.6], "at": [0, 0.96, 0], "stuff": true}]}, "parent": "StuffBuildingBase", "label": "bed",

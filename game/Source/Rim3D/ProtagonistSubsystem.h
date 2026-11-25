@@ -115,6 +115,19 @@ public:
 	float GetUnstuckSecondsLeft() const { return UnstuckSecondsLeft; }
 	bool IsUnstucking() const { return UnstuckSecondsLeft > 0.0f; }
 
+	/**
+	 * The build screen (sneed 2026-11-25, docs/design/handson.md "The build screen"): B in direct mode brings up the
+	 * overseer's panels (the bar, with the Build menu open) over the walking view, which keeps its camera. The mouse is
+	 * freed and places plans under the cursor (click, or drag for walls); the body's keys are off, so nobody walks, turns
+	 * or punches. B again, or Esc, goes back to walking. False if it can't open now (not walking, asleep, dead).
+	 */
+	bool OpenBuildUi();
+	void CloseBuildUi();
+	void ToggleBuildUi();
+	bool IsBuildUiOpen() const { return bBuildUi && bDirect; }
+	/** Frames the build screen was up (smoke tests). */
+	int32 GetBuildUiFrames() const { return BuildUiFrames; }
+
 protected:
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
 
@@ -133,6 +146,10 @@ private:
 	void EndDeathScreen();
 	void TickDeathScreen();
 	void DrawDeathScreen(float Seconds, bool bHasSave);
+	/** The build screen's mouse and keys, each frame it is up: clicks to the order tools (or select), Esc and B close. */
+	void UpdateBuildUi(APlayerController& PC);
+	bool bBuildUi = false;
+	int32 BuildUiFrames = 0;
 
 	UPROPERTY()
 	TObjectPtr<AProtagonistPawn> Body;

@@ -515,3 +515,60 @@ TEST_CASE("Title backdrop: a wild rainforest tile in the morning, with no people
     CHECK(sim.time().steps == 0);
     CHECK(sim.plants().count() > 0);
 }
+
+TEST_CASE("Crash Landed lands in a clearing: no trees or tall plants round the people and the cargo, grass stays") {
+    const auto defs = newGameDefs();
+    const Def* scenario = defs->find("Scenarios", "CrashLanded");
+    NG_REQUIRE(scenario != nullptr);
+    const double radius = scenario->number("landingClearRadiusM", 0.0);
+    NG_REQUIRE(radius >= 8.0);
+    const auto tall = [](const Sim& on, CellPos c) {
+        if (!on.plants().has(c)) {
+            return false;
+        }
+        const Def& d = on.defs().get(on.plants().defAt(c));
+        return d.flag("plant.isTree") || d.number("pathCost", 0.0) > 0.0;
+    };
+    for (const uint64_t seed : {3ULL, 7ULL, 11ULL}) {
+        SimSettings settings = newGameSettings(seed);
+        settings.world.enabled = true;  // the tropical jungle Crash Landed lands in
+        Sim sim(settings, defs);
+        for (const std::string& e : sim.setupErrors()) {
+            MESSAGE(e);
+        }
+        NG_REQUIRE(sim.setupErrors().empty());
+        NG_REQUIRE(sim.stockpileCell().has_value());
+        CHECK(sim.biome().rfind("Tropical", 0) == 0);
+        const CellPos landing = *sim.stockpileCell();
+        int tallLeft = 0;
+        int trees = 0;
+        int kept = 0;
+        for (int y = 0; y < sim.map().height(); ++y) {
+            for (int x = 0; x < sim.map().width(); ++x) {
+                const CellPos c{x, y, 0};
+                const double dx = x - landing.x;
+                const double dy = y - landing.y;
+                const bool inside = dx * dx + dy * dy <= radius * radius;
+                trees += sim.plants().isTree(c) ? 1 : 0;
+                tallLeft += inside && tall(sim, c) ? 1 : 0;
+                kept += inside && sim.plants().has(c) && !tall(sim, c) ? 1 : 0;
+            }
+        }
+        CHECK(tallLeft == 0);
+        CHECK(trees > 50);  // only the clearing goes; the jungle stays
+        CHECK(kept > 0);    // grass is left
+        // The people and the starting kit are in the clearing.
+        for (const Entity e : newGameColonists(sim)) {
+            const CellPos at = cellOf(sim.things().registry().get<Position>(e));
+            const double dx = at.x - landing.x;
+            const double dy = at.y - landing.y;
+            CHECK(dx * dx + dy * dy <= radius * radius);
+        }
+        const Position mid{static_cast<float>(landing.x) + 0.5f, static_cast<float>(landing.y) + 0.5f, 0};
+        CHECK(newGameItemsNear(sim, "MealSurvivalPack", mid, static_cast<float>(radius)) == 50);
+        // The same seed lands in the same clearing.
+        Sim again(settings, defs);
+        CHECK(again.stockpileCell() == sim.stockpileCell());
+        CHECK(again.plants().hash() == sim.plants().hash());
+    }
+}

@@ -2430,83 +2430,85 @@ void UFightSubsystem::DrawHud()
 		ImGui::End();
 	}
 
-	// The gun, bottom middle.
+	// The gun, bottom middle: its rounds and keys, grenades, bleeding and what else is carried. Bare fists with nothing else
+	// to say draw no box at all (sneed 2026-11-25: the "Fists / Left mouse punch / E picks up a gun" strip is gone).
 	const ImGuiWindowFlags PanelFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
 		ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
-	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (View && ImGui::Begin("##FightGun", nullptr, PanelFlags))
+	const UWeaponDrawSubsystem* Weapons = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
+	const bool bGun = View && View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
+	const bool bMeleeWeapon = View && !bGun && View->weapon.valid() && Bridge->GetDefs();
+	const FString Slots = View && Weapons ? Weapons->DescribeCarried(*View) : FString();
+	const bool bBleeding = View && View->patchZone < 0 && !View->downed && !View->dead && Sim.health().worstBleedingZone(Pawn) >= 0;
+	const bool bGunBox = View && !Protagonist->IsBuildUiOpen() && (bGun || bMeleeWeapon || EquipMessageSeconds > 0.0f || View->grenades > 0 || View->patchZone >= 0 || bBleeding || !Slots.IsEmpty());
+	if (bGunBox)
 	{
-		const bool bGun = View->weapon.valid() && Bridge->GetDefs() && Bridge->GetDefs()->get(View->weapon).has("verbs");
-		const UWeaponDrawSubsystem* Weapons = GetWorld()->GetSubsystem<UWeaponDrawSubsystem>();
-		if (bGun)
+		ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Viewport->Size.x * 0.5f, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+		ImGui::SetNextWindowBgAlpha(0.6f);
+		if (ImGui::Begin("##FightGun", nullptr, PanelFlags))
 		{
-			const FString Label = UTF8_TO_TCHAR(Bridge->GetDefs()->get(View->weapon).label().c_str());
-			if (View->magazineSize > 0)
+			if (bGun)
 			{
-				FightText(FString::Printf(TEXT("%s   %d / %d%s"), *Label, View->rounds, View->magazineSize, View->reloading ? TEXT("   reloading") : TEXT("")));
-				ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
-			}
-			else
-			{
-				FightText(Label);
-				DrawShotStore(*View, Scale);
-				ImGui::TextUnformatted("Left mouse fire   C crouch   Z lie down");
-			}
-		}
-		else if (View->weapon.valid() && Bridge->GetDefs())
-		{
-			FightText(UTF8_TO_TCHAR(Bridge->GetDefs()->get(View->weapon).label().c_str()));
-			ImGui::TextUnformatted("Left mouse swing   Right mouse block   C crouch   Z lie down");
-		}
-		else
-		{
-			ImGui::TextUnformatted("Fists   Left mouse punch   E picks up a gun");
-			if (EquipMessageSeconds > 0.0f)
-			{
-				ImGui::TextUnformatted("No gun within reach");
-			}
-		}
-		// Grenades on the belt (sneed 2026-11-19): the kind G throws, how many, and the keys.
-		if (View->grenades > 0 && Bridge->GetDefs())
-		{
-			const colony::DefId Item = GetGrenadeChoice();
-			if (Item.valid())
-			{
-				const int32 Count = Sim.explosives().count(Pawn, Item);
-				const bool bKinds = Sim.explosives().stacks(Pawn).size() > 1;
-				const FString Line = FString::Printf(TEXT("%s x%d   %s throw (hold to aim)%s%s"), UTF8_TO_TCHAR(Bridge->GetDefs()->get(Item).label().c_str()), Count,
-					*Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade), bKinds ? TEXT("   ") : TEXT(""),
-					bKinds ? *FString::Printf(TEXT("%s next kind"), *Rim3DKeys::GetKeyLabel(ERim3DAction::NextGrenade)) : TEXT(""));
-				if (View->throwReadyIn > 0)
+				const FString Label = UTF8_TO_TCHAR(Bridge->GetDefs()->get(View->weapon).label().c_str());
+				if (View->magazineSize > 0)
 				{
-					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", TCHAR_TO_UTF8(*Line));
+					FightText(FString::Printf(TEXT("%s   %d / %d%s"), *Label, View->rounds, View->magazineSize, View->reloading ? TEXT("   reloading") : TEXT("")));
+					ImGui::TextUnformatted("Left mouse fire   R reload   C crouch   Z lie down");
 				}
 				else
 				{
-					ImGui::TextUnformatted(TCHAR_TO_UTF8(*Line));
+					FightText(Label);
+					DrawShotStore(*View, Scale);
+					ImGui::TextUnformatted("Left mouse fire   C crouch   Z lie down");
 				}
 			}
-		}
-		// Bleeding: the key that patches it (body-health.md part B), or how long the patching still takes.
-		if (View->patchZone >= 0)
-		{
-			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Patching...  %.1f s", static_cast<float>(View->patchStepsLeft) / static_cast<float>(colony::kStepsPerRealSecondAt1x));
-		}
-		else if (!View->downed && !View->dead && Sim.health().worstBleedingZone(Pawn) >= 0)
-		{
-			ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "%s", TCHAR_TO_UTF8(*FString::Printf(TEXT("Bleeding   %s patch the wound"), *Rim3DKeys::GetKeyLabel(ERim3DAction::Patch))));
-		}
-		if (Weapons)
-		{
-			const FString Slots = Weapons->DescribeCarried(*View);
+			else if (bMeleeWeapon)
+			{
+				FightText(UTF8_TO_TCHAR(Bridge->GetDefs()->get(View->weapon).label().c_str()));
+				ImGui::TextUnformatted("Left mouse swing   Right mouse block   C crouch   Z lie down");
+			}
+			else if (EquipMessageSeconds > 0.0f)
+			{
+				ImGui::TextUnformatted("No gun within reach");
+			}
+			// Grenades on the belt (sneed 2026-11-19): the kind G throws, how many, and the keys.
+			if (View->grenades > 0 && Bridge->GetDefs())
+			{
+				const colony::DefId Item = GetGrenadeChoice();
+				if (Item.valid())
+				{
+					const int32 Count = Sim.explosives().count(Pawn, Item);
+					const bool bKinds = Sim.explosives().stacks(Pawn).size() > 1;
+					const FString Line = FString::Printf(TEXT("%s x%d   %s throw (hold to aim)%s%s"), UTF8_TO_TCHAR(Bridge->GetDefs()->get(Item).label().c_str()), Count,
+						*Rim3DKeys::GetKeyLabel(ERim3DAction::Grenade), bKinds ? TEXT("   ") : TEXT(""),
+						bKinds ? *FString::Printf(TEXT("%s next kind"), *Rim3DKeys::GetKeyLabel(ERim3DAction::NextGrenade)) : TEXT(""));
+					if (View->throwReadyIn > 0)
+					{
+						ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", TCHAR_TO_UTF8(*Line));
+					}
+					else
+					{
+						ImGui::TextUnformatted(TCHAR_TO_UTF8(*Line));
+					}
+				}
+			}
+			// Bleeding: the key that patches it (body-health.md part B), or how long the patching still takes.
+			if (View->patchZone >= 0)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "Patching...  %.1f s", static_cast<float>(View->patchStepsLeft) / static_cast<float>(colony::kStepsPerRealSecondAt1x));
+			}
+			else if (bBleeding)
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f), "%s", TCHAR_TO_UTF8(*FString::Printf(TEXT("Bleeding   %s patch the wound"), *Rim3DKeys::GetKeyLabel(ERim3DAction::Patch))));
+			}
 			if (!Slots.IsEmpty())
 			{
 				FightText(Slots);
 			}
+			GunBoxTop = ImGui::GetWindowPos().y;
+			GunBoxFrame = GFrameCounter;
 		}
+		ImGui::End();
 	}
-	ImGui::End();
 
 	if (bAimingGrenade && View && !View->dead)
 	{

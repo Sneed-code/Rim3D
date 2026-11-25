@@ -10,6 +10,7 @@
 #include "WorldScreenSubsystem.generated.h"
 
 class USimSubsystem;
+class UTexture2D;
 
 /** What the world screen drew and did (smoke test `worldmap`). */
 struct FWorldScreenStats
@@ -22,12 +23,16 @@ struct FWorldScreenStats
 };
 
 /**
- * The world screen (task W3, docs/design/world-map.md): the planet's tiles drawn as a map with ImGui,
- * a tile picked with the mouse, the tile's facts beside it, and a button that starts a colony there.
+ * The world screen (task W3, docs/design/world-map.md): the planet's tiles drawn as a map of hexagons, a tile picked
+ * with the mouse, the tile's facts beside it, and a button that starts a colony there.
  *
  * - Open with M or the "World map" button (top right), close with M, Esc or Close. Console: World.Screen 0|1.
- * - Colours show the biome (darker for hills), open water by depth; rivers are blue lines, roads brown
- *   to black (dirt, stone, asphalt), settlements red dots, the colony's tile a yellow ring.
+ * - The sim's grid is drawn as hexagons, every other row shifted half a tile (the sim keeps its square grid and eight
+ *   neighbours; only the picture is hexagonal). The map is painted once per world into a picture (BuildMapPicture):
+ *   biome colours with their own texture (trees, dunes, ice), shaded relief from the tiles' heights (hills and
+ *   mountains, snowy peaks where it is cold), seas by depth with shallows and foam along the coasts, and a fine hex
+ *   grid. Rivers (smooth blue curves), roads (brown to black: dirt, stone, asphalt), settlements, the colony's tile, the
+ *   hovered and the picked hexagon are drawn over it every frame. Mouse wheel zooms (at the pointer), dragging moves.
  * - A click picks a tile; the panel gives its biome, hills, height, climate, river, road and settlement.
  * - "Start colony here" restarts the sim on this world with that start tile (the same scenario as the
  *   running game). A tile a colony can't start on (sea, impassable, a settlement) says why and has no button.
@@ -59,8 +64,13 @@ public:
 	int32 GetSelectedTile() const { return Selected; }
 	/** Picks a tile as a click does. False for a tile off the map. */
 	bool SelectTile(int32 Tile);
-	/** The tile under a screen position given the map's rectangle (the same maths the click uses). */
+	/** The tile under a screen position given the map's top left corner and the hexagons' width in pixels (the same maths
+	 *  the click uses); -1 off the map. */
 	static int32 TileAt(const colony::World& World, float MapLeft, float MapTop, float TileSize, float X, float Y);
+	/** Where a tile's hexagon has its middle on screen, for the same map corner and hexagon width. */
+	static FVector2D TileCentre(const colony::World& World, float MapLeft, float MapTop, float TileSize, int32 Tile);
+	/** The whole map's size in hexagon widths (columns plus the half a shifted row sticks out; rows overlap). */
+	static FVector2D MapSizeInTiles(const colony::World& World);
 	/** Why a colony can't start on a tile, or an empty string when it can. */
 	FString WhyNotStart(int32 Tile) const;
 	/** The facts the panel lists for a tile, one per line. */
@@ -88,6 +98,17 @@ protected:
 private:
 	USimSubsystem* GetBridge() const;
 	void DrawScreen(USimSubsystem& Bridge);
+	/** Paints the shown world's map picture (and its halves) if the world or the new-game biomes changed. */
+	void BuildMapPicture(const colony::World& World);
+
+	/** The map picture at full size, half and a quarter (the smallest still as big as it is drawn is used). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTexture2D>> MapPictures;
+	FString MapPictureKey;
+	/** The view: zoom (1 shows the whole map) and the map point at the middle of the view, in hexagon widths. */
+	float MapZoom = 1.0f;
+	FVector2D MapViewCentre = FVector2D(-1.0, -1.0);
+	bool bMapDragged = false;
 
 	bool bOpen = false;
 	bool bPreview = true;

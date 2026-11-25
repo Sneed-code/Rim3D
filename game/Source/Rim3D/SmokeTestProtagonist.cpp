@@ -22,6 +22,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Map.h"
+#include "ColonySim/JobType.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Sim.h"
@@ -342,7 +343,9 @@ void USmokeTestSubsystem::BuildProtagonistPhases()
 		}
 		const colony::Sim* Sim = B->GetSim();
 		const colony::ThingView* Left = B->GetCurrentSnapshot().find(State->Other);
-		if (!Left || std::abs(Left->vx) + std::abs(Left->vy) > 0.0001f)
+		// Let go, its job system takes over (Sim ControlPawn): walking off to a job (e.g. to put on the landing's clothes)
+		// is fine; moving with no job means it still drifts on the player's last input.
+		if (!Left || (Left->job == colony::JobType::None && std::abs(Left->vx) + std::abs(Left->vy) > 0.0001f))
 		{
 			Fail(TEXT("The colonist that was let go is still moving by itself"));
 		}

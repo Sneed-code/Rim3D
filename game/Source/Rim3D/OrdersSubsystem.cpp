@@ -652,7 +652,8 @@ bool UOrdersSubsystem::IsDirectBuilding() const
 {
 	const UWorld* World = GetWorld();
 	const UProtagonistSubsystem* Protagonist = World ? World->GetSubsystem<UProtagonistSubsystem>() : nullptr;
-	return Tool == EOrderTool::Build && Protagonist && Protagonist->IsDirectMode();
+	// Not on the build screen (B): there the overseer's own tools run, under the cursor.
+	return Tool == EOrderTool::Build && Protagonist && Protagonist->IsDirectMode() && !Protagonist->IsBuildUiOpen();
 }
 
 bool UOrdersSubsystem::CycleBuilding(int32 Direction)
@@ -782,8 +783,17 @@ FSimPick UOrdersSubsystem::PickGroundAt(const FVector2D& Screen) const
 	{
 		return FSimPick();
 	}
-	// On the level the overseer looks at (docs/design/levels-draw.md).
-	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, ULevelsSubsystem::TopShownLevel(World));
+	// On the level the overseer looks at (docs/design/levels-draw.md). With the panels over the walking view (B) every
+	// level is shown, so the ground is the player's own level instead (as the crosshair's ghost picks it).
+	int32 Level = ULevelsSubsystem::TopShownLevel(World);
+	const UOverseerSubsystem* Overseer = World->GetSubsystem<UOverseerSubsystem>();
+	const UProtagonistSubsystem* Protagonist = World->GetSubsystem<UProtagonistSubsystem>();
+	if (Overseer && !Overseer->IsOverseerCamera() && Protagonist)
+	{
+		const colony::ThingView* Self = Bridge->GetCurrentSnapshot().find(Protagonist->GetControlled());
+		Level = Self ? Self->level : 0;
+	}
+	return SimPicking::PickGroundFromRay(*Bridge, Origin, Direction, Level);
 }
 
 bool UOrdersSubsystem::HandleLeftPressed(const FVector2D& Screen)
@@ -1348,6 +1358,32 @@ bool UOrdersSubsystem::OrderAttackSelected(colony::Entity Target)
 	return true;
 }
 
+void UOrdersSubsystem::DrawAlarmButton(USimSubsystem& Bridge)
+{
+	// The alarm as a plain button beside the day (sneed 2026-11-25: "Draft", not a red ALARM box): drafts every colonist,
+	// or, once all are drafted, reads Stand down and sends them back to work.
+	const colony::Sim* Sim = Bridge.GetSim();
+	if (!Sim)
+	{
+		return;
+	}
+	bool bAnyColonist = false;
+	bool bAnyUndrafted = false;
+	for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
+	{
+		if (View.category == colony::ThingCategory::Pawn && View.faction == 1 && !View.dead && !View.downed && Sim->colonistOf(View.id))
+		{
+			bAnyColonist = true;
+			bAnyUndrafted = bAnyUndrafted || !View.drafted;
+		}
+	}
+	if (ColonyHud::Button(bAnyUndrafted ? TEXT("Draft##alarm") : TEXT("Stand down##alarm"), !bAnyUndrafted && bAnyColonist) && bAnyColonist)
+	{
+		Alarm();
+	}
+	ColonyHud::Tip(bAnyUndrafted ? TEXT("Draft every colonist") : TEXT("Send every colonist back to work"));
+}
+
 void UOrdersSubsystem::DrawDraftControls(const colony::ThingView& View)
 {
 	if (View.category != colony::ThingCategory::Pawn || View.faction != 1 || View.dead)
@@ -1770,8 +1806,28 @@ void UOrdersSubsystem::UpdatePreview(USimSubsystem& Bridge)
 				continue;
 			}
 			const bool bValid = CanPlace(BuildDef, Origin, BuildRot);
+			const colony::Sim* PreviewSim = Bridge.GetSim();
+			const bool bOverWall = bValid && PreviewSim && PreviewSim->map().inBounds(Origin) && PreviewSim->map().buildingAt(Origin) != colony::kNoEntity;
+			if (bOverWall)
+			{
+				const colony::Map& PreviewMap = PreviewSim->map();
+				// A door planned over a wall (docs/design/construction.md "Doors over walls"): the ghost is drawn a little
+				// larger than the wall, so it shows over it, and along the wall as the finished door will stand.
+				const auto WallAt = [&PreviewMap, &Origin](int32 DX, int32 DY)
+				{
+					const colony::CellPos Near{Origin.x + DX, Origin.y + DY, Origin.level};
+					return PreviewMap.inBounds(Near) && PreviewMap.passage(Near) == colony::Passage::Blocked;
+				};
+				const bool bWallsEastWest = WallAt(-1, 0) || WallAt(1, 0);
+				const bool bWallsNorthSouth = WallAt(0, -1) || WallAt(0, 1);
+				if (bWallsEastWest != bWallsNorthSouth)
+				{
+					Placed.SetRotation(FRotator(0.0, bWallsNorthSouth ? 90.0 : 0.0, 0.0).Quaternion());
+				}
+				Placed.SetScale3D(FVector(1.14, 1.14, 1.03));
+			}
 			(bValid ? Good : Bad).Add(Placed);
-			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0) + (static_cast<uint64>(Origin.level) << 8));
+			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0) + (bOverWall ? 2 : 0) + (static_cast<uint64>(Origin.level) << 8));
 		}
 	}
 	if (Signature == PreviewSignature)
@@ -2039,34 +2095,7 @@ void UOrdersSubsystem::DrawPanels(USimSubsystem& Bridge)
 	}
 	ButtonRects.Reset();
 
-	// The alarm, top right.
-	HudLayout::PlaceRight(Viewport, HudLayout::ERightSlot::Alarm, Scale);
-	if (ImGui::Begin("##OrdersAlarm", nullptr, PanelFlags))
-	{
-		HudLayout::ReportRight(HudLayout::ERightSlot::Alarm);
-		bool bAnyColonist = false;
-		bool bAnyUndrafted = false;
-		for (const colony::ThingView& View : Bridge.GetCurrentSnapshot().things)
-		{
-			if (View.category == colony::ThingCategory::Pawn && View.faction == 1 && !View.dead && !View.downed && Sim.colonistOf(View.id))
-			{
-				bAnyColonist = true;
-				bAnyUndrafted = bAnyUndrafted || !View.drafted;
-			}
-		}
-		ImGui::PushStyleColor(ImGuiCol_Button, bAnyUndrafted ? ImVec4(0.72f, 0.14f, 0.12f, 1.0f) : ImVec4(0.22f, 0.45f, 0.30f, 1.0f));
-		if (HudIcons::Button(HudIcons::Get(bAnyUndrafted ? TEXT("pawn_draft") : TEXT("pawn_undraft"), ImGui::GetFrameHeight()),
-				bAnyUndrafted ? TEXT("ALARM##alarm") : TEXT("Stand down##alarm"), false, ImVec2(0.0f, 0.0f)) && bAnyColonist)
-		{
-			Alarm();
-		}
-		ImGui::PopStyleColor();
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("%s", bAnyUndrafted ? "Draft every colonist" : "Send every colonist back to work");
-		}
-	}
-	ImGui::End();
+	// The alarm is the date box's Draft button now (DrawAlarmButton, sneed 2026-11-25).
 
 	// The Build menu (the bottom bar's Build tab), above the bar on the left. A message (what a drag did) shows in it, or on its
 	// own above the bar while the menu is closed (building in direct mode).

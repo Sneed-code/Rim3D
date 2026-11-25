@@ -570,8 +570,9 @@ JobSystem::StepResult JobSystem::plantWork(Entity pawn, Job& job, std::string& w
             const Position& at = things_.registry().get<Position>(pawn);
             fallDirection(tx - at.x, ty - at.y, event.x, event.y);
             event.thing = pawn;
-            event.count = static_cast<int>(plants_.growthPpm(job.cell));
         }
+        // Its growth: Unreal topples a tree of that size, or breaks up a cut grass or bush of it (PlantBreakSubsystem).
+        event.count = static_cast<int>(plants_.growthPpm(job.cell));
         plants_.remove(job.cell);
         event.type = EventType::PlantRemoved;
         event.message = tree ? "felled" : (harvest ? "harvested" : "cut");
@@ -616,6 +617,7 @@ JobSystem::StepResult JobSystem::sowWork(Entity pawn, Job& job, std::string& why
         removed.type = EventType::PlantRemoved;
         removed.cell = job.cell;
         removed.def = plants_.defAt(job.cell);
+        removed.count = static_cast<int>(plants_.growthPpm(job.cell));
         removed.message = "cut";
         plants_.remove(job.cell);
         events_.push_back(std::move(removed));

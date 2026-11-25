@@ -844,7 +844,14 @@ void UStrandHairSubsystem::Want(USkeletalMeshComponent* Body, const FString& Bas
 	UGroomAsset* Groom = CreatorStyle.IsEmpty() ? nullptr : StrandHairFindGrown(Base, CreatorStyle, bUnderHat);
 	if (Found && Found->bStrands && Found->Groom.Get() != Groom)
 	{
-		Show(*Found, false);  // a new style: the old strands go, the new ones come at the next sort
+		// A new style: the old strands go, the new ones come at the next sort. Only the strands: the apply calling this has
+		// just shown the new style's wig and hidden the rest, and hiding through Show(false) put the OLD style's wig back
+		// on the head under the new strands (its sections are still the wearer's until below).
+		if (UGroomComponent* Old = Found->Strands.Get())
+		{
+			Old->SetVisibility(false);
+		}
+		Found->bStrands = false;
 	}
 	if (!Groom)
 	{
@@ -954,6 +961,9 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 		else if (!Wearer.bStrands)
 		{
 			StrandHairSetColour(Strands, Wearer.Colour);  // on coming into view; Want sets a changed colour
+			// From the shape it was grown in: a groom shown again (or a new style on the same component) kept whatever its
+			// simulation last had, from another style or from before the body moved or turned while it was hidden.
+			Strands->ResetSimulation();
 		}
 	}
 	else if (UGroomComponent* Strands = Wearer.Strands.Get())

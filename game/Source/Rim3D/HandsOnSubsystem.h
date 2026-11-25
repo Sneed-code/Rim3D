@@ -31,6 +31,10 @@ struct FHandsOnStats
 	int32 PromptFrames = 0;
 	int32 ProgressFrames = 0;
 	int32 GhostPlans = 0;
+	/** Work started on the next target by itself while F stayed held (docs/design/handson.md "Holding on"). */
+	int32 ChainedJobs = 0;
+	/** Frames a pick-up label was drawn over an item in the world. */
+	int32 WorldLabelFrames = 0;
 };
 
 /**
@@ -40,13 +44,13 @@ struct FHandsOnStats
  * decides what the job is (JobSystem::planHandsOn, which this subsystem asks for the prompt) and
  * does the work at the colonist's own speed and skill.
  *
- * - F (hold): start the job on what the crosshair is on; let go: stop it. Picking up is instant.
+ * - F (hold): start the job on what the crosshair is on (two cells' reach); let go: stop it. Held on, when the job is
+ *   done the next target of the same kind in reach is started (JobSystem::nextHandsOn), the one the view points at first.
+ *   Picking up is instant; F on a weapon takes it into the hands.
  * - X: put down what the colonist carries, on the cell under the crosshair if it is near.
- * - B: the build ghost. The architect menu's Build tool in hand, aimed by the crosshair (snapped to the
- *   grid, green where it can stand, red where it can't): the wheel picks the building, Q the stuff,
- *   R turns it, the left button plans it, B or the right button puts it away. While it is in hand the gun is quiet.
+ * - B: the build screen (UProtagonistSubsystem::OpenBuildUi): the overseer's bar over this view, Build open.
  *
- * Draws the prompt under the crosshair, a progress bar for the job, what is carried and the keys.
+ * Draws the prompt and the job's progress bottom middle, a pick-up label over an item looked at, what is carried.
  */
 UCLASS()
 class RIM3D_API UHandsOnSubsystem : public UTickableWorldSubsystem
@@ -77,9 +81,9 @@ public:
 	void PutDown();
 	/** The wheel in direct mode: with a building in hand it picks the next one and returns true. */
 	bool HandleWheel(float Notches);
-	/** B: take the build ghost in hand, or put it away. */
+	/** B: the build screen up or down (UProtagonistSubsystem::ToggleBuildUi). */
 	void ToggleBuilding();
-	/** The left button with a building in hand. True if a plan was made. */
+	/** The left button with the old crosshair build ghost in hand (not reached from the keys any more). True if a plan was made. */
 	bool PlaceBuilding();
 
 	bool IsInteracting() const { return bInteracting; }
@@ -97,6 +101,10 @@ private:
 	void Interact(USimSubsystem& Bridge, bool bDown);
 	void UpdateBuilding(USimSubsystem& Bridge, class APlayerController* PC);
 	void DrawHud(USimSubsystem& Bridge);
+	/** The item looked at: its pick-up key and name drawn over it in the world (sneed 2026-11-25). */
+	void DrawWorldLabel(USimSubsystem& Bridge, float Scale);
+	/** F still held and the job over: the next target of the same kind, or let go. */
+	void ContinueWork(USimSubsystem& Bridge, colony::Entity Pawn);
 
 	FHandsOnTarget Target;
 	colony::HandsOnPlan Plan;
@@ -108,6 +116,13 @@ private:
 	bool bWasDown = false;
 	bool bInteracting = false;
 	uint64 LastCommand = 0;
+	/** The kind of work F started, for holding on to the next of its kind; whether the sim was seen doing it yet, and the
+	 *  sim step the command went in at. */
+	colony::HandsOnKind WorkKind = colony::HandsOnKind::None;
+	bool bWorkSeen = false;
+	int64 WorkSentStep = 0;
+	/** The top of the boxes bottom middle under the prompt (screen pixels, last frame), 0 for none. */
+	float CarryTop = 0.0f;
 
 	FString Message;
 	double MessageUntil = 0.0;

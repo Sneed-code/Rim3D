@@ -91,8 +91,8 @@
       "reinstall": "python tools/terrain_textures.py, then \"C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe\" C:\\Dev\\Rim3D\\game\\Rim3D.uproject -run=TerrainMaterials -unattended -nosplash -AllowCommandletRendering"
     },
     {
-      "name": "Stuff textures (ambientCG)",
-      "source": "https://ambientcg.com, surfaces listed in assets/stuff_textures.json (WoodSiding008, Bricks089, Bricks083, Bricks100, Bricks066, Marble012, MetalPlates013, MetalPlates004), 2k JPG colour, DirectX normal and roughness maps downloaded by tools/stuff_textures.py",
+      "name": "Stuff textures (ambientCG, Poly Haven)",
+      "source": "https://ambientcg.com and https://polyhaven.com, surfaces listed in assets/stuff_textures.json (wood: Poly Haven wood_planks; Bricks089, Bricks083, Bricks100, Bricks066, Marble012, MetalPlates013, MetalPlates004), 2k JPG colour, DirectX normal and roughness maps downloaded by tools/stuff_textures.py",
       "licence": "CC0 (public domain)",
       "version": "as downloaded 2026-10-29",
       "installedTo": "files in game/Content/ThirdParty/StuffTextures/ and the made textures and materials (M_Surface, MI_Surface_<surface>) in game/Content/Rim3D/Generated/Surfaces/ (neither in Git)",

@@ -15,7 +15,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | Left Shift | **sprint on / off**. It stays on until pressed again, also when you take over another colonist |
 | Space | jump |
 | T | **roll** (third person only since 2026-11-22, `docs/decisions/0012-third-person-only.md`). Left Alt does nothing now |
-| F (hold) | **interact**: pick up, mine, chop, harvest, build, sleep in a bed, and take a weapon lying in reach into your hands |
+| F (hold) | **interact**: pick up, mine, chop, harvest, build, sleep in a bed, and take a weapon lying in reach into your hands. Work reaches two cells; held on, it goes on to the next of the same kind in reach ([handson.md](handson.md)) |
 | X | put down what you hold |
 | E | take the nearest weapon (within 8 m) |
 | Q | switch weapon |
@@ -29,7 +29,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | Middle mouse | lock on / let go (lock-on focus; Tab shuffles targets). Unreal's F-key debug views are cleared in DefaultInput.ini |
 | N | sleep here at night |
 | I | inventory |
-| B | build mode |
+| B | the build screen: the overseer's bar over this view with Build open, the mouse places plans; B or Esc back ([handson.md](handson.md)) |
 | O | overseer view and back (in the overseer view it takes control of the selected colonist). Was Tab, which is now focus |
 | Y | take over the colonist you look at. Was T, which is now roll / dash |
 | H | patch a bleeding wound (body health) |

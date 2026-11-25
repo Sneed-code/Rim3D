@@ -55,6 +55,11 @@ namespace
 	constexpr float NgPreviewClearMetres = 5.5f;
 	// Plants within this many metres of a person on show are not drawn while the screen is open (a cosmetic clearing).
 	constexpr float NgPreviewClearingMetres = 3.5f;
+	// The character screen's camera tilt (degrees, down is negative), for the left-drag tilt and the right-button orbit,
+	// and how far over the feet the eye must stay (cm).
+	constexpr float NgPreviewPitchLow = -50.0f;
+	constexpr float NgPreviewPitchHigh = 15.0f;
+	constexpr double NgPreviewLowestEyeCm = 25.0;
 	// The engine warns on screen when its exposure passes 12 (cached lighting would clip): the screen's hour is the one
 	// nearest NgPreviewHour, earlier in the morning, whose exposure (ours, which reads a little above the engine's) stays
 	// under this. At 6:30, 12.1 of ours showed no warning; 10:30 did.
@@ -284,6 +289,44 @@ namespace
 	const float NgEyeSwatches[][3] = {{0.30f, 0.20f, 0.12f}, {0.45f, 0.32f, 0.18f}, {0.35f, 0.50f, 0.65f}, {0.40f, 0.55f, 0.35f},
 		{0.50f, 0.55f, 0.55f}, {0.15f, 0.12f, 0.10f}};
 
+	/**
+	 * Skin as one slider from fair (0) to dark (1) (sneed 2026-11-25: "have skin as a slider"): the colour at any point
+	 * between the swatches, blended. The skin material takes any colour (it shifts the skin texture's own average to it),
+	 * so a point between two swatches is as good as a swatch.
+	 */
+	void NgSkinAt(float Tone, float* Out)
+	{
+		constexpr int32 Last = static_cast<int32>(UE_ARRAY_COUNT(NgSkinSwatches)) - 1;
+		const float T = FMath::Clamp(Tone, 0.0f, 1.0f) * static_cast<float>(Last);
+		const int32 K = FMath::Clamp(FMath::FloorToInt32(T), 0, Last - 1);
+		const float F = T - static_cast<float>(K);
+		for (int32 c = 0; c < 3; ++c)
+		{
+			Out[c] = FMath::Lerp(NgSkinSwatches[K][c], NgSkinSwatches[K + 1][c], F);
+		}
+	}
+
+	/** Where a skin colour lies on the slider: the nearest point of the blend (a random person's skin has no tone yet). */
+	float NgSkinToneOf(float R, float G, float B)
+	{
+		float BestTone = 0.0f;
+		float BestDistance = TNumericLimits<float>::Max();
+		constexpr int32 Steps = 240;
+		for (int32 i = 0; i <= Steps; ++i)
+		{
+			const float Tone = static_cast<float>(i) / static_cast<float>(Steps);
+			float C[3];
+			NgSkinAt(Tone, C);
+			const float Distance = FMath::Square(C[0] - R) + FMath::Square(C[1] - G) + FMath::Square(C[2] - B);
+			if (Distance < BestDistance)
+			{
+				BestDistance = Distance;
+				BestTone = Tone;
+			}
+		}
+		return BestTone;
+	}
+
 	bool NgSwatch(const char* Id, const float* C, bool bPicked, float Size)
 	{
 		ImGui::PushStyleColor(ImGuiCol_Border, bPicked ? NgStyle::Jade : ImVec4(0, 0, 0, 0));
@@ -372,6 +415,7 @@ void UColonyHudSubsystem::EnterPeoplePage(USimSubsystem& Bridge)
 	PeopleDistance = 300.0f;
 	PeopleSpin = 0.0f;
 	PeopleSpinRate = 0.0f;
+	PeopleOrbit = 0.0f;
 	bPeopleClothes = false;
 	PeopleViewFor = colony::kNoEntity;
 	Bridge.SetSpeed(0);
@@ -443,6 +487,7 @@ void UColonyHudSubsystem::EndPeopleCamera()
 					{
 						Actor->SetPreviewSpin(0.0f);
 						Actor->SetPreviewLive(false);
+						Actor->SetBodyHidden(false);  // the screen showed only the one being shaped
 					}
 				}
 			}
@@ -468,7 +513,9 @@ float UColonyHudSubsystem::PickPeopleView(colony::Entity Pawn) const
 	TArray<FVector2D> Others;
 	for (const colony::Entity Other : Sim.startingColonistSlots())
 	{
-		if (const ASimPawnActor* OtherActor = Other != Pawn ? Pawns->FindPawn(Other) : nullptr)
+		// Only the one being shaped stands on show (the others are hidden): the hidden ones are not in the way.
+		const ASimPawnActor* OtherActor = Other != Pawn ? Pawns->FindPawn(Other) : nullptr;
+		if (OtherActor && !OtherActor->IsBodyHidden())
 		{
 			Others.Add(FVector2D((OtherActor->GetActorLocation().X - Origin.X) / 100.0, (OtherActor->GetActorLocation().Y - Origin.Y) / 100.0));
 		}
@@ -580,16 +627,25 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		PeopleViewYaw = PickPeopleView(Pawn);
 		PeopleSpin = PeopleViewYaw;
 		PeopleSpinRate = 0.0f;
+		PeopleOrbit = 0.0f;
 		Actor->SetPreviewSpin(PeopleSpin);
 	}
-	// The turntable: dragging over the open middle spins the body itself (so soft tissue and hair swing with it), and
-	// it keeps turning a little after the mouse lets go; up and down tilt the view, the wheel zooms.
+	// The turntable: dragging with the left button over the open middle spins the body itself (so soft tissue and hair
+	// swing with it), and it keeps turning a little after the mouse lets go; up and down tilt the view. Holding the right
+	// button carries the camera round the still body instead (sneed 2026-11-25: "holding right click should allow me to
+	// orbit the character"), side to side all the way round, up and down within the tilt's limits. The wheel zooms.
 	const ImGuiIO& IO = ImGui::GetIO();
 	const float Delta = FMath::Clamp(IO.DeltaTime, 0.0f, 0.1f);
-	if (!IO.WantCaptureMouse && (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Right, 1.0f)))
+	const bool bOrbiting = !IO.WantCaptureMouse && ImGui::IsMouseDown(ImGuiMouseButton_Right) && !ImGui::IsMouseDown(ImGuiMouseButton_Left);
+	if (bOrbiting)
+	{
+		PeopleOrbit = FRotator::NormalizeAxis(PeopleOrbit + IO.MouseDelta.x * 0.35f);
+		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.2f, NgPreviewPitchLow, NgPreviewPitchHigh);
+	}
+	if (!bOrbiting && !IO.WantCaptureMouse && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f))
 	{
 		PeopleSpinRate = Delta > 0.0f ? IO.MouseDelta.x * 0.45f / Delta : 0.0f;
-		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.15f, -30.0f, 15.0f);
+		PeoplePitch = FMath::Clamp(PeoplePitch - IO.MouseDelta.y * 0.15f, NgPreviewPitchLow, NgPreviewPitchHigh);
 	}
 	else
 	{
@@ -602,7 +658,8 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		PeopleDistance = FMath::Clamp(PeopleDistance * (IO.MouseWheel > 0.0f ? 0.88f : 1.0f / 0.88f), 70.0f, 520.0f);
 	}
 	Actor->SetPreviewSpin(PeopleSpin);
-	// The camera stays put in front of the body's own facing (not the spin), at the body's middle, the face when close.
+	// The camera stands in front of the body's own facing (not the spin), carried round by the orbit, at the body's middle,
+	// the face when close.
 	FVector Focus = Actor->GetActorLocation() + FVector(0.0, 0.0, 20.0);
 	if (const USkeletalMeshComponent* Mesh = Actor->GetMakeHumanMesh())
 	{
@@ -610,10 +667,18 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		const float Closeness = 1.0f - FMath::Clamp((PeopleDistance - 70.0f) / 300.0f, 0.0f, 1.0f);
 		Focus = FVector(Actor->GetActorLocation().X, Actor->GetActorLocation().Y, Bounds.Origin.Z + Bounds.BoxExtent.Z * (0.05f + 0.7f * Closeness));
 	}
-	const float Facing = Actor->GetDrawnYaw() + PeopleViewYaw;
+	const float Facing = Actor->GetDrawnYaw() + PeopleViewYaw + PeopleOrbit;
 	const FRotator Around(PeoplePitch, Facing + 180.0f, 0.0f);
-	const FVector Eye = Focus - Around.Vector() * PeopleDistance;
-	Camera->SetActorLocationAndRotation(Eye, Around);
+	FVector Eye = Focus - Around.Vector() * PeopleDistance;
+	// Never under the ground when looking up from far off: the eye stays a little over the feet (looking at the same spot).
+	const double LowestEye = Actor->GetActorLocation().Z + NgPreviewLowestEyeCm;
+	FRotator Looking = Around;
+	if (Eye.Z < LowestEye)
+	{
+		Eye.Z = LowestEye;
+		Looking = (Focus - Eye).Rotation();
+	}
+	Camera->SetActorLocationAndRotation(Eye, Looking);
 	// A soft key light up and to one side of the camera, so the face and body read even in the shade of the canopy.
 	if (!PeopleLamp.IsValid())
 	{
@@ -1454,7 +1519,57 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 			}
 		}
 	};
-	Swatches(TEXT("Skin"), TEXT("skin"), NgSkinSwatches, static_cast<int32>(UE_ARRAY_COUNT(NgSkinSwatches)), Full);
+	// Skin: a slider from fair to dark over the colours it blends (NgSkinAt), saved as the colour itself (skinR/G/B, what
+	// the body is drawn with) and the slider's place (skinTone). Beside it the clothes tick (sneed 2026-11-25: "put the
+	// clothes on box next to skin").
+	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
+	NgLabel(TEXT("Skin"));
+	{
+		float Tone = Look.Values.Contains(TEXT("skinTone")) ? FMath::Clamp(Look.Get(TEXT("skinTone"), 0.0f), 0.0f, 1.0f)
+			: NgSkinToneOf(Full.Get(TEXT("skinR"), NgSkinSwatches[1][0]), Full.Get(TEXT("skinG"), NgSkinSwatches[1][1]), Full.Get(TEXT("skinB"), NgSkinSwatches[1][2]));
+		const float ClothesW = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x + ImGui::CalcTextSize("CLOTHES ON").x;
+		const float SkinW = FMath::Max(ImGui::GetContentRegionAvail().x - ClothesW - 2.0f * Gap, 80.0f * Scale);
+		// The track shows the skin colours it runs through.
+		{
+			constexpr int32 Last = static_cast<int32>(UE_ARRAY_COUNT(NgSkinSwatches)) - 1;
+			const ImVec2 TrackAt = ImGui::GetCursorScreenPos();
+			const float TrackH = ImGui::GetFrameHeight();
+			ImDrawList* Draw = ImGui::GetWindowDrawList();
+			for (int32 i = 0; i < Last; ++i)
+			{
+				const float X0 = TrackAt.x + SkinW * static_cast<float>(i) / static_cast<float>(Last);
+				const float X1 = TrackAt.x + SkinW * static_cast<float>(i + 1) / static_cast<float>(Last);
+				const ImU32 From = ImGui::GetColorU32(ImVec4(NgSkinSwatches[i][0], NgSkinSwatches[i][1], NgSkinSwatches[i][2], 1.0f));
+				const ImU32 To = ImGui::GetColorU32(ImVec4(NgSkinSwatches[i + 1][0], NgSkinSwatches[i + 1][1], NgSkinSwatches[i + 1][2], 1.0f));
+				Draw->AddRectFilledMultiColor(ImVec2(X0, TrackAt.y), ImVec2(X1, TrackAt.y + TrackH), From, To, To, From);
+			}
+		}
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
+		ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(1.0f, 1.0f, 1.0f, 0.12f));
+		ImGui::PushStyleColor(ImGuiCol_SliderGrab, NgStyle::Field);
+		ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, NgStyle::Jade);
+		ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 8.0f * Scale);
+		ImGui::SetNextItemWidth(SkinW);
+		if (ImGui::SliderFloat("##skinTone", &Tone, 0.0f, 1.0f, ""))
+		{
+			float C[3];
+			NgSkinAt(Tone, C);
+			NgSetColour(Look, TEXT("skin"), C);
+			Look.Values.Add(TEXT("skinTone"), Tone);
+			bLive = true;
+		}
+		bSend |= ImGui::IsItemDeactivatedAfterEdit();
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor(5);
+		ColonyHud::Tip(TEXT("Fair to dark. Any point along it works, not only the marks."));
+		ImGui::SameLine(0.0f, 2.0f * Gap);
+		ImGui::Checkbox("##clothes", &bPeopleClothes);
+		ImGui::SameLine();
+		ImGui::AlignTextToFramePadding();
+		ColonyHud::TextColored(NgStyle::Text, TEXT("CLOTHES ON"));
+		ColonyHud::Tip(TEXT("Shows the cotton shirt and trousers from the cargo pack. Everyone lands naked."));
+	}
 	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
 	NgLabel(TEXT("Hair style"));
 	{
@@ -1848,8 +1963,11 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 	}
 	Bridge.ApplyPregameCommands();  // the first looks and your name show this frame
 	// Naked by default (they land so); "clothes on" shows the cargo pack's cotton shirt and trousers on everyone.
+	// Only the one being shaped stands on the spot (sneed 2026-11-25: "it only shows selected on the spot, not both"):
+	// the others are hidden while the screen is open (cosmetic; EndPeopleCamera shows them again).
 	if (USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>())
 	{
+		const bool bPickedDrawn = Pawns->FindPawn(Picked) != nullptr;
 		TArray<FString> Cotton;
 		for (const TCHAR* Piece : NgCottonClothes)
 		{
@@ -1860,6 +1978,12 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 			if (ASimPawnActor* Shown = Pawns->FindPawn(Pawn))
 			{
 				Shown->SetPreviewLive(true);  // a calm standing idle, breathing, while the game is held
+				// Only once the picked one is drawn (then the camera stands too, and EndPeopleCamera shows them again).
+				const bool bHide = Pawn != Picked && bPickedDrawn;
+				if (Shown->IsBodyHidden() != bHide)
+				{
+					Shown->SetBodyHidden(bHide);
+				}
 			}
 			if (bPeopleClothes)
 			{
@@ -1958,6 +2082,9 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		if (NgBeginPanel("##NgCompanionsCards", ImVec2(Left, BodyTop), ImVec2(SideW, Bottom - BodyTop - Gap)))
 		{
 			NgHeading(TEXT("The strangers"));
+			ImGui::PushTextWrapPos(0.0f);
+			ColonyHud::TextColored(NgStyle::Faint, TEXT("Click one to shape them. Only that one stands on the spot."));
+			ImGui::PopTextWrapPos();
 			const float Face = 84.0f * Scale;
 			for (int32 Slot = 1; Slot < static_cast<int32>(People.size()); ++Slot)
 			{
@@ -1975,6 +2102,18 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 				const float CardH = FMath::Max(Face, ImGui::GetFontSize() * NgStyle::kHeading + ImGui::GetTextLineHeightWithSpacing() +
 					ImGui::GetFrameHeightWithSpacing() + 2.0f * ImGui::GetStyle().ItemSpacing.y) + 2.0f * ImGui::GetStyle().WindowPadding.y;
 				ImGui::BeginChild("##card", ImVec2(0.0f, CardH), ImGuiChildFlags_Borders);
+				// The whole card picks the stranger (sneed 2026-11-25: "make the names clickable"), but for its buttons.
+				if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+				{
+					if (!bPicked)
+					{
+						ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+					}
+					if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered())
+					{
+						PeopleSelected = Slot;
+					}
+				}
 				if (UTexture* Mugshot = GetMugshot(Pawn))
 				{
 					ImGui::Image(ImTextureRef(Mugshot), ImVec2(Face, Face));
@@ -2058,17 +2197,13 @@ void UColonyHudSubsystem::DrawPeoplePage(USimSubsystem& Bridge, float Scale)
 		}
 	}
 
-	// Under the body: how to look at it, and the clothes.
-	const float StripW = 680.0f * Scale;
+	// Under the body: how to look at it (the clothes tick is in the looks, next to the skin).
+	const float StripW = 760.0f * Scale;
 	const float StripH = ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().WindowPadding.y + 4.0f * Scale;
 	if (NgBeginPanel("##NgPeopleStrip", ImVec2(Viewport->Pos.x + (Viewport->Size.x - StripW) * 0.5f, Bottom - StripH - Gap), ImVec2(StripW, StripH)))
 	{
-		ImGui::Checkbox("##clothes", &bPeopleClothes);
-		ImGui::SameLine();
-		ColonyHud::TextColored(NgStyle::Text, TEXT("CLOTHES ON"));
-		ColonyHud::Tip(TEXT("Shows the cotton shirt and trousers from the cargo pack. Everyone lands naked."));
-		ImGui::SameLine(0.0f, 2.0f * Gap);
-		ImGui::TextColored(NgStyle::Faint, "%s", "Drag to spin");
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextColored(NgStyle::Faint, "%s", "Drag: spin    Hold right click: orbit    Wheel: zoom");
 		// Zoom buttons as well as the wheel (sneed 2026-11-24: "i need to be able to zoom them"): in to the face, out to the feet.
 		const float ZoomW = 2.2f * ImGui::GetFontSize();
 		const float StripRight = ImGui::GetCursorStartPos().x + ImGui::GetWindowWidth() - 2.0f * ImGui::GetStyle().WindowPadding.x;

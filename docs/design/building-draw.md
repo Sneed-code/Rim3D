@@ -179,13 +179,13 @@ footprint's middle.
 Task L4 of the look pass ([art-stage.md](../plans/art-stage.md)). A building made of stuff now shows the stuff's own
 material, not just its colour, and walls join their neighbours.
 
-**Surfaces.** A stuff def names its surface in `visual.surface`; the nine surfaces are free CC0 ambientCG textures (2k
+**Surfaces.** A stuff def names its surface in `visual.surface`; the nine surfaces are free CC0 ambientCG and Poly Haven textures (2k
 colour, DirectX normal and roughness maps), listed in `assets/stuff_textures.json` with their tile size, tint, saturation,
 roughness and metalness:
 
 | Stuff | Surface | Texture |
 | --- | --- | --- |
-| Wood | wood | WoodSiding008 (weathered boards) |
+| Wood | wood | Poly Haven wood_planks (brown planks; sneed 2026-11-25: ambientCG's WoodSiding008, grey weathered boards, read as sandstone) |
 | Granite, limestone, sandstone, slate, marble blocks | granite, limestone, sandstone, slate, marble | Bricks089, Bricks083, Bricks100, Bricks066, Marble012 |
 | Steel | steel | MetalPlates013 (rusty plates) |
 | Plasteel, uranium | plasteel, uranium | MetalPlates004 (clean panels; uranium tinted green-grey) |

@@ -181,6 +181,13 @@ struct HandsOnPlan {
     bool ok() const { return kind != HandsOnKind::None && inReach && error.empty(); }
 };
 
+// A target for hands-on work (JobSystem::nextHandsOn): a blueprint or frame (`thing`), else the rock or plant in `cell`.
+struct HandsOnTarget {
+    bool found = false;
+    Entity thing = kNoEntity;
+    CellPos cell;
+};
+
 class ApparelSystem;
 class BillSystem;
 class Breeding;
@@ -310,6 +317,11 @@ public:
     bool sleepingByHand(Entity pawn) const;
     // How far along the pawn's job is, 0 to 1 (a swing of the pick, a plant, a frame); 0 with no job.
     float jobProgress(Entity pawn) const;
+    // Holding the interact key on (sneed 2026-11-25, docs/design/handson.md "Holding on"): when a hands-on job is done,
+    // the next target of the same kind (Mine, Chop, Cut, Harvest or Build) the controlled pawn can work on from where it
+    // stands, within kHandsOnReachCells, the one nearest the way the player looks (viewX, viewY: any length, zero for
+    // none) first, then the nearest. Unreal sends it back as the next HandsOnCommand, so it replays like any command.
+    HandsOnTarget nextHandsOn(Entity pawn, HandsOnKind kind, float viewX, float viewY) const;
     // The downed pawn or corpse this pawn is carrying on a job now (rescue, capture, a corpse to haul or butcher: after it
     // was lifted and until it is put down); kNoEntity otherwise (docs/design/weapon-hold.md, "Carrying a body").
     Entity carryingPawn(Entity pawn) const;
@@ -835,7 +847,7 @@ private:
     void dropCarried(Entity pawn);
     // Puts what the pawn carries on `cell` if all of it fits there and no other pawn holds the cell.
     bool placeCarriedAt(Entity pawn, CellPos cell);
-    // Whether a standing point is within kHandsOnReach of the rect; for a job, of what it works on.
+    // Whether a standing point is within kHandsOnReachCells of the rect; for a job, of what it works on.
     static bool handsReach(float x, float y, int level, const CellRect& rect);
     bool handsOnInReach(Entity pawn, const Job& job) const;
     bool handsOnPickUp(Entity pawn, Entity item, std::string& error);

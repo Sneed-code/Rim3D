@@ -276,7 +276,8 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		float MouseX = 0.0f;
 		float MouseY = 0.0f;
 		PC->GetInputMouseDelta(MouseX, MouseY);
-		if (MouseX != 0.0f || MouseY != 0.0f)
+		// The build screen (B) has the mouse for its cursor: the view holds still under it.
+		if ((MouseX != 0.0f || MouseY != 0.0f) && !Rim3DKeys::AreGameKeysBlocked())
 		{
 			const float Turn = FMath::Max(0.01f, GetMouseTurn());
 			// Locked on in third person the camera keeps the enemy ahead: the mouse only tilts it (Dark Souls).
