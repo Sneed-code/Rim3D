@@ -69,8 +69,9 @@ always; kept under 0.35 m so the geothermal generator sits over it), `ShipStruct
 `SculptureSmall`, `MedicineLumen`; medium: `Grenade_Frag`, `MealSurvivalPack`, `Pemmican`, `Beer`, `MealNutrientPaste`,
 `Chemfuel`, `Kibble`, `FenceGate`, `Column`, `MeditationSpot`, `AnimalSleepingSpot` (all `visual.mesh`). The whole batch
 took about 70 minutes on the PC (3 Neon and 3 Codex jobs at a time). Also wired: `Gun_RecurveBow` (batch 4) and
-`Gun_IncendiaryLauncher` / `Gun_SmokeLauncher` on the GrenadeLauncher model. Bows and the pila use grip (0,0,0) and the
-Bow/blade hand frame; their in-hand turn is unverified. Sculptures and the column ignore the stuff tint (one stone look).
+`Gun_IncendiaryLauncher` / `Gun_SmokeLauncher` on the GrenadeLauncher model. Bows are made upright but the bow hand frame wants
+the limbs along X, so their prep entries carry `"turn": "xz-swap"` (codex_prep swaps X and Z about the grip). The pila is
+held in one hand tilted up like a sword (no javelin pose yet). Sculptures and the column ignore the stuff tint (one stone look).
 
 ## How a model is made
 

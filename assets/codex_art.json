@@ -569,7 +569,8 @@
    "kind": "gun"
   },
   "Gun_RecurveBow": {
-   "kind": "gun"
+   "kind": "gun",
+   "turn": "xz-swap"
   },
   "Gun_Revolver": {
    "kind": "gun"
@@ -1097,13 +1098,15 @@
    "kind": "gun"
   },
   "Gun_Greatbow": {
-   "kind": "gun"
+   "kind": "gun",
+   "turn": "xz-swap"
   },
   "Gun_EMPLauncher": {
    "kind": "gun"
   },
   "Gun_ShortBow": {
-   "kind": "gun"
+   "kind": "gun",
+   "turn": "xz-swap"
   },
   "Gun_Pila": {
    "kind": "gun"

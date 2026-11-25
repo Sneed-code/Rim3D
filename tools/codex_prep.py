@@ -15,7 +15,7 @@ Kinds ("kind" in the prep entry):
                    in z (a model saved lying on its side is stood up), its footprint middle at x = y = 0 and its bottom
                    at z = 0. The front faces Blender -Y, which the import makes Unreal +Y: the sim's north, the way
                    building meshes face (docs/design/building-draw.md).
-  gun              the origin is kept (the firing hand's palm on the grip), +X out of the muzzle; the named "parts" are
+  gun              ("turn": "xz-swap" swaps X and Z about the grip, for bows) the origin is kept (the firing hand's palm on the grip), +X out of the muzzle; the named "parts" are
                    kept as their own objects and everything else is joined into "Body".
   creature         a rigged, animated creature (the Neon remnants and chitinids): the GLB is copied as it is to
                    assets/raw/codex/<Name>/<Name>.glb for the AnimalArt commandlet (assets/animal_art.json "imports").
@@ -444,6 +444,11 @@ def prep(src_root, name, entry):
         o.data.transform(mathutils.Matrix.Translation(piv) @ mathutils.Matrix.Rotation(angle, 4, "Y") @ mathutils.Matrix.Translation(-piv))
         print(f"CODEXPREP {name}: {o.name} turned {math.degrees(angle):.1f} degrees about its pivot {tuple(round(v, 3) for v in piv)}")
     turn = "none"
+    if kind == "gun" and entry.get("turn") == "xz-swap":
+        # Bows are made upright (limbs along Z, arrow along +X) but the bow hand frame wants the limbs along X and the
+        # arrow along Z: half a turn about the X/Z diagonal swaps the two, top limb staying at +X, about the grip.
+        transform_all(meshes, empties, mathutils.Matrix.Rotation(math.pi, 4, mathutils.Vector((1, 0, 1)).normalized()))
+        turn = "xz-swap"
     if kind in ("building", "item"):
         turn = stand_up(meshes, empties, entry.get("size"), entry.get("turn"))
         # "centerOn": the footprint is the bounds of the objects whose name starts with it (a turret's base), so an
