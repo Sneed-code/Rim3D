@@ -46,7 +46,7 @@ public:
 	 * The camera pawn is made if there is none but not given the player controller. False if it could not be made.
 	 */
 	bool SetUiOverDirectView(bool bOn);
-	bool IsUiOverDirectView() const { return bUiOverDirect && IsValid(Pawn.Get()); }
+	bool IsUiOverDirectView() const;
 
 	/** The first (main) thing or cell selected; the inspect panel shows it. More things may be selected with it. */
 	const FSimPick& GetSelection() const { return Selection; }

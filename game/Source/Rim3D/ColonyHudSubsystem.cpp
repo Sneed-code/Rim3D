@@ -1,5 +1,5 @@
 #include "ColonyHudSubsystem.h"
-#include "Animation/AnimationRuntime.h"
+#include "AnimationRuntime.h"
 #include "Engine/SkeletalMesh.h"
 
 #include "GameFramework/PlayerInput.h"

@@ -202,6 +202,11 @@ bool UOverseerSubsystem::IsOverseerActive() const
 	return (bActive || bUiOverDirect) && IsValid(Pawn.Get());
 }
 
+bool UOverseerSubsystem::IsUiOverDirectView() const
+{
+	return bUiOverDirect && IsValid(Pawn);
+}
+
 bool UOverseerSubsystem::IsOverseerCamera() const
 {
 	return bActive && IsValid(Pawn.Get());

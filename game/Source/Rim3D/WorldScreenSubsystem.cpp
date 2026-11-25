@@ -1175,7 +1175,7 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 				{
 					// Zoomed in past the picture's own detail: draw the grid sharp over it.
 					WmCorners(C, TileSize, Corners);
-					Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 46), ImDrawFlags_Closed, 1.0f);
+					Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 46), 1.0f, ImDrawFlags_Closed);
 				}
 			}
 
@@ -1274,14 +1274,14 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 			if (World->startTile() >= 0 && !bPreview)
 			{
 				WmCorners(Center(World->startTile()), TileSize, Corners);
-				Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 160), ImDrawFlags_Closed, 4.0f * Stroke);
-				Draw->AddPolyline(Corners, 6, IM_COL32(255, 222, 40, 255), ImDrawFlags_Closed, 2.5f * Stroke);
+				Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 160), 4.0f * Stroke, ImDrawFlags_Closed);
+				Draw->AddPolyline(Corners, 6, IM_COL32(255, 222, 40, 255), 2.5f * Stroke, ImDrawFlags_Closed);
 			}
 			if (Hover >= 0 && Hover != Selected)
 			{
 				WmCorners(Center(Hover), TileSize, Corners);
 				Draw->AddConvexPolyFilled(Corners, 6, IM_COL32(255, 255, 255, 38));
-				Draw->AddPolyline(Corners, 6, IM_COL32(255, 255, 255, 170), ImDrawFlags_Closed, 1.5f * Stroke);
+				Draw->AddPolyline(Corners, 6, IM_COL32(255, 255, 255, 170), 1.5f * Stroke, ImDrawFlags_Closed);
 			}
 			if (Selected >= 0)
 			{
@@ -1289,11 +1289,11 @@ void UWorldScreenSubsystem::DrawScreen(USimSubsystem& Bridge)
 				const ImVec2 C = Center(Selected);
 				const float Pulse = 0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 3.0f);
 				WmCorners(C, TileSize * 1.18f, Corners);
-				Draw->AddPolyline(Corners, 6, IM_COL32(94, 212, 168, static_cast<int32>(40.0f + 50.0f * Pulse)), ImDrawFlags_Closed, 3.0f * Stroke);
+				Draw->AddPolyline(Corners, 6, IM_COL32(94, 212, 168, static_cast<int32>(40.0f + 50.0f * Pulse)), 3.0f * Stroke, ImDrawFlags_Closed);
 				WmCorners(C, TileSize, Corners);
 				Draw->AddConvexPolyFilled(Corners, 6, IM_COL32(94, 212, 168, 40));
-				Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 170), ImDrawFlags_Closed, 4.5f * Stroke);
-				Draw->AddPolyline(Corners, 6, IM_COL32(150, 255, 214, 255), ImDrawFlags_Closed, 2.5f * Stroke);
+				Draw->AddPolyline(Corners, 6, IM_COL32(0, 0, 0, 170), 4.5f * Stroke, ImDrawFlags_Closed);
+				Draw->AddPolyline(Corners, 6, IM_COL32(150, 255, 214, 255), 2.5f * Stroke, ImDrawFlags_Closed);
 			}
 			Draw->PopClipRect();
 
