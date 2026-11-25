@@ -283,7 +283,8 @@ struct Event {
     // "felled" (a tree) or "cut" for removed, "picked" for harvested; "broken" for a plant killed by blows, shots or a blast.
     // A tree that falls ("felled", "broken") also has (x, y) the unit vector it falls along (away from the one who cut it,
     // the blow, the shot or the blast), `count` its growth in millionths and, felled, `thing` the pawn: Unreal topples it
-    // (docs/design/structure-damage.md "Falling trees"); (0, 0) for anything that doesn't fall. PawnAction Mine, Cut, Harvest:
+    // (docs/design/structure-damage.md "Falling trees"); (0, 0) for anything that doesn't fall. A plant "cut" (or "harvested"
+    // away) also has `count` its growth in millionths: Unreal breaks a cut grass or bush up into clippings that fade. PawnAction Mine, Cut, Harvest:
     // `thing` the pawn, `cell` the cell worked on, `def` the pawn's def.
     // RecipeDone: `thing` the pawn, `def` the Recipes def, `target` the work building, `cell` where the
     // pawn stood, `amount` how many products were made, `message` "bill finished" if that was the

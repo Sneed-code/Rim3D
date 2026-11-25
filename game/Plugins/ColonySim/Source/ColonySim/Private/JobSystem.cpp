@@ -1492,7 +1492,9 @@ bool JobSystem::failCheck(Entity pawn, Job& job, std::string& why) {
         return true;
     }
     if (job.type == JobType::Deconstruct) {
-        if (!things_.spawned(job.thing) || !reg.all_of<MarkedForDeconstruct>(job.thing)) {
+        // Marked, or a wall under a door's plan that replaces it (docs/design/construction.md "Doors over walls").
+        if (!things_.spawned(job.thing) ||
+            (!reg.all_of<MarkedForDeconstruct>(job.thing) && construction_.replacedBy(job.thing) == kNoEntity)) {
             why = "the building is gone or no longer marked";
             return false;
         }

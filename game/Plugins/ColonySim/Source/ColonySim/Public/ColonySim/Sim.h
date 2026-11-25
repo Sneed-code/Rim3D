@@ -601,6 +601,9 @@ private:
     std::string placeName(int tile) const;
     void pruneDesignations();
     void startScenario();
+    // A scenario's `landingClearRadiusM` (docs/design/new-game.md): moves the landing to the spot with the fewest trees
+    // and tall plants near the map's middle, then clears them round it, so the people and the cargo land in the open.
+    void clearLandingSite(const Def& scenario);
     // A newcomer made like the scenario's colonists (Scenario.cpp); kNoEntity if it can't be placed.
     Entity joinColonist(CellPos cell, uint64_t seed);
     // One colonist of the scenario at a cell (Scenario.cpp); kNoEntity and a setup error if it fails.

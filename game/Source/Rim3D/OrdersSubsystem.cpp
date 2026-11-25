@@ -1770,8 +1770,28 @@ void UOrdersSubsystem::UpdatePreview(USimSubsystem& Bridge)
 				continue;
 			}
 			const bool bValid = CanPlace(BuildDef, Origin, BuildRot);
+			const colony::Sim* PreviewSim = Bridge.GetSim();
+			const bool bOverWall = bValid && PreviewSim && PreviewSim->map().inBounds(Origin) && PreviewSim->map().buildingAt(Origin) != colony::kNoEntity;
+			if (bOverWall)
+			{
+				const colony::Map& PreviewMap = PreviewSim->map();
+				// A door planned over a wall (docs/design/construction.md "Doors over walls"): the ghost is drawn a little
+				// larger than the wall, so it shows over it, and along the wall as the finished door will stand.
+				const auto WallAt = [&PreviewMap, &Origin](int32 DX, int32 DY)
+				{
+					const colony::CellPos Near{Origin.x + DX, Origin.y + DY, Origin.level};
+					return PreviewMap.inBounds(Near) && PreviewMap.passage(Near) == colony::Passage::Blocked;
+				};
+				const bool bWallsEastWest = WallAt(-1, 0) || WallAt(1, 0);
+				const bool bWallsNorthSouth = WallAt(0, -1) || WallAt(0, 1);
+				if (bWallsEastWest != bWallsNorthSouth)
+				{
+					Placed.SetRotation(FRotator(0.0, bWallsNorthSouth ? 90.0 : 0.0, 0.0).Quaternion());
+				}
+				Placed.SetScale3D(FVector(1.14, 1.14, 1.03));
+			}
 			(bValid ? Good : Bad).Add(Placed);
-			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0) + (static_cast<uint64>(Origin.level) << 8));
+			Signature = OrdMix(Signature, OrdCellKey(Origin.x, Origin.y) + (bValid ? 1 : 0) + (bOverWall ? 2 : 0) + (static_cast<uint64>(Origin.level) << 8));
 		}
 	}
 	if (Signature == PreviewSignature)

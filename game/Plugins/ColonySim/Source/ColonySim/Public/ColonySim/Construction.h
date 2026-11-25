@@ -172,6 +172,16 @@ public:
     // ---- Looking up -------------------------------------------------------------------------
     // The blueprint or frame covering a cell, or kNoEntity.
     Entity siteAt(CellPos cell) const;
+    // Replacing a wall (RimWorld's canPlaceOverWall, docs/design/construction.md "Doors over walls"): true if a plan
+    // of `def` may go over a wall def (`building.isPlaceOverableWall`) because it has `building.canPlaceOverWall` (a
+    // door). A wall's blueprint or frame there is cancelled when the plan is placed; a finished wall stays standing
+    // under the plan until a builder takes it down (the Deconstruct work, with the usual refund), and only then are
+    // materials brought and the door built.
+    bool canReplace(DefId def, DefId old) const;
+    // The finished building a site stands over and will replace (a wall under a door's plan), or kNoEntity.
+    Entity replacing(Entity site) const;
+    // The site planned over a finished building to replace it, or kNoEntity.
+    Entity replacedBy(Entity building) const;
     // Work the job at a site or building needs: total game seconds at speed 1.
     float deconstructWork(Entity building) const;
     // A walkable cell beside the rect (sharing a side, never a corner) that `from` can reach (for a

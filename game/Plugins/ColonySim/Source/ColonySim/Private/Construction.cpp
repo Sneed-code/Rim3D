@@ -322,11 +322,22 @@ std::string Construction::whyNotBlueprint(DefId def, DefId stuff, CellPos cell, 
                        : bridgeKindOf(d) != BridgeKind::None ? "a heavy bridge goes on shallow water, marsh, mud or a river, not " + constructionCellText(c)
                                                              : "can't build on " + constructionCellText(c);
             }
-            if (map_.buildingAt(c) != kNoEntity) {
-                return "there is a building at " + constructionCellText(c);
+            if (const Entity there = map_.buildingAt(c); there != kNoEntity) {
+                // A door goes over a finished wall that lies wholly inside its footprint, and replaces it.
+                const Footprint* fp = things_.registry().try_get<Footprint>(there);
+                const CellRect old = fp != nullptr ? fp->rect() : CellRect{};
+                const bool inside = fp != nullptr && old.minX >= rect.minX && old.minY >= rect.minY &&
+                                    old.minX + old.sizeX <= rect.minX + rect.sizeX && old.minY + old.sizeY <= rect.minY + rect.sizeY;
+                if (!inside || !canReplace(def, things_.registry().get<Thing>(there).def)) {
+                    return "there is a building at " + constructionCellText(c);
+                }
             }
-            if (siteAt(c) != kNoEntity) {
-                return "something is already planned at " + constructionCellText(c);
+            if (const Entity planned = siteAt(c); planned != kNoEntity) {
+                // A wall's blueprint or frame gives way to a door's plan.
+                const entt::registry& reg = things_.registry();
+                if (reg.get<ConstructionSite>(planned).floor.valid() || !canReplace(def, reg.get<Thing>(planned).def)) {
+                    return "something is already planned at " + constructionCellText(c);
+                }
             }
         }
     }
@@ -373,10 +384,29 @@ Entity Construction::placeBlueprint(DefId def, DefId stuff, CellPos cell, Rot4 r
     const CellRect rect = footprintRect(cell, sizeX, sizeY, rot);
     const bool onWater = standsOnWater(d);  // a watermill or a bridge: no levelling
 
+    // A door planned over walls (docs/design/construction.md "Doors over walls"): the walls' own plans are cancelled
+    // (what was delivered to them is put back on the ground); finished walls stay until a builder takes them down.
+    bool overBuilt = false;
+    std::vector<Entity> replacedPlans;
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            const CellPos c{x, y, rect.level};
+            overBuilt = overBuilt || map_.buildingAt(c) != kNoEntity;
+            const Entity planned = siteAt(c);
+            if (planned != kNoEntity && std::find(replacedPlans.begin(), replacedPlans.end(), planned) == replacedPlans.end()) {
+                replacedPlans.push_back(planned);
+            }
+        }
+    }
+    for (const Entity planned : replacedPlans) {
+        std::string ignored;
+        cancel(planned, ignored);
+    }
+
     // The plan marks its ground to be dug or filled flat; a builder does that earthwork first, when it starts on
     // the frame (docs/design/earthworks.md). Sandbags and the like lean with the slope instead.
     const GroundFit fit = groundFitOf(d);
-    if (!onWater && !upperFloor && fit != GroundFit::Conform) {
+    if (!onWater && !upperFloor && fit != GroundFit::Conform && !overBuilt) {  // a wall's ground is level already
         map_.planGround(rect);
         if (fit == GroundFit::Level && rect.level == 0) {
             planBetweenWalls(rect);
@@ -951,6 +981,47 @@ int Construction::cancelEarthworks(const CellRect& area) {
     }
     map_.cancelEarth(cells);
     return static_cast<int>(cells.size());
+}
+
+bool Construction::canReplace(DefId def, DefId old) const {
+    return def.valid() && old.valid() && defs_.get(def).flag("building.canPlaceOverWall") &&
+           defs_.get(old).flag("building.isPlaceOverableWall");
+}
+
+Entity Construction::replacing(Entity site) const {
+    const entt::registry& reg = things_.registry();
+    const ConstructionSite* s = reg.valid(site) ? reg.try_get<ConstructionSite>(site) : nullptr;
+    if (s == nullptr || s->floor.valid() || isUpperFloor(reg.get<Thing>(site).def)) {
+        return kNoEntity;
+    }
+    const CellRect rect = s->rect();
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            const CellPos c{x, y, rect.level};
+            if (map_.inBounds(c) && map_.buildingAt(c) != kNoEntity) {
+                return map_.buildingAt(c);
+            }
+        }
+    }
+    return kNoEntity;
+}
+
+Entity Construction::replacedBy(Entity building) const {
+    const entt::registry& reg = things_.registry();
+    const Footprint* fp = reg.valid(building) ? reg.try_get<Footprint>(building) : nullptr;
+    if (fp == nullptr || reg.all_of<ConstructionSite>(building)) {
+        return kNoEntity;
+    }
+    const CellRect rect = fp->rect();
+    for (int y = rect.minY; y < rect.minY + rect.sizeY; ++y) {
+        for (int x = rect.minX; x < rect.minX + rect.sizeX; ++x) {
+            const Entity site = siteAt(CellPos{x, y, rect.level});
+            if (site != kNoEntity && !reg.get<ConstructionSite>(site).floor.valid()) {
+                return site;
+            }
+        }
+    }
+    return kNoEntity;
 }
 
 bool Construction::afterLoad(std::string& error) {
