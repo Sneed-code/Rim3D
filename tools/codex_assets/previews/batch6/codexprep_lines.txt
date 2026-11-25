@@ -1,0 +1,28 @@
+CODEXPREP Gun_DoomsdayLauncher: gun, turned none, [1.295, 0.321, 0.375] m, parts ['Body'], slots ['Gun_DoomsdayLauncher'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_DoomsdayLauncher\Gun_DoomsdayLauncher_Game.fbx
+CODEXPREP Gun_Greatbow: gun, turned none, [0.861, 0.048, 1.85] m, parts ['Body'], slots ['Gun_Greatbow'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_Greatbow\Gun_Greatbow_Game.fbx
+CODEXPREP Gun_EMPLauncher: gun, turned none, [0.852, 0.128, 0.341] m, parts ['Body'], slots ['Gun_EMPLauncher_0', 'Gun_EMPLauncher_1'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_EMPLauncher\Gun_EMPLauncher_Game.fbx
+CODEXPREP SculptureGrand: building, turned none, [1.875, 1.82, 2.644] m, parts ['SculptureGrand'], slots ['SculptureGrand'] -> C:\Dev\Rim3D-climb\assets\raw\codex\SculptureGrand\SculptureGrand_Game.fbx
+CODEXPREP SculptureLarge: building, turned none, [0.878, 1.853, 1.697] m, parts ['SculptureLarge'], slots ['SculptureLarge'] -> C:\Dev\Rim3D-climb\assets\raw\codex\SculptureLarge\SculptureLarge_Game.fbx
+CODEXPREP SteamGeyser: action Bubbling (3.0 s) Bubbles: turn 0 deg about (0, 0, 0), shift 20.3 cm, scale +0.42, 18 keys
+CODEXPREP SteamGeyser: action Bubbling (3.0 s) Throat: turn 0 deg about (0, 0, 0), shift 0.7 cm, scale +0.05, 17 keys
+CODEXPREP SteamGeyser: action Bubbling (3.0 s) Water: turn 0 deg about (0, 0, 0), shift 1.0 cm, scale +0.00, 11 keys
+CODEXPREP SteamGeyser: building, turned none, [1.818, 1.706, 0.332] m, parts ['SteamGeyser', 'SteamGeyser_Water', 'SteamGeyser_Bubbles', 'SteamGeyser_Throat'], slots ['SteamGeyser_0', 'SteamGeyser_1', 'SteamGeyser_2'] -> C:\Dev\Rim3D-climb\assets\raw\codex\SteamGeyser\SteamGeyser_Game.fbx
+CODEXPREP ShipStructuralBeam: action Idle (4.0 s) StatusLights: turn 0 deg about (0, 0, 0), shift 19.6 cm, scale +0.15, 7 keys
+CODEXPREP ShipStructuralBeam: action Settle (2.0 s) JackFeet: turn 0 deg about (0, 0, 0), shift 5.9 cm, scale +0.00, 5 keys
+CODEXPREP ShipStructuralBeam: building, turned none, [1.873, 5.808, 1.33] m, parts ['ShipStructuralBeam', 'ShipStructuralBeam_StatusLights', 'ShipStructuralBeam_JackFeet'], slots ['ShipStructuralBeam_0', 'ShipStructuralBeam_1'] -> C:\Dev\Rim3D-climb\assets\raw\codex\ShipStructuralBeam\ShipStructuralBeam_Game.fbx
+CODEXPREP Gun_ShortBow: gun, turned none, [0.712, 0.058, 1.15] m, parts ['Body'], slots ['Gun_ShortBow'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_ShortBow\Gun_ShortBow_Game.fbx
+CODEXPREP Gun_Pila: gun, turned none, [1.9, 0.057, 0.056] m, parts ['Body'], slots ['Gun_Pila'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_Pila\Gun_Pila_Game.fbx
+CODEXPREP SculptureSmall: building, turned none, [0.486, 0.541, 0.871] m, parts ['SculptureSmall'], slots ['SculptureSmall'] -> C:\Dev\Rim3D-climb\assets\raw\codex\SculptureSmall\SculptureSmall_Game.fbx
+CODEXPREP MedicineLumen: item, turned none, [0.26, 0.163, 0.1] m, parts ['MedicineLumen'], slots ['MedicineLumen_0', 'MedicineLumen_1'] -> C:\Dev\Rim3D-climb\assets\raw\codex\MedicineLumen\MedicineLumen_Game.fbx
+CODEXPREP Grenade_Frag: item, turned none, [0.065, 0.061, 0.109] m, parts ['Grenade_Frag'], slots ['Grenade_Frag'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Grenade_Frag\Grenade_Frag_Game.fbx
+CODEXPREP Pemmican: item, turned none, [0.22, 0.177, 0.072] m, parts ['Pemmican'], slots ['Pemmican'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Pemmican\Pemmican_Game.fbx
+CODEXPREP Beer: item, turned none, [0.23, 0.158, 0.25] m, parts ['Beer'], slots ['Beer'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Beer\Beer_Game.fbx
+CODEXPREP MealNutrientPaste: item, turned none, [0.24, 0.18, 0.06] m, parts ['MealNutrientPaste'], slots ['MealNutrientPaste'] -> C:\Dev\Rim3D-climb\assets\raw\codex\MealNutrientPaste\MealNutrientPaste_Game.fbx
+CODEXPREP Chemfuel: item, turned none, [0.362, 0.191, 0.354] m, parts ['Chemfuel'], slots ['Chemfuel'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Chemfuel\Chemfuel_Game.fbx
+CODEXPREP Kibble: item, turned none, [0.293, 0.208, 0.136] m, parts ['Kibble'], slots ['Kibble'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Kibble\Kibble_Game.fbx
+CODEXPREP FenceGate: building, turned none, [1.0, 0.157, 1.2] m, parts ['FenceGate'], slots ['FenceGate'] -> C:\Dev\Rim3D-climb\assets\raw\codex\FenceGate\FenceGate_Game.fbx
+CODEXPREP Column: building, turned none, [0.6, 0.6, 3.0] m, parts ['Column'], slots ['Column'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Column\Column_Game.fbx
+CODEXPREP MeditationSpot: building, turned none, [0.883, 0.873, 0.128] m, parts ['MeditationSpot'], slots ['MeditationSpot'] -> C:\Dev\Rim3D-climb\assets\raw\codex\MeditationSpot\MeditationSpot_Game.fbx
+CODEXPREP AnimalSleepingSpot: building, turned none, [0.808, 0.78, 0.097] m, parts ['AnimalSleepingSpot'], slots ['AnimalSleepingSpot'] -> C:\Dev\Rim3D-climb\assets\raw\codex\AnimalSleepingSpot\AnimalSleepingSpot_Game.fbx
+CODEXPREP Gun_RecurveBow: gun, turned none, [0.759, 0.052, 1.453] m, parts ['Body'], slots ['Gun_RecurveBow'] -> C:\Dev\Rim3D-climb\assets\raw\codex\Gun_RecurveBow\Gun_RecurveBow_Game.fbx
+CODEXPREP MealSurvivalPack: item, turned none, [0.22, 0.14, 0.06] m, parts ['MealSurvivalPack'], slots ['MealSurvivalPack'] -> C:\Dev\Rim3D-climb\assets\raw\codex\MealSurvivalPack\MealSurvivalPack_Game.fbx
