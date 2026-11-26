@@ -132,7 +132,7 @@
   "parent": "ItemBase",
   "label": "gold",
   "stackLimit": 75,
-  "visual": {
+  "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Gold/SM_Gold.SM_Gold", 
    "pieces": 5,
    "layer": 0.05,
    "parts": [

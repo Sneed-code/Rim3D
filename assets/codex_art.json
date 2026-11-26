@@ -1200,6 +1200,90 @@
   },
   "Chicken": {
    "kind": "creature"
+  },
+  "Steel": {
+   "kind": "item",
+   "def": "Steel",
+   "size": [
+    0.36,
+    0.2,
+    0.12
+   ]
+  },
+  "Silver": {
+   "kind": "item",
+   "def": "Silver",
+   "size": [
+    0.22,
+    0.16,
+    0.05
+   ]
+  },
+  "Gold": {
+   "kind": "item",
+   "def": "Gold",
+   "size": [
+    0.2,
+    0.13,
+    0.06
+   ]
+  },
+  "RawRice": {
+   "kind": "item",
+   "def": "RawRice",
+   "size": [
+    0.32,
+    0.24,
+    0.2
+   ]
+  },
+  "RawCorn": {
+   "kind": "item",
+   "def": "RawCorn",
+   "size": [
+    0.3,
+    0.2,
+    0.09
+   ]
+  },
+  "GoJuice": {
+   "kind": "item",
+   "def": "GoJuice",
+   "size": [
+    0.14,
+    0.09,
+    0.06
+   ]
+  },
+  "Neutroamine": {
+   "kind": "item",
+   "def": "Neutroamine",
+   "size": [
+    0.12,
+    0.12,
+    0.18
+   ]
+  },
+  "Gazelle": {
+   "kind": "creature"
+  },
+  "Ostrich": {
+   "kind": "creature"
+  },
+  "Duck": {
+   "kind": "creature"
+  },
+  "Hare": {
+   "kind": "creature"
+  },
+  "Squirrel": {
+   "kind": "creature"
+  },
+  "Sheep": {
+   "kind": "creature"
+  },
+  "Yak": {
+   "kind": "creature"
   }
  },
  "buildings": [
@@ -2809,6 +2893,83 @@
     "fbx": "assets/raw/codex/InsectJelly/InsectJelly_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/InsectJelly",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Steel",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Steel",
+    "fbx": "assets/raw/codex/Steel/Steel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Steel",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Silver",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Silver",
+    "fbx": "assets/raw/codex/Silver/Silver_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Silver",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Gold",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Gold",
+    "fbx": "assets/raw/codex/Gold/Gold_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Gold",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "RawRice",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "RawRice",
+    "fbx": "assets/raw/codex/RawRice/RawRice_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/RawRice",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "RawCorn",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "RawCorn",
+    "fbx": "assets/raw/codex/RawCorn/RawCorn_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/RawCorn",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "GoJuice",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "GoJuice",
+    "fbx": "assets/raw/codex/GoJuice/GoJuice_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/GoJuice",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Neutroamine",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Neutroamine",
+    "fbx": "assets/raw/codex/Neutroamine/Neutroamine_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Neutroamine",
     "normalOpenGL": true
    }
   }
