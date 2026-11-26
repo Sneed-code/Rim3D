@@ -2148,6 +2148,18 @@ namespace
 	// Skin under clothes (docs/design/clothes-draw.md): the garment cover texture (tools/makehuman bake_garment_cover: a
 	// bit per garment where it covers the body, on the body's UVs) against the worn garments' bits (custom primitive data
 	// 30 and 31): the skin is cut away where a worn garment covers it. Added once; true if the material changed.
+	// The cut (HLSL): a worn garment's bit set in the cover texel hides the skin there. A texture smaller than 64 texels is
+	// no cover (the parameter's default, the engine's Black, has alpha 1, which read as bits 24-31 everywhere).
+	const TCHAR* const MhGarmentCoverCode = TEXT(
+		"uint worn = (uint)round(Low) | ((uint)round(High) << 16);\n"
+		"if (worn == 0) return 1.0;\n"
+		"uint2 size; Tex.GetDimensions(size.x, size.y);\n"
+		"if (size.x < 64 || size.y < 64) return 1.0;\n"
+		"int2 px = clamp(int2(frac(UV) * float2(size)), int2(0, 0), int2(size) - 1);\n"
+		"uint4 b = (uint4)round(Tex.Load(int3(px, 0)) * 255.0);\n"
+		"uint bits = b.r | (b.g << 8) | (b.b << 16) | (b.a << 24);\n"
+		"return (bits & worn) != 0 ? 0.0 : 1.0;\n");
+
 	bool MhAddGarmentCover(UMaterial* Material)
 	{
 		if (!Material)
@@ -2158,6 +2170,18 @@ namespace
 		{
 			if (const auto* Parameter = Cast<UMaterialExpressionTextureObjectParameter>(Expression); Parameter && Parameter->ParameterName == TEXT("GarmentCover"))
 			{
+				// Already there: bring an older cut's code up to date (the small-texture guard below).
+				for (UMaterialExpression* Other : Material->GetExpressions())
+				{
+					auto* Old = Cast<UMaterialExpressionCustom>(Other);
+					if (Old && Old->Description == TEXT("GarmentCover") && Old->Code != MhGarmentCoverCode)
+					{
+						Old->Code = MhGarmentCoverCode;
+						UMaterialEditingLibrary::RecompileMaterial(Material);
+						MhSave(Material);
+						return true;
+					}
+				}
 				return false;
 			}
 		}
@@ -2179,14 +2203,7 @@ namespace
 		auto* Cut = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -900, 4300));
 		Cut->OutputType = CMOT_Float1;
 		Cut->Description = TEXT("GarmentCover");
-		Cut->Code = TEXT(
-			"uint worn = (uint)round(Low) | ((uint)round(High) << 16);\n"
-			"if (worn == 0) return 1.0;\n"
-			"uint2 size; Tex.GetDimensions(size.x, size.y);\n"
-			"int2 px = clamp(int2(frac(UV) * float2(size)), int2(0, 0), int2(size) - 1);\n"
-			"uint4 b = (uint4)round(Tex.Load(int3(px, 0)) * 255.0);\n"
-			"uint bits = b.r | (b.g << 8) | (b.b << 16) | (b.a << 24);\n"
-			"return (bits & worn) != 0 ? 0.0 : 1.0;\n");
+		Cut->Code = MhGarmentCoverCode;
 		Cut->Inputs.SetNum(4);
 		Cut->Inputs[0].InputName = TEXT("Tex");
 		Cut->Inputs[1].InputName = TEXT("UV");
@@ -2477,10 +2494,21 @@ namespace
 				Cover->PostEditChange();
 				Failures += MhSave(Cover) ? 0 : 1;
 				MhAddGarmentCover(Skin->GetMaterial());
-				Skin->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("GarmentCover")), Cover);
-				Skin->PostEditChange();
-				Failures += MhSave(Skin) ? 0 : 1;
-				UE_LOG(LogMakeHumanArt, Display, TEXT("%s: garment cover %s on %s"), *Files.Name, *Cover->GetName(), *Skin->GetName());
+				// The 4K skin too (sneed 2026-11-26: "no body / skin" in game): everyone wears MI_MH_<base>_Skin4K since
+				// 2026-11-25, and without its own cover it read the parameter's default, the engine's Black, whose alpha
+				// is 1: bits 24-31 set everywhere, so worn trousers (the crotch bit 31) cut away the whole skin.
+				UMaterialInstanceConstant* Skin4K = LoadObject<UMaterialInstanceConstant>(nullptr, *MakeHumanAssetPath(MakeHumanFolder, MakeHumanSkinName(Files.Name) + TEXT("4K")), nullptr, LOAD_NoWarn | LOAD_Quiet);
+				for (UMaterialInstanceConstant* Instance : {Skin, Skin4K})
+				{
+					if (!Instance)
+					{
+						continue;
+					}
+					Instance->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(TEXT("GarmentCover")), Cover);
+					Instance->PostEditChange();
+					Failures += MhSave(Instance) ? 0 : 1;
+					UE_LOG(LogMakeHumanArt, Display, TEXT("%s: garment cover %s on %s"), *Files.Name, *Cover->GetName(), *Instance->GetName());
+				}
 			}
 		}
 		UE_LOG(LogMakeHumanArt, Display, TEXT("%s: %d garments"), *Files.Name, Made);

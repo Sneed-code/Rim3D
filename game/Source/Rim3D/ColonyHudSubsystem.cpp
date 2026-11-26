@@ -76,6 +76,12 @@ namespace
 {
 	const TCHAR* const HudPrefsSection = TEXT("Rim3D.Hud");
 
+	// Mugshots (UpdateMugshots): a close-up of the face, straight on at eye height, rendered at 512 square.
+	constexpr int32 HudMugshotSize = 512;
+	constexpr float HudMugshotFov = 20.0f;       // degrees
+	constexpr float HudMugshotDistance = 85.0f;  // cm from the face: about 30 cm of head in the picture, chin to crown
+	constexpr float HudMugshotLift = 9.0f;       // cm from the head bone (top of the neck) up to the middle of the face
+
 	TAutoConsoleVariable<int32> GHudShowUi(
 		TEXT("Hud.UI"), 1, TEXT("1 shows the overseer's bottom bar, date box, hover readout and info window; 0 hides them."), ECVF_Default);
 
@@ -1644,7 +1650,7 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 			MugshotCapture->RegisterComponent();
 			MugshotCapture->bCaptureEveryFrame = false;
 			MugshotCapture->bCaptureOnMovement = false;
-			MugshotCapture->FOVAngle = 24.0f;
+			MugshotCapture->FOVAngle = HudMugshotFov;
 			MugshotCapture->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 			MugshotCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 			MugshotCapture->ShowFlags.SetAtmosphere(false);
@@ -1664,17 +1670,19 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 			UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(this);
 			Target->RenderTargetFormat = RTF_RGBA8;
 			Target->ClearColor = FLinearColor(0.07f, 0.08f, 0.09f, 1.0f);
-			Target->InitAutoFormat(256, 256);  // sharp at the bigger portrait size
+			Target->InitAutoFormat(HudMugshotSize, HudMugshotSize);  // sharp at any portrait size (sneed 2026-11-26: "high res")
 			Target->UpdateResourceImmediate(true);
 			Shot->Target = Target;
 			MugshotTargets.Add(Target);
 		}
-		// In front of the face, a little above it, looking back at it.
+		// A close-up straight in front of the face at eye height (sneed 2026-11-26: "close up camera infront of their face",
+		// not "a camera above their head"): the head bone is the top of the neck, so the face's middle is HudMugshotLift
+		// above it, and the camera stands level with it, near enough that the face fills the picture.
 		USkeletalMeshComponent* Mesh = Actor->GetMakeHumanMesh() ? Actor->GetMakeHumanMesh() : Actor->GetBody();
 		FVector Head = Actor->GetActorLocation() + FVector(0.0f, 0.0f, 160.0f * Actor->GetBodyScale());
 		if (Mesh && Mesh->GetBoneIndex(TEXT("head")) != INDEX_NONE)
 		{
-			Head = Mesh->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, 6.0f);
+			Head = Mesh->GetBoneLocation(TEXT("head")) + FVector(0.0f, 0.0f, HudMugshotLift * Actor->GetBodyScale());
 		}
 		// Straight at the face (sneed 2026-11-25: front on, never whatever angle the head had turned to): the head bone's turn
 		// away from its bind pose carries the face's bind direction (the actor's forward) round with it; level, so a bowed
@@ -1693,7 +1701,7 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 				Forward = Face;
 			}
 		}
-		const FVector Eye = Head + Forward * 95.0f + FVector(0.0f, 0.0f, 4.0f);
+		const FVector Eye = Head + Forward * (HudMugshotDistance * Actor->GetBodyScale());
 		MugshotActor->SetActorLocationAndRotation(Eye, (Head - Eye).Rotation());
 		MugshotCapture->ShowOnlyActors.Reset();
 		MugshotCapture->ShowOnlyActors.Add(Actor);

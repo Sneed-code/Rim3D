@@ -254,6 +254,35 @@ namespace
 		return INDEX_NONE;
 	}
 
+	/** The face shapes as drawn: the skull-height sliders (face length, forehead, brow ridge) scaled back together so their
+	 *  sum stays within CreatorSkullBudget either way; every other slider as it is. */
+	constexpr float CreatorSkullBudget = 1.2f;
+	void CreatorSkullLimited(const float* In, float* Out)
+	{
+		static const int32 SkullShapes[] = {CreatorShapeIndex(TEXT("faceHeadHeight")), CreatorShapeIndex(TEXT("faceForehead")), CreatorShapeIndex(TEXT("faceBrowRidge"))};
+		float Up = 0.0f;
+		float Down = 0.0f;
+		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+		{
+			Out[f] = FMath::Clamp(In[f], -1.0f, 1.0f);
+		}
+		for (const int32 f : SkullShapes)
+		{
+			if (f != INDEX_NONE)
+			{
+				(Out[f] > 0.0f ? Up : Down) += FMath::Abs(Out[f]);
+			}
+		}
+		for (const int32 f : SkullShapes)
+		{
+			if (f != INDEX_NONE)
+			{
+				const float Sum = Out[f] > 0.0f ? Up : Down;
+				Out[f] *= Sum > CreatorSkullBudget ? CreatorSkullBudget / Sum : 1.0f;
+			}
+		}
+	}
+
 	/**
 	 * Ethnicity (sneed 2026-11-26: "add all the ethnicities ... this can be a picked ethnicity? and or slide"): a picked
 	 * preset that sets the person's starting point, then every slider fine-tunes it. Each preset is:
@@ -410,7 +439,7 @@ namespace
 		float Tail = 0.0f;
 		float Genital = 0.0f;     // -1 smaller .. 1 larger (the man's genitals, the woman's labia)
 		float Pigment = 0.5f;     // 0 .. 1: how much darker the areolae and genitals are than the skin
-		int32 Pubic = 1;          // 0 none, else grown pubic hair with the four controls below
+		int32 Pubic = 0;          // 0 none (the default, sneed 2026-11-26), else grown pubic hair with the four controls below
 		float PubicCoverage = 1.0f;
 		float PubicDensity = 1.0f;
 		float PubicLength = 1.0f;  // 1 natural .. 0.35 trimmed (PubicShort)
@@ -901,12 +930,19 @@ namespace
 		Set(TEXT("ImpFace"), P.ImpFace);
 		Set(TEXT("OrcFace"), P.OrcFace);
 		Set(TEXT("OrcBody"), P.OrcBody);
-		Set(TEXT("EthAfrican"), P.EthAfrican);
-		Set(TEXT("EthAsian"), P.EthAsian);
+		// No mix of sliders deforms the skull (sneed 2026-11-26: "the skull is .. a conehead?"): the two ethnic base shapes
+		// share one whole between them, and the sliders that raise or lower the top of the head (face length, forehead,
+		// brow ridge: each about 2 cm at full) add up to at most CreatorSkullBudget of one slider's worth either way.
+		const float EthSum = P.EthAfrican + P.EthAsian;
+		const float EthScale = EthSum > 1.0f ? 1.0f / EthSum : 1.0f;
+		Set(TEXT("EthAfrican"), P.EthAfrican * EthScale);
+		Set(TEXT("EthAsian"), P.EthAsian * EthScale);
+		float Skull[CreatorFaceShapeCount];
+		CreatorSkullLimited(P.FaceShape, Skull);
 		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 		{
-			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Lo")), -P.FaceShape[f]);
-			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Hi")), P.FaceShape[f]);
+			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Lo")), -Skull[f]);
+			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Hi")), Skull[f]);
 		}
 		Set(TEXT("NoHorns"), 1.0f - P.Horns);
 		Set(TEXT("NoTusks"), 1.0f - P.Tusks);
@@ -2682,7 +2718,7 @@ namespace
 			P.Iris[1] = Look.Get(TEXT("irisG"), P.Iris[1]);
 			P.Iris[2] = Look.Get(TEXT("irisB"), P.Iris[2]);
 		}
-		switch (FMath::RoundToInt(Look.Get(TEXT("pubic"), 1.0f)))
+		switch (FMath::RoundToInt(Look.Get(TEXT("pubic"), 0.0f)))  // none unless picked (sneed 2026-11-26: "default the pubic hair as off")
 		{
 		case 0: P.Pubic = 0; break;
 		case 2: P.Pubic = 1; P.PubicLength = 0.45f; P.PubicCoverage = 0.6f; break;
@@ -2856,7 +2892,7 @@ CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
 	Keep(TEXT("skinR"), P.Skin[0]);
 	Keep(TEXT("skinG"), P.Skin[1]);
 	Keep(TEXT("skinB"), P.Skin[2]);
-	Keep(TEXT("pubic"), 1.0f);
+	Keep(TEXT("pubic"), 0.0f);
 	Keep(TEXT("genital"), P.Genital);
 	Keep(TEXT("pigment"), P.Pigment);
 	return Out;

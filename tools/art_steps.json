@@ -203,7 +203,7 @@
     {
       "name": "makehuman-garments",
       "what": "Bring the fitted clothes into the game",
-      "inputs": ["assets/makehuman_garments.json"],
+      "inputs": ["assets/makehuman_garments.json", "game/Source/Rim3DEditor/MakeHumanArtCommandlet.cpp"],
       "after": ["garments-fit"],
       "coveredBy": ["makehuman-bodies"],
       "run": [{"commandlet": "MakeHumanArt", "args": ["-Garments", "-nullrhi"]}]
