@@ -80,7 +80,7 @@ namespace
 	constexpr int32 HudMugshotSize = 512;
 	constexpr float HudMugshotFov = 20.0f;       // degrees
 	constexpr float HudMugshotDistance = 85.0f;  // cm from the face: about 30 cm of head in the picture, chin to crown
-	constexpr float HudMugshotLift = 9.0f;       // cm from the head bone (top of the neck) up to the middle of the face
+	constexpr float HudMugshotLift = 2.0f;       // cm from the head bone up to the middle of the face (9 framed the forehead, PC 2026-11-26)
 
 	TAutoConsoleVariable<int32> GHudShowUi(
 		TEXT("Hud.UI"), 1, TEXT("1 shows the overseer's bottom bar, date box, hover readout and info window; 0 hides them."), ECVF_Default);
@@ -1669,7 +1669,12 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(this);
 			Target->RenderTargetFormat = RTF_RGBA8;
-			Target->ClearColor = FLinearColor(0.07f, 0.08f, 0.09f, 1.0f);
+			// A mid grey-green backdrop, so dark hair still reads against it (on near-black it vanished, PC 2026-11-26).
+			Target->ClearColor = FLinearColor(0.16f, 0.19f, 0.19f, 1.0f);
+			// Mips: the portrait is drawn at about a fifth of the picture's size, which without them sparkles and looks
+			// pixelated (PC 2026-11-26).
+			Target->bAutoGenerateMips = true;
+			Target->MipsSamplerFilter = TF_Trilinear;
 			Target->InitAutoFormat(HudMugshotSize, HudMugshotSize);  // sharp at any portrait size (sneed 2026-11-26: "high res")
 			Target->UpdateResourceImmediate(true);
 			Shot->Target = Target;

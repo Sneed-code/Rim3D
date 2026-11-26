@@ -2,6 +2,18 @@
 
 Updated 2026-11-26.
 
+Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
+**skin**: colonists showed only clothes, hair, eyes and teeth. Everyone wears the 4K skin since 2026-11-25, but only the
+2K skin got the garment cover texture; the 4K one read the parameter's default, the engine's Black, whose alpha 1 reads as
+cover bits 24-31, so worn trousers (crotch bit 31) cut away the whole skin. `MakeHumanArt -Garments` now puts the cover on
+both skins, and the cut ignores any texture under 64 texels (art step `makehuman-garments` reruns). **Skull**: the face
+length, forehead and brow ridge sliders together stay within 1.2 of one slider's worth each way, and the two ethnic base
+shapes share one whole (`CreatorSkullLimited`); the Pacific Islander head checks normal on the PC. **Pubic hair** is off
+by default (creator, random people, saved looks without the key). **Mugshots**: a close-up straight in front of the face,
+512 px with mips, lighter backdrop. Female long, bob, ponytail and braid hair checked from behind and the side: no bare
+patches (a faint scalp glow on the bob's crown). Known: the EthAsian/EthAfrican morphs carry MakeHuman's height change
+(head 11 cm down / 7 cm up at full, bones stay), a cleanup for a later creator-bodies run.
+
 Ethnicities, face and body variety, live mocap faces (sneed, 2026-11-26; data, art steps and Unreal; built and filmed in a test copy, shots on branch claude/shots-faces-dt19nn): **ethnicity**
 (`docs/design/makehuman.md` "Ethnicity and more face and body shapes"): 15 presets (Northern, Western, Southern, Eastern
 European, Middle Eastern and North African, South Asian, Central Asian, East Asian, Southeast Asian, Pacific Islander,
