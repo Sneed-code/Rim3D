@@ -1489,6 +1489,32 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 			}
 		}
+		// -CreatorLiveFace=<emotion>[,talk] (facial capture, docs/design/faces-mocap.md) on everyone, and
+		// -CreatorEthnicity=<number> (CreatorEthnicities; the last is mixed) for each person in turn from that one, for pictures.
+		FString LiveArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorLiveFace="), LiveArg, false))
+		{
+			for (int32 e = 1; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorLiveEmotions)); ++e)
+			{
+				if (LiveArg.StartsWith(UTF8_TO_TCHAR(CreatorLiveEmotions[e])))
+				{
+					for (FCreatorPerson& Person : State->People)
+					{
+						Person.LiveEmotion = e;
+						Person.bLiveTalk = LiveArg.EndsWith(TEXT(",talk"));
+					}
+				}
+			}
+		}
+		int32 EthnicityArg = -1;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorEthnicity="), EthnicityArg))
+		{
+			FRandomStream EthRandom(7);
+			for (int32 i = 0; i < State->People.Num(); ++i)
+			{
+				CreatorSetEthnicity(State->People[i], (EthnicityArg + i) % (CreatorEthnicityMixed() + 1), [&EthRandom]() { return EthRandom.FRand(); }, false);
+			}
+		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorPitch="), State->CameraPitch);
 		// -CreatorWet=<0-1> for everyone, for pictures.
 		float WetArg = -1.0f;

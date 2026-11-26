@@ -1,5 +1,5 @@
 {
-  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph. Shape<Part>Lo/Hi (sneed 2026-11-25, face variety): MakeHuman's own face modelling targets, one pair per face slider (SmokeTestCreator.cpp CreatorFaceShapes); every person's face is a blend of them, so they work with every expression unit, the hair fit (grow_hair.py measures any slider that moves the skull) and the gore.",
+  "comment": "The character creator's base bodies (tools/makehuman/mh_creator.py, docs/design/makehuman.md). Each morph is a variant build of its base with these settings changed. Adults only: there is no younger morph. Shape<Part>Lo/Hi (sneed 2026-11-25, face variety): MakeHuman's own face modelling targets, one pair per face slider (SmokeTestCreator.cpp CreatorFaceShapes); every person's face is a blend of them, so they work with every expression unit, the hair fit (grow_hair.py measures any slider that moves the skull) and the gore. EthAfrican/EthAsian (sneed 2026-11-26): MakeHuman's own ethnic base shapes (European is what is left); 24 more Shape pairs (face and build); Face_CheekPuff and one-sided Face_<Unit>L/R ({\"from\", \"side\"}: mh_creator reuses the unit's build, mh_common.add_morphs keeps one side) for the facial capture (docs/design/faces-mocap.md).",
   "bases": [
     {
       "name": "CreatorFemale",
@@ -671,6 +671,326 @@
             "mouth-upperlip-volume-incr": 1.0,
             "mouth-lowerlip-volume-incr": 1.0
           }
+        },
+        "EthAfrican": {
+          "macro": {
+            "race": {
+              "caucasian": 0.0,
+              "african": 1.0,
+              "asian": 0.0
+            }
+          }
+        },
+        "EthAsian": {
+          "macro": {
+            "race": {
+              "caucasian": 0.0,
+              "african": 0.0,
+              "asian": 1.0
+            }
+          }
+        },
+        "ShapeHeadHeightLo": {
+          "targets": {
+            "head-scale-vert-decr": 0.7
+          }
+        },
+        "ShapeHeadHeightHi": {
+          "targets": {
+            "head-scale-vert-incr": 0.7
+          }
+        },
+        "ShapeForeheadLo": {
+          "targets": {
+            "forehead-scale-vert-decr": 0.9
+          }
+        },
+        "ShapeForeheadHi": {
+          "targets": {
+            "forehead-scale-vert-incr": 0.9
+          }
+        },
+        "ShapeBrowRidgeLo": {
+          "targets": {
+            "forehead-nubian-decr": 1.0
+          }
+        },
+        "ShapeBrowRidgeHi": {
+          "targets": {
+            "forehead-nubian-incr": 1.0,
+            "forehead-trans-forward": 0.3
+          }
+        },
+        "ShapeEyeTiltLo": {
+          "targets": {
+            "l-eye-corner2-down": 0.8,
+            "r-eye-corner2-down": 0.8,
+            "l-eye-corner1-up": 0.4,
+            "r-eye-corner1-up": 0.4
+          }
+        },
+        "ShapeEyeTiltHi": {
+          "targets": {
+            "l-eye-corner2-up": 0.8,
+            "r-eye-corner2-up": 0.8,
+            "l-eye-corner1-down": 0.4,
+            "r-eye-corner1-down": 0.4
+          }
+        },
+        "ShapeEyelidLo": {
+          "targets": {
+            "l-eye-epicanthus-out": 0.6,
+            "r-eye-epicanthus-out": 0.6,
+            "l-eye-eyefold-up": 0.6,
+            "r-eye-eyefold-up": 0.6
+          }
+        },
+        "ShapeEyelidHi": {
+          "targets": {
+            "l-eye-epicanthus-in": 0.8,
+            "r-eye-epicanthus-in": 0.8,
+            "l-eye-eyefold-down": 0.6,
+            "r-eye-eyefold-down": 0.6
+          }
+        },
+        "ShapeEyeDepthLo": {
+          "targets": {
+            "l-eye-push1-out": 0.8,
+            "r-eye-push1-out": 0.8
+          }
+        },
+        "ShapeEyeDepthHi": {
+          "targets": {
+            "l-eye-push1-in": 0.8,
+            "r-eye-push1-in": 0.8
+          }
+        },
+        "ShapeNoseTipLo": {
+          "targets": {
+            "nose-point-down": 1.0
+          }
+        },
+        "ShapeNoseTipHi": {
+          "targets": {
+            "nose-point-up": 1.0
+          }
+        },
+        "ShapeNoseDepthLo": {
+          "targets": {
+            "nose-scale-depth-decr": 0.9,
+            "nose-trans-backward": 0.3
+          }
+        },
+        "ShapeNoseDepthHi": {
+          "targets": {
+            "nose-scale-depth-incr": 0.9,
+            "nose-trans-forward": 0.3
+          }
+        },
+        "ShapeNostrilsLo": {
+          "targets": {
+            "nose-flaring-decr": 1.0
+          }
+        },
+        "ShapeNostrilsHi": {
+          "targets": {
+            "nose-flaring-incr": 1.0
+          }
+        },
+        "ShapeCheeksLo": {
+          "targets": {
+            "l-cheek-volume-decr": 1.0,
+            "r-cheek-volume-decr": 1.0
+          }
+        },
+        "ShapeCheeksHi": {
+          "targets": {
+            "l-cheek-volume-incr": 1.0,
+            "r-cheek-volume-incr": 1.0
+          }
+        },
+        "ShapeJawJutLo": {
+          "targets": {
+            "chin-prognathism-decr": 0.8
+          }
+        },
+        "ShapeJawJutHi": {
+          "targets": {
+            "chin-prognathism-incr": 0.8
+          }
+        },
+        "ShapeEarsLo": {
+          "targets": {
+            "l-ear-scale-decr": 0.8,
+            "r-ear-scale-decr": 0.8
+          }
+        },
+        "ShapeEarsHi": {
+          "targets": {
+            "l-ear-scale-incr": 0.8,
+            "r-ear-scale-incr": 0.8
+          }
+        },
+        "ShapeEarsOutLo": {
+          "targets": {
+            "l-ear-wing-decr": 1.0,
+            "r-ear-wing-decr": 1.0
+          }
+        },
+        "ShapeEarsOutHi": {
+          "targets": {
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0
+          }
+        },
+        "ShapeNeckLo": {
+          "targets": {
+            "neck-scale-horiz-decr": 0.7,
+            "neck-scale-depth-decr": 0.5
+          }
+        },
+        "ShapeNeckHi": {
+          "targets": {
+            "neck-scale-horiz-incr": 0.7,
+            "neck-scale-depth-incr": 0.5
+          }
+        },
+        "ShapeShouldersLo": {
+          "targets": {
+            "torso-vshape-decr": 0.8
+          }
+        },
+        "ShapeShouldersHi": {
+          "targets": {
+            "torso-vshape-incr": 0.8
+          }
+        },
+        "ShapeChestLo": {
+          "targets": {
+            "torso-scale-depth-decr": 0.5
+          }
+        },
+        "ShapeChestHi": {
+          "targets": {
+            "torso-scale-depth-incr": 0.5
+          }
+        },
+        "ShapeWaistLo": {
+          "targets": {
+            "measure-waist-circ-decr": 0.8
+          }
+        },
+        "ShapeWaistHi": {
+          "targets": {
+            "measure-waist-circ-incr": 0.8
+          }
+        },
+        "ShapeHipsLo": {
+          "targets": {
+            "hip-scale-horiz-decr": 0.6
+          }
+        },
+        "ShapeHipsHi": {
+          "targets": {
+            "hip-scale-horiz-incr": 0.6
+          }
+        },
+        "ShapeBellyLo": {
+          "targets": {
+            "stomach-pregnant-decr": 0.6
+          }
+        },
+        "ShapeBellyHi": {
+          "targets": {
+            "stomach-pregnant-incr": 0.35
+          }
+        },
+        "ShapeButtLo": {
+          "targets": {
+            "buttocks-volume-decr": 1.0
+          }
+        },
+        "ShapeButtHi": {
+          "targets": {
+            "buttocks-volume-incr": 1.0
+          }
+        },
+        "ShapeThighsLo": {
+          "targets": {
+            "measure-thigh-circ-decr": 0.8
+          }
+        },
+        "ShapeThighsHi": {
+          "targets": {
+            "measure-thigh-circ-incr": 0.8
+          }
+        },
+        "ShapeCalvesLo": {
+          "targets": {
+            "measure-calf-circ-decr": 0.8
+          }
+        },
+        "ShapeCalvesHi": {
+          "targets": {
+            "measure-calf-circ-incr": 0.8
+          }
+        },
+        "ShapeArmsLo": {
+          "targets": {
+            "measure-upperarm-circ-decr": 0.8
+          }
+        },
+        "ShapeArmsHi": {
+          "targets": {
+            "measure-upperarm-circ-incr": 0.8
+          }
+        },
+        "Face_CheekPuff": {
+          "targets": {
+            "l-cheek-volume-incr": 1.6,
+            "r-cheek-volume-incr": 1.6,
+            "mouth-scale-depth-incr": 0.3
+          }
+        },
+        "Face_MouthCornerPullerL": {
+          "from": "Face_MouthCornerPuller",
+          "side": "l"
+        },
+        "Face_MouthCornerPullerR": {
+          "from": "Face_MouthCornerPuller",
+          "side": "r"
+        },
+        "Face_MouthDepressionL": {
+          "from": "Face_MouthDepression",
+          "side": "l"
+        },
+        "Face_MouthDepressionR": {
+          "from": "Face_MouthDepression",
+          "side": "r"
+        },
+        "Face_MouthRetractionL": {
+          "from": "Face_MouthRetraction",
+          "side": "l"
+        },
+        "Face_MouthRetractionR": {
+          "from": "Face_MouthRetraction",
+          "side": "r"
+        },
+        "Face_MouthUpwardRetractionL": {
+          "from": "Face_MouthUpwardRetraction",
+          "side": "l"
+        },
+        "Face_MouthUpwardRetractionR": {
+          "from": "Face_MouthUpwardRetraction",
+          "side": "r"
+        },
+        "Face_MouthDepressionRetractionL": {
+          "from": "Face_MouthDepressionRetraction",
+          "side": "l"
+        },
+        "Face_MouthDepressionRetractionR": {
+          "from": "Face_MouthDepressionRetraction",
+          "side": "r"
         }
       }
     },
@@ -1339,6 +1659,326 @@
             "mouth-upperlip-volume-incr": 1.0,
             "mouth-lowerlip-volume-incr": 1.0
           }
+        },
+        "EthAfrican": {
+          "macro": {
+            "race": {
+              "caucasian": 0.0,
+              "african": 1.0,
+              "asian": 0.0
+            }
+          }
+        },
+        "EthAsian": {
+          "macro": {
+            "race": {
+              "caucasian": 0.0,
+              "african": 0.0,
+              "asian": 1.0
+            }
+          }
+        },
+        "ShapeHeadHeightLo": {
+          "targets": {
+            "head-scale-vert-decr": 0.7
+          }
+        },
+        "ShapeHeadHeightHi": {
+          "targets": {
+            "head-scale-vert-incr": 0.7
+          }
+        },
+        "ShapeForeheadLo": {
+          "targets": {
+            "forehead-scale-vert-decr": 0.9
+          }
+        },
+        "ShapeForeheadHi": {
+          "targets": {
+            "forehead-scale-vert-incr": 0.9
+          }
+        },
+        "ShapeBrowRidgeLo": {
+          "targets": {
+            "forehead-nubian-decr": 1.0
+          }
+        },
+        "ShapeBrowRidgeHi": {
+          "targets": {
+            "forehead-nubian-incr": 1.0,
+            "forehead-trans-forward": 0.3
+          }
+        },
+        "ShapeEyeTiltLo": {
+          "targets": {
+            "l-eye-corner2-down": 0.8,
+            "r-eye-corner2-down": 0.8,
+            "l-eye-corner1-up": 0.4,
+            "r-eye-corner1-up": 0.4
+          }
+        },
+        "ShapeEyeTiltHi": {
+          "targets": {
+            "l-eye-corner2-up": 0.8,
+            "r-eye-corner2-up": 0.8,
+            "l-eye-corner1-down": 0.4,
+            "r-eye-corner1-down": 0.4
+          }
+        },
+        "ShapeEyelidLo": {
+          "targets": {
+            "l-eye-epicanthus-out": 0.6,
+            "r-eye-epicanthus-out": 0.6,
+            "l-eye-eyefold-up": 0.6,
+            "r-eye-eyefold-up": 0.6
+          }
+        },
+        "ShapeEyelidHi": {
+          "targets": {
+            "l-eye-epicanthus-in": 0.8,
+            "r-eye-epicanthus-in": 0.8,
+            "l-eye-eyefold-down": 0.6,
+            "r-eye-eyefold-down": 0.6
+          }
+        },
+        "ShapeEyeDepthLo": {
+          "targets": {
+            "l-eye-push1-out": 0.8,
+            "r-eye-push1-out": 0.8
+          }
+        },
+        "ShapeEyeDepthHi": {
+          "targets": {
+            "l-eye-push1-in": 0.8,
+            "r-eye-push1-in": 0.8
+          }
+        },
+        "ShapeNoseTipLo": {
+          "targets": {
+            "nose-point-down": 1.0
+          }
+        },
+        "ShapeNoseTipHi": {
+          "targets": {
+            "nose-point-up": 1.0
+          }
+        },
+        "ShapeNoseDepthLo": {
+          "targets": {
+            "nose-scale-depth-decr": 0.9,
+            "nose-trans-backward": 0.3
+          }
+        },
+        "ShapeNoseDepthHi": {
+          "targets": {
+            "nose-scale-depth-incr": 0.9,
+            "nose-trans-forward": 0.3
+          }
+        },
+        "ShapeNostrilsLo": {
+          "targets": {
+            "nose-flaring-decr": 1.0
+          }
+        },
+        "ShapeNostrilsHi": {
+          "targets": {
+            "nose-flaring-incr": 1.0
+          }
+        },
+        "ShapeCheeksLo": {
+          "targets": {
+            "l-cheek-volume-decr": 1.0,
+            "r-cheek-volume-decr": 1.0
+          }
+        },
+        "ShapeCheeksHi": {
+          "targets": {
+            "l-cheek-volume-incr": 1.0,
+            "r-cheek-volume-incr": 1.0
+          }
+        },
+        "ShapeJawJutLo": {
+          "targets": {
+            "chin-prognathism-decr": 0.8
+          }
+        },
+        "ShapeJawJutHi": {
+          "targets": {
+            "chin-prognathism-incr": 0.8
+          }
+        },
+        "ShapeEarsLo": {
+          "targets": {
+            "l-ear-scale-decr": 0.8,
+            "r-ear-scale-decr": 0.8
+          }
+        },
+        "ShapeEarsHi": {
+          "targets": {
+            "l-ear-scale-incr": 0.8,
+            "r-ear-scale-incr": 0.8
+          }
+        },
+        "ShapeEarsOutLo": {
+          "targets": {
+            "l-ear-wing-decr": 1.0,
+            "r-ear-wing-decr": 1.0
+          }
+        },
+        "ShapeEarsOutHi": {
+          "targets": {
+            "l-ear-wing-incr": 1.0,
+            "r-ear-wing-incr": 1.0
+          }
+        },
+        "ShapeNeckLo": {
+          "targets": {
+            "neck-scale-horiz-decr": 0.7,
+            "neck-scale-depth-decr": 0.5
+          }
+        },
+        "ShapeNeckHi": {
+          "targets": {
+            "neck-scale-horiz-incr": 0.7,
+            "neck-scale-depth-incr": 0.5
+          }
+        },
+        "ShapeShouldersLo": {
+          "targets": {
+            "torso-vshape-decr": 0.8
+          }
+        },
+        "ShapeShouldersHi": {
+          "targets": {
+            "torso-vshape-incr": 0.8
+          }
+        },
+        "ShapeChestLo": {
+          "targets": {
+            "torso-scale-depth-decr": 0.5
+          }
+        },
+        "ShapeChestHi": {
+          "targets": {
+            "torso-scale-depth-incr": 0.5
+          }
+        },
+        "ShapeWaistLo": {
+          "targets": {
+            "measure-waist-circ-decr": 0.8
+          }
+        },
+        "ShapeWaistHi": {
+          "targets": {
+            "measure-waist-circ-incr": 0.8
+          }
+        },
+        "ShapeHipsLo": {
+          "targets": {
+            "hip-scale-horiz-decr": 0.6
+          }
+        },
+        "ShapeHipsHi": {
+          "targets": {
+            "hip-scale-horiz-incr": 0.6
+          }
+        },
+        "ShapeBellyLo": {
+          "targets": {
+            "stomach-pregnant-decr": 0.6
+          }
+        },
+        "ShapeBellyHi": {
+          "targets": {
+            "stomach-pregnant-incr": 0.35
+          }
+        },
+        "ShapeButtLo": {
+          "targets": {
+            "buttocks-volume-decr": 1.0
+          }
+        },
+        "ShapeButtHi": {
+          "targets": {
+            "buttocks-volume-incr": 1.0
+          }
+        },
+        "ShapeThighsLo": {
+          "targets": {
+            "measure-thigh-circ-decr": 0.8
+          }
+        },
+        "ShapeThighsHi": {
+          "targets": {
+            "measure-thigh-circ-incr": 0.8
+          }
+        },
+        "ShapeCalvesLo": {
+          "targets": {
+            "measure-calf-circ-decr": 0.8
+          }
+        },
+        "ShapeCalvesHi": {
+          "targets": {
+            "measure-calf-circ-incr": 0.8
+          }
+        },
+        "ShapeArmsLo": {
+          "targets": {
+            "measure-upperarm-circ-decr": 0.8
+          }
+        },
+        "ShapeArmsHi": {
+          "targets": {
+            "measure-upperarm-circ-incr": 0.8
+          }
+        },
+        "Face_CheekPuff": {
+          "targets": {
+            "l-cheek-volume-incr": 1.6,
+            "r-cheek-volume-incr": 1.6,
+            "mouth-scale-depth-incr": 0.3
+          }
+        },
+        "Face_MouthCornerPullerL": {
+          "from": "Face_MouthCornerPuller",
+          "side": "l"
+        },
+        "Face_MouthCornerPullerR": {
+          "from": "Face_MouthCornerPuller",
+          "side": "r"
+        },
+        "Face_MouthDepressionL": {
+          "from": "Face_MouthDepression",
+          "side": "l"
+        },
+        "Face_MouthDepressionR": {
+          "from": "Face_MouthDepression",
+          "side": "r"
+        },
+        "Face_MouthRetractionL": {
+          "from": "Face_MouthRetraction",
+          "side": "l"
+        },
+        "Face_MouthRetractionR": {
+          "from": "Face_MouthRetraction",
+          "side": "r"
+        },
+        "Face_MouthUpwardRetractionL": {
+          "from": "Face_MouthUpwardRetraction",
+          "side": "l"
+        },
+        "Face_MouthUpwardRetractionR": {
+          "from": "Face_MouthUpwardRetraction",
+          "side": "r"
+        },
+        "Face_MouthDepressionRetractionL": {
+          "from": "Face_MouthDepressionRetraction",
+          "side": "l"
+        },
+        "Face_MouthDepressionRetractionR": {
+          "from": "Face_MouthDepressionRetraction",
+          "side": "r"
         }
       }
     }

@@ -1,6 +1,23 @@
 # Status
 
-Updated 2026-11-25.
+Updated 2026-11-26.
+
+Ethnicities, face and body variety, live mocap faces (sneed, 2026-11-26; data, art steps and Unreal): **ethnicity**
+(`docs/design/makehuman.md` "Ethnicity and more face and body shapes"): 15 presets (Northern, Western, Southern, Eastern
+European, Middle Eastern and North African, South Asian, Central Asian, East Asian, Southeast Asian, Pacific Islander,
+Indigenous American, West, East, Southern African, Melanesian and Aboriginal Australian) plus Mixed, each MakeHuman's own
+ethnic base shapes (`EthAfrican`/`EthAsian` morphs), a face and build average, skin range and undertone, hair and eye
+colours; picked in the colony creator (with "African features" and "East Asian features" sliders) and the Debug creator;
+random people come from all of them, weighted fair, with eye colours of their own. **24 more shape sliders** (face length,
+forehead, brow ridge, eye tilt, eyelids, deep-set eyes, nose tip and projection, nostrils, cheeks, jaw jut, ears; neck,
+shoulders, chest, waist, hips, belly, bottom, thighs, calves, arms), folded under "Face in detail"/"Build in detail" with
+Random face/Random build. **Breast jiggle by size** (`SetBreastSize`: mass from the breast slider and weight; lower,
+slower, wider swing for larger). **Eyes vanishing on a gender switch** fixed: the old body's hidden sections and material
+overrides carried over slot by slot to the new body (`ApplyMakeHuman` now clears them). **Live faces**
+(`docs/design/faces-mocap.md`): real actors' facial capture (BEAT, ARKit curves, 122 clips in 8 emotions) plays on every
+face within 15 m by mood, talk, breaks, fights, pain, sleep and death, with left/right mouth halves; fight faces on top.
+**Skin**: full-quality subsurface scattering, tone-matched sheen, per-person oiliness, older skin shows pores more; the
+scanned-skin step is in BACKLOG.
 
 Hair clipping for good, 4K skins, snug HUD buttons (sneed, 2026-11-25; art steps and Unreal): **hair** (`docs/design/hair-physics.md` "One barrier, for good"):
 the collision shapes now reach just **out** of the skin (head 1 mm, back 6 mm) instead of 1.5 to 4 mm inside it, with
