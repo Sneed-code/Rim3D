@@ -41,6 +41,17 @@ output is committed. Needs Blender 5.2 with MPFB for the MakeHuman steps (`BLEND
 need is missing waits for the next update. `{codex}` in a step is the Codex models folder outside the repo
 (`RIM3D_CODEX` overrides `~\OneDrive\Documents\ChatGPT\Models\Rim3D_Codex`).
 
+## Stopping an update part way
+
+Closing the window or pressing Ctrl+C during an art step leaves that step half done (the MakeHuman import, for
+one, clears its folder first). `update.py` then stamps nothing for it, so the next `update-and-play.bat` runs it
+again. `makehuman-bodies` also lists the creator bodies in its `makes`, so a missing body is redone even when
+nothing changed (2026-11-26: the colony creator showed Unreal's grey dummy after a stopped import).
+
+Each step is stamped with its fingerprint taken when it finishes, not when the update started: steps whose raw
+folders earlier steps fill (`makehuman-bodies` reads the Blender bodies, `hair-grooms` the grown hair) used to look
+changed on every update and ran again for nothing.
+
 ## Test copies (Claude only)
 
 PR test builds on the PC still use separate clones (`pc-standing-ok`), but nobody plays from them, and

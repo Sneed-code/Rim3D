@@ -302,6 +302,26 @@ def update(args):
 
     failed = []
     ran = set()
+    try:
+        return run_steps(steps, stamps, prints, decisions, engine, blender, failed, ran)
+    except KeyboardInterrupt:
+        # Ctrl+C or a closed window: whatever was running is left half done, so it is not stamped (done or failed)
+        # and runs again on the next update.
+        save_stamps(stamps)
+        say("stopped part way through; the unfinished art step runs again next time (run update-and-play again)")
+        return 2
+
+
+INTERRUPTED_CODES = {130, -2, 0xC000013A, -1073741510}  # Ctrl+C / console closed (POSIX, Windows STATUS_CONTROL_C_EXIT)
+
+
+def stamp_done(stamps, step):
+    """Done, with the step's fingerprint taken now: its raw folders may hold what earlier steps in this update just
+    wrote (Blender bodies, grown hair), and a fingerprint from before them would make it run again next time."""
+    stamps[step["name"]] = {"done": fingerprint(step), "when": time.strftime("%Y-%m-%d %H:%M")}
+
+
+def run_steps(steps, stamps, prints, decisions, engine, blender, failed, ran):
     for step, decision, why in decisions:
         name = step["name"]
         # A step that comes after one that failed waits for next time, unless it has reasons of its own.
@@ -319,20 +339,23 @@ def update(args):
         ok = True
         for i, command in enumerate(step["run"]):
             log = STATE_DIR / "logs" / f"{name}{'' if i == 0 else '-' + str(i + 1)}.log"
-            if run_logged(command_line(command, engine, blender), log) != 0:
+            code = run_logged(command_line(command, engine, blender), log)
+            if code in INTERRUPTED_CODES:
+                raise KeyboardInterrupt
+            if code != 0:
                 say(f"  FAILED, log: {log}")
                 ok = False
                 break
         say(f"  {'done' if ok else 'failed'} in {time.time() - started:.0f} s")
         if ok:
             ran.add(name)
-            stamps[name] = {"done": prints[name], "when": time.strftime("%Y-%m-%d %H:%M")}
+            stamp_done(stamps, step)
             for s in steps:  # steps this one covers count as done too
                 if name in s.get("coveredBy", []) and any(d[0] is s and d[1] == "covered" for d in decisions):
-                    stamps[s["name"]] = {"done": prints[s["name"]], "when": time.strftime("%Y-%m-%d %H:%M")}
+                    stamp_done(stamps, s)
         else:
             failed.append(name)
-            stamps.setdefault(name, {})["failed"] = prints[name]
+            stamps.setdefault(name, {})["failed"] = fingerprint(step)
         save_stamps(stamps)
     if failed:
         say("art steps that failed: " + ", ".join(failed) + " (the game still runs; logs in game/Saved/ArtSteps/logs)")

@@ -1110,6 +1110,96 @@
   },
   "Gun_Pila": {
    "kind": "gun"
+  },
+  "Chocolate": {
+   "kind": "item",
+   "def": "Chocolate",
+   "size": [
+    0.2,
+    0.12,
+    0.05
+   ]
+  },
+  "MedicineHerbal": {
+   "kind": "item",
+   "def": "MedicineHerbal",
+   "size": [
+    0.24,
+    0.14,
+    0.08
+   ]
+  },
+  "Jade": {
+   "kind": "item",
+   "def": "Jade",
+   "size": [
+    0.25,
+    0.2,
+    0.12
+   ]
+  },
+  "SmokeleafJoint": {
+   "kind": "item",
+   "def": "SmokeleafJoint",
+   "size": [
+    0.11,
+    0.06,
+    0.02
+   ]
+  },
+  "PsychiteTea": {
+   "kind": "item",
+   "def": "PsychiteTea",
+   "size": [
+    0.08,
+    0.08,
+    0.22
+   ]
+  },
+  "Ambrosia": {
+   "kind": "item",
+   "def": "Ambrosia",
+   "size": [
+    0.18,
+    0.14,
+    0.09
+   ]
+  },
+  "PegLeg": {
+   "kind": "item",
+   "def": "PegLeg",
+   "size": [
+    0.55,
+    0.14,
+    0.14
+   ]
+  },
+  "InsectJelly": {
+   "kind": "item",
+   "def": "InsectJelly",
+   "size": [
+    0.18,
+    0.16,
+    0.07
+   ]
+  },
+  "Capybara": {
+   "kind": "creature"
+  },
+  "Iguana": {
+   "kind": "creature"
+  },
+  "Monkey": {
+   "kind": "creature"
+  },
+  "WildBoar": {
+   "kind": "creature"
+  },
+  "Cougar": {
+   "kind": "creature"
+  },
+  "Chicken": {
+   "kind": "creature"
   }
  },
  "buildings": [
@@ -2631,6 +2721,94 @@
     "fbx": "assets/raw/codex/ShipStructuralBeam/ShipStructuralBeam_JackFeet_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/ShipStructuralBeam",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Chocolate",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Chocolate",
+    "fbx": "assets/raw/codex/Chocolate/Chocolate_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Chocolate",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MedicineHerbal",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MedicineHerbal",
+    "fbx": "assets/raw/codex/MedicineHerbal/MedicineHerbal_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MedicineHerbal",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Jade",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Jade",
+    "fbx": "assets/raw/codex/Jade/Jade_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Jade",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SmokeleafJoint",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "SmokeleafJoint",
+    "fbx": "assets/raw/codex/SmokeleafJoint/SmokeleafJoint_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SmokeleafJoint",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PsychiteTea",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PsychiteTea",
+    "fbx": "assets/raw/codex/PsychiteTea/PsychiteTea_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PsychiteTea",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Ambrosia",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Ambrosia",
+    "fbx": "assets/raw/codex/Ambrosia/Ambrosia_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Ambrosia",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PegLeg",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PegLeg",
+    "fbx": "assets/raw/codex/PegLeg/PegLeg_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PegLeg",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "InsectJelly",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "InsectJelly",
+    "fbx": "assets/raw/codex/InsectJelly/InsectJelly_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/InsectJelly",
     "normalOpenGL": true
    }
   }

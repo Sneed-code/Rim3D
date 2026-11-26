@@ -197,7 +197,7 @@
       "inputs": ["assets/makehuman.json"],
       "after": ["creator-bodies"],
       "raw": ["game/Saved/MakeHuman"],
-      "makes": ["game/Content/Rim3D/Generated/MakeHuman"],
+      "makes": ["game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorFemale.uasset", "game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorMale.uasset", "game/Content/Rim3D/Generated/MakeHuman/Garments"],
       "run": [{"commandlet": "MakeHumanArt", "args": ["-nullrhi"]}]
     },
     {

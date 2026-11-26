@@ -14,6 +14,15 @@ by default (creator, random people, saved looks without the key). **Mugshots**: 
 patches (a faint scalp glow on the bob's crown). Known: the EthAsian/EthAfrican morphs carry MakeHuman's height change
 (head 11 cm down / 7 cm up at full, bones stay), a cleanup for a later creator-bodies run.
 
+Creator bodies safe from stopped updates, 14 new models (sneed, 2026-11-26; tools and data): the colony creator drew
+Unreal's grey dummy because `update-and-play` redid the MakeHuman import for nothing and it was stopped part way (the
+import clears its folder first). `tools/update.py` now stamps each art step with its fingerprint when it **finishes**
+(raw folders filled earlier in the same update no longer make steps look changed every time), never stamps a step that
+was interrupted (Ctrl+C or a closed window: it runs again next time), and `makehuman-bodies` lists the creator bodies
+in its `makes` (`docs/setup/update.md` "Stopping an update part way"). **Models**: Codex (medium) chocolate, herbal
+medicine, jade, smokeleaf joints, psychite tea, ambrosia, peg leg, insect jelly; Neon (high) rigged and animated
+capybara, iguana, monkey, wild boar, cougar and chicken, replacing their stand-ins (`assets/animal_art.json`).
+
 Ethnicities, face and body variety, live mocap faces (sneed, 2026-11-26; data, art steps and Unreal; built and filmed in a test copy, shots on branch claude/shots-faces-dt19nn): **ethnicity**
 (`docs/design/makehuman.md` "Ethnicity and more face and body shapes"): 15 presets (Northern, Western, Southern, Eastern
 European, Middle Eastern and North African, South Asian, Central Asian, East Asian, Southeast Asian, Pacific Islander,
