@@ -136,5 +136,53 @@ class Fingerprints(unittest.TestCase):
         self.assertNotEqual(a, b)
 
 
+class Running(unittest.TestCase):
+    """update.run_steps with the commands faked: what gets stamped."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.version = {"bodies": "after-blender"}
+        for name, fake in (("STATE_DIR", Path(self.tmp.name)), ("save_stamps", lambda stamps: None),
+                           ("fingerprint", lambda step, *a, **k: self.version.get(step["name"], step["name"] + "-v1"))):
+            old = getattr(update, name)
+            setattr(update, name, fake)
+            self.addCleanup(setattr, update, name, old)
+
+    def run_with(self, code):
+        update.run_logged = lambda cmd, log, cwd=None: code
+        steps = [{"name": "bodies", "run": [{"python": ["x.py"]}]}]
+        stamps = {}
+        decisions = [(steps[0], "run", "its inputs changed")]
+        return update.run_steps(steps, stamps, {"bodies": "before-blender"}, decisions, "", "", [], set()), stamps
+
+    def test_done_is_stamped_with_the_fingerprint_after_earlier_steps(self):
+        old = update.run_logged
+        self.addCleanup(setattr, update, "run_logged", old)
+        code, stamps = self.run_with(0)
+        self.assertEqual(code, 0)
+        # Not the fingerprint from the start of the update: Blender wrote into its raw folder since (2026-11-26 rerun).
+        self.assertEqual(stamps["bodies"]["done"], "after-blender")
+
+    def test_interrupted_step_is_not_stamped(self):
+        old = update.run_logged
+        self.addCleanup(setattr, update, "run_logged", old)
+        for interrupted in (0xC000013A, 130):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_with(interrupted)
+
+    def test_failed_step_is_stamped_failed(self):
+        old = update.run_logged
+        self.addCleanup(setattr, update, "run_logged", old)
+        code, stamps = self.run_with(1)
+        self.assertEqual(code, 1)
+        self.assertEqual(stamps["bodies"], {"failed": "after-blender"})
+
+    def test_creator_bodies_are_outputs(self):
+        step = next(s for s in update.load_steps() if s["name"] == "makehuman-bodies")
+        self.assertIn("game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorFemale.uasset", step["makes"])
+        self.assertIn("game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorMale.uasset", step["makes"])
+
+
 if __name__ == "__main__":
     unittest.main()
