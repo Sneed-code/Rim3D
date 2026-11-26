@@ -54,7 +54,7 @@ namespace
 		TEXT("the worn clothes; 0 nothing; 2 the body's own physics asset (stands proud of the skin, so it throws the hair out: for comparison)."));
 	TAutoConsoleVariable<int32> GStrandHairClothes(TEXT("Pawns.StrandHairClothes"), 1,
 		TEXT("1: the hair's collision shapes under worn clothes grow out to the cloth (and its puff), so hair lies on the clothes ")
-		TEXT("instead of through them. 0: they stay inside the skin (to compare)."));
+		TEXT("instead of through them. 0: they stay just outside the skin (to compare)."));
 	TAutoConsoleVariable<float> GStrandHairClothGap(TEXT("Pawns.StrandHairClothGap"), 0.3f,
 		TEXT("Strand hair: cm past the cloth's surface that its collision shapes reach (hair strands follow the guide strands ")
 		TEXT("that collide, give or take half a centimetre, so a little past the cloth keeps them all out of it)."));
@@ -85,7 +85,7 @@ namespace
 		TEXT("in, was fine (sneed 2026-11-25). The undercoat always draws all of its strands. 0: Unreal's pick everywhere."));
 
 	TAutoConsoleVariable<int32> GStrandHairDebug(TEXT("Pawns.StrandHairDebug"), 0,
-		TEXT("1: draw the shapes each strand-haired person's hair collides with (green inside the skin, yellow grown out to clothes)."));
+		TEXT("1: draw the shapes each strand-haired person's hair collides with (green just outside the skin, yellow grown out to clothes)."));
 
 	// Unreal's hair simulation reads at most 100 shapes from a physics asset (grow_hair.py keeps to 90).
 	constexpr int32 StrandHairMaxShapes = 96;
@@ -608,6 +608,26 @@ namespace
 		return Key;
 	}
 
+	/** One number for a body's head and face sliders (as the fit sees them), so its hair is fitted again when they move:
+	 *  a creator slider, a look set after the hair went on, anything that changes those morphs. */
+	uint32 StrandHairHeadKey(const USkeletalMeshComponent& Body, const USkeletalMesh* Base)
+	{
+		if (!Base)
+		{
+			return 0u;
+		}
+		FString BaseName = Base->GetName();
+		BaseName.RemoveFromStart(TEXT("SK_MH_"));
+		const FStrandHairHeadShape Shape = StrandHairHeadShapeOf(Body, StrandHairHeadFit(BaseName));
+		uint32 Key = 0x4ead0u;
+		for (int32 a = 0; a < 3; ++a)
+		{
+			Key = HashCombineFast(Key, GetTypeHash(FMath::RoundToInt32(Shape.Scale[a] * 500.0)));
+			Key = HashCombineFast(Key, GetTypeHash(FMath::RoundToInt32(Shape.Offset[a] * 10.0)));
+		}
+		return Key;
+	}
+
 	/** A garment's vertices in the reference pose (component space, cm), or empty if the mesh keeps no copy to read. */
 	const TArray<FVector3f>& StrandHairClothVertices(const USkeletalMesh& Mesh)
 	{
@@ -685,7 +705,7 @@ namespace
 	}
 
 	/** What grown hair collides with on a body of this mesh wearing these clothes: a physics asset of grow_hair.py's
-	 *  shapes inside the skin (spheres and capsules), each on the bone of its part (head, neck_01, a named bone, or for
+	 *  shapes just outside the skin (spheres and capsules), each on the bone of its part (head, neck_01, a named bone, or for
 	 *  "torso" the spine bone nearest it), so the hair rests where it was grown and is only pushed back when it swings into
 	 *  the body or the body moves into it. Shapes under worn clothes grow out to just past the cloth (sneed 2026-11-22:
 	 *  hair through the shirt), so the hair lies on the clothes. Made once per mesh and outfit. */
@@ -919,7 +939,7 @@ namespace
 			Placed += StrandHairAddBreasts(Mesh, *Asset, Bodies, BreastScale, bClothes && ClothRead > 0, Cloth, GapCm);
 		}
 		Asset->UpdateBodySetupIndexMap();
-		UE_LOG(LogTemp, Display, TEXT("STRANDHAIR collision for %s: %d shapes inside the skin on %d bones; %d garments worn (%d read), %d shapes grown out to the clothes by %.1f cm on average%s"),
+		UE_LOG(LogTemp, Display, TEXT("STRANDHAIR collision for %s: %d shapes just outside the skin on %d bones; %d garments worn (%d read), %d shapes grown out to the clothes by %.1f cm on average%s"),
 			*Mesh.GetName(), Placed, Bodies.Num(), Cloth.Num(), ClothRead, Grown, Grown > 0 ? GrownCm / Grown : 0.0f,
 			bClothes && ClothRead < Cloth.Num() ? TEXT(" (a garment keeps no copy of its vertices: the hair can pass into it)") : TEXT(""));
 		Made.Add(Key, Asset);
@@ -989,7 +1009,7 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit, StrandHairWornCloth(*Body), BreastScale, HeadShape);
 		}
 		static int32 Logged = 0;
-		if (HeadShape.LiftMm > 0.0f && Logged < 20)
+		if ((HeadShape.LiftMm > 0.0f || !HeadShape.Scale.Equals(FVector::OneVector, 1.0e-3)) && Logged < 20)
 		{
 			++Logged;
 			UE_LOG(LogTemp, Display, TEXT("STRANDHAIR head sliders on %s: hair scale %s, moved %s cm, lifted for %.1f mm of skin no scale follows"),
@@ -1178,6 +1198,7 @@ void UStrandHairSubsystem::Show(FWearer& Wearer, bool bStrands)
 		UGroomComponent* Strands = StrandHairAttachGrown(Body, Wearer.Groom.Get(), Wearer.Base.Get(), Wearer.Strands.Get());
 		Wearer.Strands = Strands;
 		Wearer.ClothKey = StrandHairClothKey(StrandHairWornCloth(*Body));  // the outfit its collision was made for
+		Wearer.HeadKey = StrandHairHeadKey(*Body, Wearer.Base.Get());  // the sliders it was fitted to
 		if (!Strands)
 		{
 			bStrands = false;
@@ -1285,7 +1306,9 @@ void UStrandHairSubsystem::Tick(float DeltaTime)
 	// Clothes put on or taken off: the strands' collision is remade for the new outfit (hair lies on the clothes).
 	for (FWearer& Wearer : Wearers)
 	{
-		if (Wearer.bStrands && StrandHairClothKey(StrandHairWornCloth(*Wearer.Body.Get())) != Wearer.ClothKey)
+		// The same for head and face sliders moved after the hair went on (the creator's, or a look set later).
+		if (Wearer.bStrands && (StrandHairClothKey(StrandHairWornCloth(*Wearer.Body.Get())) != Wearer.ClothKey ||
+			StrandHairHeadKey(*Wearer.Body.Get(), Wearer.Base.Get()) != Wearer.HeadKey))
 		{
 			Show(Wearer, true);
 		}

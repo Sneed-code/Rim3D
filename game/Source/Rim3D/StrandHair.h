@@ -102,6 +102,7 @@ private:
 		TArray<int32> WigSections;
 		bool bStrands = false;
 		uint32 ClothKey = 0;  // the outfit (garments and puff) the strands' collision was made for
+		uint32 HeadKey = 0;  // the head and face sliders the strands were fitted to
 		float LastYaw = 0.0f;  // the body's facing last tick (degrees), for Pawns.StrandHairTurnHold
 		bool bHaveYaw = false;
 		float TurnHold = 0.0f;  // seconds the hair is still held at rest after a fast turn
