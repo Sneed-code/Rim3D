@@ -240,7 +240,10 @@ try:
         dump_vertices([o for o in export if o != rig], cfg["dump_vertices"], log=log)
         sys.exit(0)
     if cfg.get("morphs"):
-        add_morphs([o for o in export if o != rig], cfg["morphs"], log=log)
+        # The character's left: one-sided morphs (mh_creator "side") keep their change on one side of the middle line.
+        thigh = rig.data.bones.get("thigh_l")
+        left_sign = 1.0 if thigh is None or thigh.head_local.x >= 0 else -1.0
+        add_morphs([o for o in export if o != rig], cfg["morphs"], left_sign=left_sign, log=log)
     # tools/makehuman/mh_garments.py: only the garments are written (the body's own export stays as mh_creator made it).
     if cfg.get("garments_only"):
         garments_out = cfg.get("garments_out") or os.path.join(os.path.dirname(cfg["out"]), "Garments")

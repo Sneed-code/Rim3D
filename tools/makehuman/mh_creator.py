@@ -32,6 +32,10 @@ def merge(base, change):
     return out
 
 
+def morph_file(value):
+    return value["path"] if isinstance(value, dict) else value
+
+
 def run(cfg, work, label):
     path = os.path.join(work, label + ".json")
     with open(path, "w", encoding="utf-8") as f:
@@ -73,7 +77,13 @@ def main():
             if not (reuse and os.path.exists(cfg["pubic_layout"])):
                 run(first, work, "_layout")
         morphs = {}
+        sided = {}
         for name, change in base["morphs"].items():
+            # A one-sided morph ({"from": "<morph>", "side": "l" or "r"}) reuses another morph's build and keeps its change
+            # on one side of the face (mh_common.add_morphs): left and right mouth units for facial capture.
+            if "from" in change:
+                sided[name] = change
+                continue
             variant = merge(cfg, change)
             variant["out"] = os.path.join(work, name, name + ".fbx")   # its skin copies stay out of the way
             variant["dump_vertices"] = os.path.join(work, name + ".npz")
@@ -81,6 +91,8 @@ def main():
             if not (reuse and os.path.exists(variant["dump_vertices"])):
                 run(variant, work, name)
             morphs[name] = variant["dump_vertices"]
+        for name, change in sided.items():
+            morphs[name] = {"path": morph_file(morphs[change["from"]]), "side": change["side"]}
         cfg["morphs"] = morphs
         run(cfg, work, base["name"])
         # The 4K skin beside it, for the creator's switch (skin_4k.py).

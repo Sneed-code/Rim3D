@@ -206,6 +206,53 @@ work on every face; at the far ends of eye size an eye may not close fully on a 
 70% of MakeHuman's target. The strand hair follows any head: `grow_hair.py` measures every slider that moves the skull
 (`head_morphs` in grooms.json), these included. People from earlier games (a seed in their look) get their random face too.
 
+## Ethnicity and more face and body shapes (sneed 2026-11-26)
+
+"Add all the ethnicities and all the diversity of body faces types etc so we have heaps ... a picked ethnicity? and or
+slide". One system for the game, the colony creator and the Debug creator (`SmokeTestCreator.cpp`, `CreatorPeople`):
+
+- **Ethnic base shapes.** MakeHuman's own African, Asian and European macro sliders, as the morphs `EthAfrican` and
+  `EthAsian` on both creator bases (`creator.json`; European is what is left). They reshape the whole head and body the
+  way MakeHuman's population data does. In the colony creator they are the "African features" and "East Asian features"
+  sliders (look values `ethAfrican`, `ethAsian`, 0 .. 1).
+- **24 more shape sliders** (25 face, 10 build in all with the first 12): face length, forehead, brow ridge, eye tilt,
+  eyelids (hooded, the epicanthic fold), deep-set eyes, nose tip, nose projection, nostrils, cheeks, jaw jut, ears and
+  ears sticking out; neck, shoulders, chest, waist, hips, belly, bottom, thighs, calves and arms. Each is a
+  `Shape<Part>Lo/Hi` pair from MakeHuman's own modelling targets; none moves a joint (the skeleton is fitted to the base).
+  The clothes are fitted to each body morph (`mh_garments.py` builds them all) and the hair to each head one.
+- **Ethnicity presets** (`CreatorEthnicities`): Northern, Western, Southern and Eastern European, Middle Eastern and North
+  African, South Asian, Central Asian, East Asian, Southeast Asian, Pacific Islander, Indigenous American, West, East and
+  Southern African, Melanesian and Aboriginal Australian, and Mixed (two of them, half each). A preset is the base-shape
+  blend, the face and build sliders' average for those people, a skin tone range on the shared skin ramp (fair to deep,
+  now reaching a deeper brown) with an undertone (pink, olive, golden, warm, red), how common each natural hair and eye
+  colour is, how often the hair is an afro, and a height and weight lean. Picking one gives the person its base shape,
+  colouring and a face and build of their own round its average; "Another face of these people" draws again; every slider
+  then fine-tunes. Broad averages only: people vary well beyond them.
+- **Random people** (`CreatorRandomize`) are drawn from every preset, weighted towards fair skin (about half European, the
+  standing look rule), one in 33 mixed, and get eye colours too (before, everyone had the base's green eyes).
+
+## Breast jiggle by size (sneed 2026-11-26)
+
+"Larger breasts need to jiggle more proportionate to size": `UMakeHumanAnimInstance::SetBreastSize` takes the breast
+slider and the body's weight as the breasts' mass (about 0.35 to 2.6 times the default's, doubling per +0.83 on the
+slider). The same tissue with more mass on it: the spring's stiffness divides by the mass (lower, slower bounce), the
+damping by its square root (the same share of critical damping, so heavy breasts settle a little slower) and the farthest
+it sways grows with mass^0.6 (up to 11 cm). Small breasts move quick and tight, men's barely. On top of the creator's
+Breast jiggle (looseness) slider.
+
+## Skin realism (sneed 2026-11-26)
+
+The question was whether skin can be made drastically more photoreal easily. Already in: the MetaHumans' subsurface
+profile (light scattering under the skin), a 4K colour map with pores and mottling, a normal map from the colour's detail,
+the MetaHumans' tiled micro-normal for pores close up, a roughness map, wrinkle maps driven by the face and wetness.
+The limit is the source: MakeHuman's skins are painted 2K textures, not scans, so pores, fine veins, freckles and real
+colour variation are faked. Quick wins added now: subsurface scattering at full resolution and quality (no half-res or
+checkerboard: `r.SSS.*` in DefaultEngine.ini); per person a sheen that follows the skin tone (deeper skin gets a stronger,
+tighter specular, as melanin-rich skin has), its own oiliness, and older skin shows its pores more (`MicroStrength`).
+The big step would be scanned skin: project a free photoscanned head and body's colour, normal and specular maps onto
+MakeHuman's texture layout in Blender (a few sittings), with separate textures per skin tone, plus a cavity map and
+peach fuzz; MetaHuman level everywhere is beyond what MakeHuman's mesh and UVs allow.
+
 ## Eyes, wrinkles, brows and lashes
 
 `M_MH_Eye` (MakeHumanArt, for the eye slots): glossy wet surface, the iris set back behind the cornea by parallax
