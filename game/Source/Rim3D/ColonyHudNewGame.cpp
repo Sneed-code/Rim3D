@@ -1878,7 +1878,7 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
 	NgLabel(TEXT("Body hair below"));
 	static const TCHAR* const PubicNames[] = {TEXT("None"), TEXT("Natural"), TEXT("Trimmed"), TEXT("Shaved")};
-	const int32 Pubic = FMath::RoundToInt(Full.Get(TEXT("pubic"), 1.0f));
+	const int32 Pubic = FMath::RoundToInt(Full.Get(TEXT("pubic"), 0.0f));
 	const float Quarter = (ImGui::GetContentRegionAvail().x - Gap * 3.0f) / 4.0f;
 	for (int32 i = 0; i < 4; ++i)
 	{
