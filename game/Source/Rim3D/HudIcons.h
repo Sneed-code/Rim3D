@@ -21,7 +21,8 @@ namespace HudIcons
 	void Draw(ImDrawList* Draw, UTexture* Icon, const ImVec2& Centre, float Size, bool bDim = false);
 
 	/**
-	 * A ColonyHud::Button with the icon at its left and the label after it, the two centred together. The label may carry
+	 * A ColonyHud::Button with the icon a small pad from its left edge and the label right after it (snug, no centring
+	 * gap). The label may carry
 	 * an ImGui "##id" suffix; only the part before it is shown. With no icon it is a plain ColonyHud::Button.
 	 */
 	bool Button(UTexture* Icon, const FString& Label, bool bActive, const ImVec2& Size);

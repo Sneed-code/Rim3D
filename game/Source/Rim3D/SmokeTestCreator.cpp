@@ -1093,6 +1093,34 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorFocusZ="), State->FocusOffset.Z);
 		State->b4KSkin = !FParse::Param(FCommandLine::Get(), TEXT("Creator2K"));  // 4K by default (sneed 2026-11-23)
+		// -CreatorFaceShape=Brow:1,HeadWidth:-1 (CreatorFaceShapes by morph name without "Shape", -1 .. 1) on everyone, for
+		// pictures of the hair on a changed head (sneed 2026-11-25: high brows put skin through the hair).
+		FString FaceShapeArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorFaceShape="), FaceShapeArg, false))
+		{
+			TArray<FString> FaceShapePairs;
+			FaceShapeArg.ParseIntoArray(FaceShapePairs, TEXT(","));
+			for (const FString& Pair : FaceShapePairs)
+			{
+				FString PartName;
+				FString PartValue;
+				if (!Pair.Split(TEXT(":"), &PartName, &PartValue))
+				{
+					continue;
+				}
+				for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+				{
+					if (FString(CreatorFaceShapes[f].Morph).Equals(TEXT("Shape") + PartName, ESearchCase::IgnoreCase))
+					{
+						for (FCreatorPerson& FacePerson : State->People)
+						{
+							FacePerson.FaceShape[f] = FMath::Clamp(FCString::Atof(*PartValue), -1.0f, 1.0f);
+						}
+						UE_LOG(LogTemp, Display, TEXT("creator: face shape %s %s on everyone"), CreatorFaceShapes[f].Morph, *PartValue);
+					}
+				}
+			}
+		}
 		// -CreatorJewels=0,3,7 (indices into CreatorJewels) for pictures; -CreatorMetal=<0-5>.
 		FString JewelArg;
 		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorJewels="), JewelArg, false))
@@ -2215,6 +2243,18 @@ FSimPawnLooks CreatorPeople::DefaultLooks(bool bFemale, const FSimPawnLooks& Fro
 	return Looks;
 }
 
+namespace
+{
+	/** Whether the people the game and the colony creator dress wear the 4K skin (Pawns.Skin4K, on by default; sneed
+	 *  2026-11-23). These applies passed "2K", so every look applied put the 2K skin back over the 4K one the pawn had just
+	 *  been given (sneed 2026-11-25: "the colony maker make humans are all 4k textures?"). */
+	bool CreatorPeopleWant4K()
+	{
+		static IConsoleVariable* Skin4K = IConsoleManager::Get().FindConsoleVariable(TEXT("Pawns.Skin4K"));
+		return !Skin4K || Skin4K->GetInt() != 0;
+	}
+}
+
 bool CreatorPeople::ApplyDefault(bool bFemale, ASimPawnActor& Pawn)
 {
 	FCreatorPerson Person;
@@ -2226,7 +2266,7 @@ bool CreatorPeople::ApplyDefault(bool bFemale, ASimPawnActor& Pawn)
 		return false;
 	}
 	Person.bBlink = false;
-	CreatorApply(Person, Pawn, false);
+	CreatorApply(Person, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 
@@ -2238,7 +2278,7 @@ bool CreatorPeople::ApplyRandom(int32 Seed, bool bFemale, ASimPawnActor& Pawn)
 		return false;
 	}
 	Person.bBlink = false;
-	CreatorApply(Person, Pawn, false);
+	CreatorApply(Person, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 
@@ -2464,7 +2504,7 @@ bool CreatorPeople::Apply(const FLook& Look, ASimPawnActor& Pawn)
 	{
 		return false;
 	}
-	CreatorApply(P, Pawn, false);
+	CreatorApply(P, Pawn, CreatorPeopleWant4K());
 	return true;
 }
 

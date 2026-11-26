@@ -2,6 +2,17 @@
 
 Updated 2026-11-25.
 
+Hair clipping for good, 4K skins, snug HUD buttons (sneed, 2026-11-25; art steps and Unreal): **hair** (`docs/design/hair-physics.md` "One barrier, for good"):
+the collision shapes now reach just **out** of the skin (head 1 mm, back 6 mm) instead of 1.5 to 4 mm inside it, with
+26 spheres on the head (hair could sink 3.8 mm into the scalp and 6.6 mm into the back, median; now 0.9 mm and none), every
+guide strand is 2 mm thick to the collision root to tip (Unreal's default thinned to 0.1 mm at the tips: the shoulder
+blades), the guides are the innermost strand of each patch (written by `grow_hair.py`, so no drawn strand lies under its
+guide), the hair is grown clear of the shapes, head and face sliders move the hair per axis with a lift for what no scale
+follows (head width put the sides 7 mm through the hair, the brow slider the forehead 3 mm) and the head's spheres move
+with it, and the hair feels 30% of the body's starts and stops (`Pawns.StrandHairInertia`; turning in full). **4K skins**:
+the game and colony creator put the 2K skin back whenever they applied a look; everyone wears 4K now. **HUD buttons**:
+icon and label sit snug from the left edge of each button, with the bar tabs as narrow as their longest label needs.
+
 Hair game-wide, face variety, HUD bar and punches (sneed, 2026-11-25 evening; sim, data, art steps and Unreal): **hair**
 in the colony creator and in game showed the scalp although the Debug creator was fine: further than arm's length Unreal
 dropped the groom to its second LOD (a third of the strands). Now everyone within `Pawns.StrandHairFullDetail` (8 m) draws
