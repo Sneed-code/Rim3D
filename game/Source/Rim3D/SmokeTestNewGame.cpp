@@ -310,7 +310,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 			return;
 		}
 		CreatorPeople::ApplyEthnicity(Look, Picked);
-		Hud()->SubmitPeopleLook(People[0], 0, Look);
+		Hud()->SubmitPeopleLookForTest(People[0], 0, Look);
 		Hud()->SetPeopleOrbitForTest(35.0f);
 		UE_LOG(LogTemp, Display, TEXT("NEWGAME dark skin: you as %s"), *CreatorPeople::EthnicityLabel(Picked));
 	};
@@ -326,7 +326,7 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		CreatorPeople::FLook Back;
 		if (!People.empty() && !State->YourLook.empty() && CreatorPeople::Decode(UTF8_TO_TCHAR(State->YourLook.c_str()), Back))
 		{
-			Hud()->SubmitPeopleLook(People[0], 0, Back);  // the default woman again for the pages after
+			Hud()->SubmitPeopleLookForTest(People[0], 0, Back);  // the default woman again for the pages after
 		}
 		State->YourLook.clear();
 	};
