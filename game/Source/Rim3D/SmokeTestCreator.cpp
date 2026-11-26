@@ -268,7 +268,7 @@ namespace
 	 */
 	// Skin, fair (0) to deep (1), sRGB: the colony creator's skin slider runs along the same colours (NgSkinSwatches).
 	const float CreatorSkinRamp[][3] = {{0.96f, 0.86f, 0.80f}, {0.91f, 0.80f, 0.75f}, {0.86f, 0.72f, 0.62f}, {0.78f, 0.62f, 0.50f},
-		{0.64f, 0.47f, 0.36f}, {0.48f, 0.34f, 0.25f}, {0.33f, 0.23f, 0.17f}, {0.24f, 0.165f, 0.12f}};
+		{0.64f, 0.47f, 0.36f}, {0.48f, 0.34f, 0.25f}, {0.33f, 0.23f, 0.17f}, {0.27f, 0.185f, 0.135f}};
 	// Natural hair (sRGB): black, dark brown, brown, light brown, blond, auburn, red, platinum blond.
 	const float CreatorHairPalette[][3] = {{0.07f, 0.06f, 0.055f}, {0.17f, 0.11f, 0.07f}, {0.32f, 0.22f, 0.14f}, {0.48f, 0.36f, 0.24f},
 		{0.78f, 0.66f, 0.45f}, {0.45f, 0.20f, 0.10f}, {0.62f, 0.27f, 0.12f}, {0.88f, 0.80f, 0.62f}};
@@ -300,7 +300,7 @@ namespace
 	const TArray<FCreatorEthnicity>& CreatorEthnicities()
 	{
 		static const TArray<FCreatorEthnicity> List = {
-			{"Northern European", 0.0f, 0.0f, 0.0f, 0.14f, ECreatorUndertone::Pink, {4, 10, 20, 24, 26, 4, 8, 4}, {16, 4, 10, 13, 42, 15}, 0.0f, 1.03f, 0.0f,
+			{"Northern European", 0.0f, 0.0f, 0.03f, 0.16f, ECreatorUndertone::Pink, {4, 10, 20, 24, 26, 4, 8, 4}, {16, 4, 10, 13, 42, 15}, 0.0f, 1.03f, 0.0f,
 				{{TEXT("faceHeadHeight"), 0.25f}, {TEXT("faceNoseLength"), 0.2f}, {TEXT("faceNoseDepth"), 0.2f}, {TEXT("faceEyeDepth"), 0.25f}, {TEXT("faceLips"), -0.2f}, {TEXT("faceJaw"), 0.15f}}, 13.0f},
 			{"Western European", 0.0f, 0.0f, 0.03f, 0.24f, ECreatorUndertone::Neutral, {8, 22, 30, 18, 12, 4, 4, 2}, {24, 16, 16, 12, 24, 8}, 0.0f, 1.0f, 0.0f,
 				{{TEXT("faceNoseBridge"), 0.15f}, {TEXT("faceNoseDepth"), 0.15f}, {TEXT("faceEyeDepth"), 0.15f}}, 15.0f},
@@ -348,7 +348,7 @@ namespace
 		}
 		switch (Undertone)
 		{
-		case ECreatorUndertone::Pink: Out[0] *= 1.0f; Out[1] *= 0.985f; Out[2] *= 1.01f; break;
+		case ECreatorUndertone::Pink: Out[0] *= 1.0f; Out[1] *= 0.98f; Out[2] *= 0.97f; break;
 		case ECreatorUndertone::Olive: Out[0] *= 0.975f; Out[1] *= 1.0f; Out[2] *= 0.93f; break;
 		case ECreatorUndertone::Golden: Out[0] *= 0.99f; Out[1] *= 1.005f; Out[2] *= 0.9f; break;
 		case ECreatorUndertone::Warm: Out[0] *= 1.02f; Out[1] *= 0.99f; Out[2] *= 0.94f; break;
@@ -475,7 +475,7 @@ namespace
 				const int32 f = CreatorShapeIndex(Shape.Key);
 				if (f != INDEX_NONE)
 				{
-					Mean[f] += Shape.Value * Share;
+					Mean[f] += Shape.Value * Share * 1.35f;  // first pictures: the peoples' faces too alike
 				}
 			}
 		}

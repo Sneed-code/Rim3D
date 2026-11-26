@@ -2,7 +2,7 @@
 
 Updated 2026-11-26.
 
-Ethnicities, face and body variety, live mocap faces (sneed, 2026-11-26; data, art steps and Unreal): **ethnicity**
+Ethnicities, face and body variety, live mocap faces (sneed, 2026-11-26; data, art steps and Unreal; built and filmed in a test copy, shots on branch claude/shots-faces-dt19nn): **ethnicity**
 (`docs/design/makehuman.md` "Ethnicity and more face and body shapes"): 15 presets (Northern, Western, Southern, Eastern
 European, Middle Eastern and North African, South Asian, Central Asian, East Asian, Southeast Asian, Pacific Islander,
 Indigenous American, West, East, Southern African, Melanesian and Aboriginal Australian) plus Mixed, each MakeHuman's own
