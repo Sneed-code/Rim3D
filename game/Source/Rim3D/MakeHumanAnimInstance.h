@@ -286,6 +286,16 @@ public:
 	bool IsSoftTissueEnabled() const { return GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.bEnabled; }
 	/** Breast jiggle, 0 (the default: firm, a small lag) to 1 (softer, looser and bouncier, still damped). */
 	void SetBreastJiggle(float Amount);
+	/** How big the breasts are (the creator's breast slider, -1 small .. 1 large, with the body's weight -1 .. 1 adding a
+	 *  little): bigger breasts are heavier, so they swing lower, slower and further (sneed 2026-11-26: "larger breasts need
+	 *  to jiggle more proportionate to size"); small ones hardly move. On top of SetBreastJiggle's looseness. */
+	void SetBreastSize(float Size, float Weight = 0.0f);
+	/** The breasts' spring now (for the tests): stiffness (1/s^2) and the farthest they lag (cm). */
+	FVector2f GetBreastSpring() const;
+	/** The breast spring for a looseness (0 .. 1) and mass (1 the default body's). */
+	static void BreastSpringFor(float Looseness, float Mass, float& OutStiffness, float& OutDamping, float& OutRoom);
+	float GetBreastLooseness() const { return BreastLooseness; }
+	float GetBreastMass() const { return BreastMass; }
 	/** How much tail the body shows (0 none, the default: the tail bones stay still .. 1 a full tail that swishes). */
 	void SetTailAmount(float Amount);
 	/** How soft the body's flesh is, from the creator's sliders (Weight -1 thin .. 1 heavy, Muscle -1 soft .. 1
@@ -354,6 +364,9 @@ private:
 	TObjectPtr<UIKRetargeter> Retargeter;
 	TArray<FName> SeveredBones;
 	float BodySoftness = 0.5f;
+	float BreastLooseness = 0.0f;  // SetBreastJiggle
+	float BreastMass = 1.0f;       // SetBreastSize: the breasts' mass against the default body's (about 0.35 .. 2.6)
+	void ApplyBreastSpring();
 
 	/** A dent in the skin where a hit landed (M_MH_SkinDetail's SkinDent, custom primitive data 16 to 25): pushed in along
 	 *  the skin's normal round a point that rides on the nearest bone, then springing back past flat and settling. */

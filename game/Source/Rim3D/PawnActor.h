@@ -7,6 +7,7 @@
 #include "MeleePose.h"
 #include "PawnAnimInstance.h"
 #include "PawnSubsystem.h"
+#include "PawnFaceMocap.h"
 
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
@@ -563,6 +564,23 @@ private:
 	FVector4f FaceBaseWrinkles = FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
 	TWeakObjectPtr<USkeletalMeshComponent> FaceBaseMesh;
 	int32 PainFacesShown = 0;
+	// Live faces (docs/design/faces-mocap.md): facial capture played on the MakeHuman face by the sim's mood, talk,
+	// breaks, fights, pain, sleep and death, near the camera; the fight faces go on top.
+	void UpdateLiveFace(const colony::ThingView& Now, float GameDelta);
+	FPawnFacePlayer LiveFace;
+	FRandomStream LiveFaceRandom;
+	TMap<FName, float> LiveFaceSet;   // what it set last, to clear what is no longer driven
+	bool bLiveFaceActive = false;
+	bool bLiveFaceEnabled = true;
+	FName LiveFaceEmotion;            // the creator's pick, else none (the sim decides)
+	bool bLiveFaceTalk = false;
+public:
+	/** Live faces on or off for this pawn (the Debug creator drives its own faces unless asked), and an emotion to show
+	 *  instead of the sim's (none: the sim's), talking or not. */
+	void SetLiveFace(bool bEnabled, FName Emotion = NAME_None, bool bTalk = false) { bLiveFaceEnabled = bEnabled; LiveFaceEmotion = Emotion; bLiveFaceTalk = bTalk; }
+	bool IsLiveFaceActive() const { return bLiveFaceActive; }
+	const FPawnFacePlayer& GetLiveFace() const { return LiveFace; }
+private:
 	int32 ZoneKicks = 0;
 	ESimPawnZone LastKickZone = ESimPawnZone::Torso;
 	float HurtAge = 1.0f;

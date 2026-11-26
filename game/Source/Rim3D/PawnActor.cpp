@@ -20,6 +20,8 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GroomAsset.h"
 #include "HAL/IConsoleManager.h"
 #include "GroomBindingAsset.h"
@@ -49,6 +51,10 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> GPawnLiveFace(TEXT("Pawns.LiveFace"), 1,
+		TEXT("1 plays facial capture on MakeHuman faces near the camera (docs/design/faces-mocap.md), 0 still faces."), ECVF_Default);
+	TAutoConsoleVariable<float> GPawnLiveFaceMetres(TEXT("Pawns.LiveFaceMetres"), 15.0f,
+		TEXT("How near the camera (metres) a face plays its facial capture."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnSkin4K(TEXT("Pawns.Skin4K"), 1,
 		TEXT("1: MakeHuman people wear their 4K skin (the creator's) instead of the mesh's own 2K one (on the next look change)."), ECVF_Default);
 	TAutoConsoleVariable<int32> GPawnsHairCards(
@@ -480,6 +486,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	SetActorLocationAndRotation(Location, FRotator(0.0, DrawnYaw + PreviewSpin, 0.0));
 	ApplySevered(Now.severed);
 	UpdateFightFace(Bridge, Now, DeltaTime * Speed);
+	UpdateLiveFace(Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
 		if (Now.downed && !Now.dead)
@@ -966,6 +973,15 @@ void ASimPawnActor::ApplyMakeHuman(USimPawnSubsystem& Pawns)
 		GarmentCoverBits = 0;
 		SetMakeHumanCoverBits(0);
 		bApparelApplied = false;
+		// The old body's material overrides and hidden sections stay on the component across a mesh change, slot by slot
+		// (sneed 2026-11-26: "when i switch genders the eyes disappear"): the woman's hidden hair slot is the man's eye
+		// slot, so his eyes stayed hidden, and her hair's own material landed on another of his slots. A new body starts
+		// clean; the looks put the right ones on again.
+		MakeHumanMesh->EmptyOverrideMaterials();
+		for (int32 Lod = 0; Lod < MakeHumanMesh->LODInfo.Num(); ++Lod)
+		{
+			MakeHumanMesh->ShowAllMaterialSections(Lod);
+		}
 	}
 	MakeHumanMesh->SetSkeletalMeshAsset(Mesh);
 	// Everyone wears the 4K skin (sneed 2026-11-23: "default all pawns to 4k skin textures ... the one on the character
@@ -1892,10 +1908,156 @@ void ASimPawnActor::UpdateFightFace(const USimSubsystem& Bridge, const colony::T
 	const float OldAngry = AngryFace;
 	PainFace = FMath::Clamp(PainFace + FMath::Clamp(PainWanted - PainFace, -PainRate, PainRate), 0.0f, 1.0f);
 	AngryFace = FMath::Clamp(AngryFace + FMath::Clamp(AngryWanted - AngryFace, -AngryRate, AngryRate), 0.0f, 1.0f);
-	if (PainFace != OldPain || AngryFace != OldAngry || (FaceBaseMesh.Get() != MakeHumanMesh.Get() && (PainFace > 0.0f || AngryFace > 0.0f)))
+	if (!bLiveFaceActive && (PainFace != OldPain || AngryFace != OldAngry || (FaceBaseMesh.Get() != MakeHumanMesh.Get() && (PainFace > 0.0f || AngryFace > 0.0f))))
 	{
 		ApplyFightFace();
 	}
+}
+
+void ASimPawnActor::UpdateLiveFace(const colony::ThingView& Now, float GameDelta)
+{
+	USkeletalMeshComponent* Mesh = MakeHumanMesh.Get();
+	const FPawnFaceMocapLibrary& Library = FPawnFaceMocapLibrary::Get();
+	bool bWanted = bLiveFaceEnabled && GPawnLiveFace.GetValueOnGameThread() != 0 && Mesh && Mesh->GetSkeletalMeshAsset() && Library.IsLoaded();
+	if (bWanted)
+	{
+		const APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+		if (Controller && Controller->PlayerCameraManager)
+		{
+			const double Reach = FMath::Max(1.0f, GPawnLiveFaceMetres.GetValueOnGameThread()) * 100.0;
+			bWanted = FVector::DistSquared(Controller->PlayerCameraManager->GetCameraLocation(), Mesh->GetComponentLocation()) < Reach * Reach;
+		}
+	}
+	if (!bWanted)
+	{
+		if (bLiveFaceActive && Mesh)
+		{
+			// Back to its own still face: what the capture moved goes back to 0, and the fight faces take over again.
+			for (const TPair<FName, float>& Morph : LiveFaceSet)
+			{
+				Mesh->SetMorphTarget(Morph.Key, 0.0f, false);
+			}
+			Mesh->SetCustomPrimitiveDataVector4(8, FVector4(0.0, 0.0, 0.0, 0.0));
+			FaceBase.Reset();
+			FaceBaseMesh = nullptr;
+			if (PainFace > 0.0f || AngryFace > 0.0f)
+			{
+				ApplyFightFace();
+			}
+		}
+		LiveFaceSet.Reset();
+		bLiveFaceActive = false;
+		return;
+	}
+	if (!bLiveFaceActive)
+	{
+		LiveFaceRandom.Initialize(static_cast<int32>(FCrc::StrCrc32(*GetName())));
+	}
+	bLiveFaceActive = true;
+	const float Delta = FMath::Clamp(GameDelta, 0.0f, 0.1f);
+	TMap<FName, float> Face;
+	if (Now.dead)
+	{
+		// Dead: slack, the lids half down, the jaw dropped a little. No capture.
+		Face.Add(TEXT("Face_EyeLeftClosure"), 0.55f);
+		Face.Add(TEXT("Face_EyeRightClosure"), 0.55f);
+		Face.Add(TEXT("Face_MouthOpen"), 0.14f);
+	}
+	else if (Now.asleep || (Now.downed && !Now.downedAwake))
+	{
+		// Asleep or knocked out: eyes shut, lips just apart.
+		Face.Add(TEXT("Face_EyeLeftClosure"), 1.0f);
+		Face.Add(TEXT("Face_EyeRightClosure"), 1.0f);
+		Face.Add(TEXT("Face_MouthOpen"), 0.04f);
+	}
+	else
+	{
+		// The emotion the sim gives them, strongest first: a break or a fight, pain or fear, a talk, their mood.
+		FName Emotion = TEXT("neutral");
+		bool bTalking = false;
+		float Amount = 1.0f;
+		const bool bTalk = Now.talkDef.valid() && Now.talkSecondsLeft > 0;
+		if (!LiveFaceEmotion.IsNone())
+		{
+			Emotion = LiveFaceEmotion;
+			bTalking = bLiveFaceTalk;
+		}
+		else if (Now.mentalBreak.valid() || Now.socialFight || AngryFace > 0.0f)
+		{
+			Emotion = TEXT("anger");
+			bTalking = Now.socialFight || bTalk;
+		}
+		else if (Now.downedAwake || PainFace > 0.0f || Now.pain > 0.45f)
+		{
+			Emotion = TEXT("fear");
+			bTalking = Now.downedAwake;  // moaning and begging
+		}
+		else if (bTalk)
+		{
+			bTalking = true;
+			Emotion = !Now.talkOk ? TEXT("contempt") : (Now.mood > 70.0f ? TEXT("happiness") : (Now.mood >= 0.0f && Now.mood < 25.0f ? TEXT("sadness") : TEXT("neutral")));
+		}
+		else if (Now.mood >= 0.0f && (Now.mood < 25.0f || Now.moodBand >= 2))
+		{
+			Emotion = TEXT("sadness");
+			Amount = 0.8f;
+		}
+		else if (Now.mood > 75.0f)
+		{
+			Emotion = TEXT("happiness");
+			Amount = 0.7f;
+		}
+		LiveFace.Tick(Delta, Emotion, bTalking, LiveFaceRandom);
+		LiveFace.AddMorphs(Face, Amount);
+	}
+	// The fight faces on top (pain wins over anger), with the capture under them turned down as they come in.
+	const float Pain = PainFace;
+	const float Angry = AngryFace * (1.0f - PainFace);
+	const float Fight = FMath::Max(Pain, Angry);
+	if (Fight > 0.0f)
+	{
+		for (TPair<FName, float>& Morph : Face)
+		{
+			Morph.Value *= 1.0f - 0.6f * Fight;
+		}
+		for (const FPawnExpressionUnit& Unit : PawnExpressionPain)
+		{
+			Face.FindOrAdd(Unit.Morph) += Unit.Weight * Pain;
+		}
+		for (const FPawnExpressionUnit& Unit : PawnExpressionAngry)
+		{
+			Face.FindOrAdd(Unit.Morph) += Unit.Weight * Angry;
+		}
+	}
+	for (TPair<FName, float>& Last : LiveFaceSet)
+	{
+		if (!Face.Contains(Last.Key))
+		{
+			Mesh->SetMorphTarget(Last.Key, 0.0f, false);
+		}
+	}
+	LiveFaceSet.Reset();
+	for (const TPair<FName, float>& Morph : Face)
+	{
+		const float Value = FMath::Clamp(Morph.Value, 0.0f, 1.0f);
+		Mesh->SetMorphTarget(Morph.Key, Value, false);
+		LiveFaceSet.Add(Morph.Key, Value);
+	}
+	// The skin's wrinkles (custom primitive data 8 to 11: forehead, brow furrow, smile, nose) from the face as it is now,
+	// as the creator works them out.
+	const auto U = [&Face](const TCHAR* Name)
+	{
+		const float* Found = Face.Find(FName(Name));
+		return Found ? FMath::Clamp(*Found, 0.0f, 1.0f) : 0.0f;
+	};
+	const auto Either = [&U](const TCHAR* Left, const TCHAR* Right) { return FMath::Max(U(Left), U(Right)); };
+	const float Forehead = 0.8f * FMath::Max3(Either(TEXT("Face_EyebrowsLeftUp"), TEXT("Face_EyebrowsRightUp")),
+		0.35f * Either(TEXT("Face_EyebrowsLeftInnerUp"), TEXT("Face_EyebrowsRightInnerUp")), 0.7f * Either(TEXT("Face_EyebrowsLeftExternUp"), TEXT("Face_EyebrowsRightExternUp")));
+	const float Furrow = FMath::Max3(U(TEXT("Face_EyebrowsLeftDown")), U(TEXT("Face_EyebrowsRightDown")), U(TEXT("Face_NoseCompression")));
+	const float Smile = FMath::Max3(FMath::Max(U(TEXT("Face_MouthCornerPuller")), Either(TEXT("Face_MouthCornerPullerL"), TEXT("Face_MouthCornerPullerR"))),
+		0.7f * Either(TEXT("Face_EyeLeftSlit"), TEXT("Face_EyeRightSlit")), FMath::Max(U(TEXT("Face_MouthUpwardRetraction")), Either(TEXT("Face_MouthUpwardRetractionL"), TEXT("Face_MouthUpwardRetractionR"))));
+	const float Nose = FMath::Max3(U(TEXT("Face_NoseLeftElevation")), U(TEXT("Face_NoseRightElevation")), U(TEXT("Face_NoseDepression")));
+	Mesh->SetCustomPrimitiveDataVector4(8, FVector4(Forehead, Furrow, Smile, Nose));
 }
 
 void ASimPawnActor::ApplyFightFace()

@@ -59,6 +59,21 @@ namespace CreatorPeople
 	FString FaceShapeLabel(int32 Index);
 	FString FaceShapeKey(int32 Index);
 	void RandomFace(FLook& Look);
+	/** Whether a shape slider is a body one (shown under Build) rather than a face one. */
+	bool FaceShapeIsBody(int32 Index);
+	/** Random body shape sliders round the look's ethnicity's average (RandomFace does the face ones). */
+	void RandomBuild(FLook& Look);
+	/** Ethnicities (sneed 2026-11-26): presets the player picks (EthnicityCount() is "Mixed": two of them, half each),
+	 *  then fine-tunes with the sliders. ApplyEthnicity sets the look's ethnic base shape (ethAfrican, ethAsian: the
+	 *  EthnicFeatureKey sliders), skin, hair and eye colours and a face and build round the preset's average; height,
+	 *  weight, hair style and the rest stay. The look keeps the pick as "ethnicity". */
+	int32 EthnicityCount();
+	FString EthnicityLabel(int32 Index);
+	int32 EthnicityOf(const FLook& Look);
+	void ApplyEthnicity(FLook& Look, int32 Index);
+	/** The fine ethnic sliders: 0 African features, 1 East Asian features (European is what is left). */
+	FString EthnicFeatureKey(int32 Index);
+	FString EthnicFeatureLabel(int32 Index);
 	int32 HairStyleCount();
 	FString HairStyleLabel(int32 Index);
 	/** Whether the pawn's base has this hair style (bald always). */

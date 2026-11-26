@@ -288,7 +288,7 @@ namespace
 	const float NgHairSwatches[][3] = {{0.07f, 0.06f, 0.055f}, {0.17f, 0.11f, 0.07f}, {0.32f, 0.22f, 0.14f}, {0.48f, 0.36f, 0.24f},
 		{0.78f, 0.66f, 0.45f}, {0.45f, 0.20f, 0.10f}, {0.62f, 0.27f, 0.12f}, {0.62f, 0.60f, 0.58f}};
 	const float NgSkinSwatches[][3] = {{0.96f, 0.86f, 0.80f}, {0.91f, 0.80f, 0.75f}, {0.86f, 0.72f, 0.62f}, {0.78f, 0.62f, 0.50f},
-		{0.64f, 0.47f, 0.36f}, {0.48f, 0.34f, 0.25f}, {0.33f, 0.23f, 0.17f}};
+		{0.64f, 0.47f, 0.36f}, {0.48f, 0.34f, 0.25f}, {0.33f, 0.23f, 0.17f}, {0.27f, 0.185f, 0.135f}};  // as CreatorSkinRamp
 	const float NgEyeSwatches[][3] = {{0.30f, 0.20f, 0.12f}, {0.45f, 0.32f, 0.18f}, {0.35f, 0.50f, 0.65f}, {0.40f, 0.55f, 0.35f},
 		{0.50f, 0.55f, 0.55f}, {0.15f, 0.12f, 0.10f}};
 
@@ -1697,6 +1697,36 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 	{
 		SetGender(false);
 	}
+	// Ethnicity (sneed 2026-11-26: "a picked ethnicity ... and or slide"): a preset sets the ethnic base shape, colouring and
+	// a face and build round its average; the two feature sliders and every shape slider below fine-tune it.
+	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
+	NgLabel(TEXT("Ethnicity"));
+	{
+		const int32 Picked = CreatorPeople::EthnicityOf(Full);
+		const FString Now = Picked < 0 ? FString(TEXT("Choose...")) : CreatorPeople::EthnicityLabel(Picked);
+		ImGui::SetNextItemWidth(-1.0f);
+		if (ImGui::BeginCombo("##ethnicity", TCHAR_TO_UTF8(*Now)))
+		{
+			for (int32 Ethnicity = 0; Ethnicity <= CreatorPeople::EthnicityCount(); ++Ethnicity)
+			{
+				if (ImGui::Selectable(TCHAR_TO_UTF8(*CreatorPeople::EthnicityLabel(Ethnicity)), Ethnicity == Picked))
+				{
+					CreatorPeople::ApplyEthnicity(Look, Ethnicity);
+					bLive = bSend = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		if (Picked >= 0 && NgButton(TEXT("Another face of these people"), false, ImVec2(-1.0f, 0.0f)))
+		{
+			CreatorPeople::ApplyEthnicity(Look, Picked);
+			bLive = bSend = true;
+		}
+		for (int32 Feature = 0; Feature < 2; ++Feature)
+		{
+			Slider(*CreatorPeople::EthnicFeatureLabel(Feature), *CreatorPeople::EthnicFeatureKey(Feature), 0.0f, 1.0f);
+		}
+	}
 	Slider(TEXT("Height"), TEXT("height"), Look.bFemale ? 0.86f : 0.92f, Look.bFemale ? 1.04f : 1.12f);
 	Slider(TEXT("Thin to heavy"), TEXT("weight"), -0.8f, 0.9f);
 	Slider(TEXT("Soft to muscular"), TEXT("muscle"), -0.7f, 0.8f);
@@ -1716,15 +1746,37 @@ void UColonyHudSubsystem::DrawPeopleLooks(const colony::Sim& Sim, colony::Entity
 	// The face's own shape (face variety, sneed 2026-11-25): a random one to start, then each part by hand. The same
 	// sliders the Debug creator has, drawn in game with the same CreatorApply.
 	ImGui::Dummy(ImVec2(1.0f, Gap * 0.5f));
-	if (NgButton(TEXT("Random face"), false, ImVec2(-1.0f, 0.0f)))
 	{
-		CreatorPeople::RandomFace(Look);
-		bLive = bSend = true;
+		const float HalfW = (ImGui::GetContentRegionAvail().x - Gap) * 0.5f;
+		if (NgButton(TEXT("Random face"), false, ImVec2(HalfW, 0.0f)))
+		{
+			CreatorPeople::RandomFace(Look);
+			bLive = bSend = true;
+		}
+		ImGui::SameLine(0.0f, Gap);
+		if (NgButton(TEXT("Random build"), false, ImVec2(HalfW, 0.0f)))
+		{
+			CreatorPeople::RandomBuild(Look);
+			bLive = bSend = true;
+		}
 	}
-	for (int32 FaceIndex = 0; FaceIndex < CreatorPeople::FaceShapeCount(); ++FaceIndex)
+	// The fine sliders, folded (35 of them): the face's parts, then the build's.
+	for (int32 Group = 0; Group < 2; ++Group)
 	{
-		const FString FaceKey = CreatorPeople::FaceShapeKey(FaceIndex);
-		Slider(*CreatorPeople::FaceShapeLabel(FaceIndex), *FaceKey, -1.0f, 1.0f);
+		const bool bBodyGroup = Group == 1;
+		if (!ImGui::CollapsingHeader(bBodyGroup ? "Build in detail" : "Face in detail"))
+		{
+			continue;
+		}
+		for (int32 FaceIndex = 0; FaceIndex < CreatorPeople::FaceShapeCount(); ++FaceIndex)
+		{
+			if (CreatorPeople::FaceShapeIsBody(FaceIndex) != bBodyGroup)
+			{
+				continue;
+			}
+			const FString FaceKey = CreatorPeople::FaceShapeKey(FaceIndex);
+			Slider(*CreatorPeople::FaceShapeLabel(FaceIndex), *FaceKey, -1.0f, 1.0f);
+		}
 	}
 	const float Swatch = 26.0f * Scale;
 	const auto Swatches = [&](const TCHAR* Label, const TCHAR* Prefix, const float (*Colours)[3], int32 Count, const CreatorPeople::FLook& Against)

@@ -1295,6 +1295,14 @@ void FMakeHumanAnimProxy::Initialize(UAnimInstance* Instance)
 				Body.MaxOffset = Body.BaseMaxOffset = Part.MaxOffset;
 				Body.bBodySoft = Part.bBodySoft;
 				Body.Squash = Part.Squash;
+				// Breasts keep the size and looseness the looks gave them when the graph starts again.
+				const UMakeHumanAnimInstance* Mh = Cast<UMakeHumanAnimInstance>(Instance);
+				if (Mh && FString(Part.Bone).StartsWith(TEXT("breast")))
+				{
+					UMakeHumanAnimInstance::BreastSpringFor(Mh->GetBreastLooseness(), Mh->GetBreastMass(), Body.Stiffness, Body.Damping, Body.MaxOffset);
+					Body.BaseStiffness = Body.Stiffness;
+					Body.BaseMaxOffset = Body.MaxOffset;
+				}
 			}
 		}
 		// Long hair and a ponytail: strands with the body's collision shapes fitted to this skeleton.
@@ -1487,15 +1495,52 @@ void UMakeHumanAnimInstance::SetTailAmount(float Amount)
 
 void UMakeHumanAnimInstance::SetBreastJiggle(float Amount)
 {
-	const float A = FMath::Clamp(Amount, 0.0f, 1.0f);
+	BreastLooseness = FMath::Clamp(Amount, 0.0f, 1.0f);
+	ApplyBreastSpring();
+}
+
+void UMakeHumanAnimInstance::SetBreastSize(float Size, float Weight)
+{
+	// Volume roughly doubles from the default to MakeHuman's largest cup and halves to its smallest; weight adds fat.
+	const float S = FMath::Clamp(Size, -1.0f, 1.0f) + 0.3f * FMath::Clamp(Weight, -1.0f, 1.0f);
+	BreastMass = FMath::Clamp(FMath::Pow(2.0f, 1.2f * S), 0.35f, 2.6f);
+	ApplyBreastSpring();
+}
+
+FVector2f UMakeHumanAnimInstance::GetBreastSpring() const
+{
+	for (const FMakeHumanJiggleNode::FBody& Body : GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.Bodies)
+	{
+		if (Body.Bone.BoneName.ToString().StartsWith(TEXT("breast")))
+		{
+			return FVector2f(Body.Stiffness, Body.MaxOffset);
+		}
+	}
+	return FVector2f::ZeroVector;
+}
+
+void UMakeHumanAnimInstance::BreastSpringFor(float Looseness, float Mass, float& OutStiffness, float& OutDamping, float& OutRoom)
+{
+	// Looseness: about 2 Hz and well damped at 0; about 1.3 Hz, a third of critical damping, and more room at 1.
+	// Mass: the same tissue's spring with more weight on it, so the frequency falls as 1/sqrt(mass) (stiffness / mass), the
+	// sway it can reach grows with the breast's size (room times mass^0.6) and heavier breasts settle a little slower
+	// (damping per mass falls as 1/sqrt(mass), the same share of critical damping). Small breasts: quick, tight, small.
+	const float A = FMath::Clamp(Looseness, 0.0f, 1.0f);
+	const float M = FMath::Clamp(Mass, 0.2f, 3.0f);
+	OutStiffness = FMath::Lerp(150.0f, 65.0f, A) / M;
+	OutDamping = FMath::Lerp(5.5f, 3.2f, A) / FMath::Sqrt(M);
+	OutRoom = FMath::Min(FMath::Lerp(4.0f, 7.5f, A) * FMath::Pow(M, 0.6f), 11.0f);
+}
+
+void UMakeHumanAnimInstance::ApplyBreastSpring()
+{
 	for (FMakeHumanJiggleNode::FBody& Body : GetProxyOnGameThread<FMakeHumanAnimProxy>().Jiggle.Bodies)
 	{
 		if (Body.Bone.BoneName.ToString().StartsWith(TEXT("breast")))
 		{
-			// About 2 Hz and well damped at 0; about 1.3 Hz, a third of critical damping, and more room at 1.
-			Body.Stiffness = Body.BaseStiffness = FMath::Lerp(150.0f, 65.0f, A);
-			Body.Damping = FMath::Lerp(5.5f, 3.2f, A);
-			Body.MaxOffset = Body.BaseMaxOffset = FMath::Lerp(4.0f, 7.5f, A);
+			BreastSpringFor(BreastLooseness, BreastMass, Body.Stiffness, Body.Damping, Body.MaxOffset);
+			Body.BaseStiffness = Body.Stiffness;
+			Body.BaseMaxOffset = Body.MaxOffset;
 		}
 	}
 }

@@ -606,22 +606,41 @@ def dump_vertices(meshes, path, log=print):
     log("vertices of", len(data), "meshes to", path)
 
 
-def add_morphs(meshes, morphs, log=print):
+def morph_path(value):
+    """A morph's vertices file: the value itself, or its "path" for a one-sided morph ({"path", "side"})."""
+    return value["path"] if isinstance(value, dict) else value
+
+
+def add_morphs(meshes, morphs, left_sign=1.0, log=print):
     """Shape keys from other builds of the same character (dump_vertices files): {"Heavy": "heavy.npz", ...}. A mesh
-    whose vertex count differs (a part that changed) gets no key."""
+    whose vertex count differs (a part that changed) gets no key. A one-sided morph ({"path": ..., "side": "l" or "r"})
+    keeps the change only on that side of the body's middle line (blended over 1.5 cm across it), so a symmetric face
+    unit (MakeHuman's mouth units) becomes a left and a right one, as ARKit's facial capture has them; `left_sign` is
+    the sign of x on the character's left."""
     import numpy as np
-    for name, path in morphs.items():
-        data = np.load(path)
+    for name, value in morphs.items():
+        data = np.load(morph_path(value))
+        side = value.get("side") if isinstance(value, dict) else None
         made = 0
         for o in meshes:
             if o.name not in data.files or len(data[o.name]) != len(o.data.vertices) * 3:
                 continue
             if not o.data.shape_keys:
                 o.shape_key_add(name="Basis", from_mix=False)
+            target = data[o.name]
+            if side:
+                base = np.empty(len(o.data.vertices) * 3, dtype=np.float32)
+                o.data.vertices.foreach_get("co", base)
+                scale = max(o.matrix_world.to_scale().x, 1e-6)
+                half = 0.0075 / scale
+                x = base[0::3] * (left_sign if side == "l" else -left_sign)
+                t = np.clip((x + half) / (2.0 * half), 0.0, 1.0)
+                w = (t * t * (3.0 - 2.0 * t)).repeat(3)
+                target = (base + (target - base) * w).astype(np.float32)
             key = o.shape_key_add(name=name, from_mix=False)
-            key.data.foreach_set("co", data[o.name])
+            key.data.foreach_set("co", target)
             made += 1
-        log("morph", name, "on", made, "meshes")
+        log("morph", name, "on", made, "meshes", "(side " + side + ")" if side else "")
 
 
 def add_tusks(rig, body, length=0.03, radius=0.006, color=(0.78, 0.72, 0.58), inset=0.004, log=print):
@@ -1066,7 +1085,7 @@ def make_wrinkle_map(body, morphs, groups, out_path, size=2048, spacing=0.016, l
             path = morphs.get(unit)
             if not path:
                 continue
-            data = np.load(path)
+            data = np.load(morph_path(path))
             if body.name not in data.files:
                 continue
             moved = data[body.name].reshape(-1, 3)

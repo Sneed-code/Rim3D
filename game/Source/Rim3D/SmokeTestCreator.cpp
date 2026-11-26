@@ -176,47 +176,209 @@ namespace
 		{"Sip", {{24, 0.80f}, {23, 0.60f}}},
 		{"Asleep", {{0, 1.00f}, {3, 1.00f}, {20, 0.05f}}},
 	};
+	// The facial capture's emotions (assets/face_mocap/clips.json), for the Face tab's test; 0 is off.
+	const char* const CreatorLiveEmotions[] = {"off", "neutral", "happiness", "anger", "sadness", "contempt", "surprise", "fear", "disgust"};
 	enum { CreatorUnitEyeLeftClosure = 0, CreatorUnitEyeRightClosure = 3,
 		CreatorUnitMouthOpen = 20, CreatorUnitMouthPursing = 24 };
 	const char* const CreatorKindNames[] = {"Baseline", "Imp", "Orcoid", "Beast-Strain (cat)", "Drow"};
 
 	/**
-	 * Face variety (sneed 2026-11-25): the shape of a face, apart from its expression. Each slider (-1 .. 1) is a pair of
-	 * morphs Shape<Part>Lo / Shape<Part>Hi on the creator bases, made from MakeHuman's own face modelling targets
+	 * Face and body variety (sneed 2026-11-25, widened 2026-11-26: "all the diversity of body faces types etc so we have
+	 * heaps"): the shape of a face and body, apart from expression, age, weight and muscle. Each slider (-1 .. 1) is a
+	 * pair of morphs Shape<Part>Lo / Shape<Part>Hi on the creator bases, made from MakeHuman's own modelling targets
 	 * (tools/makehuman/creator.json). They add on the mesh like every other slider, so the expression units, blinking,
-	 * talking and the fight faces all work on any face, the strand hair follows any head (grow_hair.py measures each), and
-	 * every random person gets a face of their own (CreatorRandomize). Key is the look's value name (CreatorPeople::FLook).
+	 * talking and the fight faces all work on any face, the strand hair follows any head (grow_hair.py measures each), the
+	 * clothes follow the body ones (mh_garments.py builds every body morph), and every random person gets a face and build
+	 * of their own (CreatorRandomize), leaning to their ethnicity's (CreatorEthnicities). Key is the look's value name
+	 * (CreatorPeople::FLook). New entries go at the end: a look keeps its values by key, a person's seed draws in order.
 	 */
 	struct FCreatorFaceShape
 	{
 		const TCHAR* Key;
 		const TCHAR* Morph;
 		const char* Label;
+		bool bBody;     // a body slider (the creator shows them under "Build")
+		float Spread;   // how far random people spread round their ethnicity's average (one die's worth)
 	};
 	const FCreatorFaceShape CreatorFaceShapes[] = {
-		{TEXT("faceHeadWidth"), TEXT("ShapeHeadWidth"), "Narrow to wide head"},
-		{TEXT("faceJaw"), TEXT("ShapeJaw"), "Soft to strong jaw"},
-		{TEXT("faceChin"), TEXT("ShapeChin"), "Chin back to forward"},
-		{TEXT("faceCheekbones"), TEXT("ShapeCheekbones"), "Low to high cheekbones"},
-		{TEXT("faceEyeSize"), TEXT("ShapeEyeSize"), "Small to large eyes"},
-		{TEXT("faceEyeSpacing"), TEXT("ShapeEyeSpacing"), "Close to wide-set eyes"},
-		{TEXT("faceBrow"), TEXT("ShapeBrow"), "Low to high brows"},
-		{TEXT("faceNoseLength"), TEXT("ShapeNoseLength"), "Short to long nose"},
-		{TEXT("faceNoseWidth"), TEXT("ShapeNoseWidth"), "Narrow to wide nose"},
-		{TEXT("faceNoseBridge"), TEXT("ShapeNoseBridge"), "Scooped to humped nose"},
-		{TEXT("faceMouthWidth"), TEXT("ShapeMouthWidth"), "Narrow to wide mouth"},
-		{TEXT("faceLips"), TEXT("ShapeLips"), "Thin to full lips"},
+		{TEXT("faceHeadWidth"), TEXT("ShapeHeadWidth"), "Narrow to wide head", false, 0.38f},
+		{TEXT("faceJaw"), TEXT("ShapeJaw"), "Soft to strong jaw", false, 0.38f},
+		{TEXT("faceChin"), TEXT("ShapeChin"), "Chin back to forward", false, 0.38f},
+		{TEXT("faceCheekbones"), TEXT("ShapeCheekbones"), "Low to high cheekbones", false, 0.38f},
+		{TEXT("faceEyeSize"), TEXT("ShapeEyeSize"), "Small to large eyes", false, 0.38f},
+		{TEXT("faceEyeSpacing"), TEXT("ShapeEyeSpacing"), "Close to wide-set eyes", false, 0.38f},
+		{TEXT("faceBrow"), TEXT("ShapeBrow"), "Low to high brows", false, 0.38f},
+		{TEXT("faceNoseLength"), TEXT("ShapeNoseLength"), "Short to long nose", false, 0.38f},
+		{TEXT("faceNoseWidth"), TEXT("ShapeNoseWidth"), "Narrow to wide nose", false, 0.38f},
+		{TEXT("faceNoseBridge"), TEXT("ShapeNoseBridge"), "Scooped to humped nose", false, 0.38f},
+		{TEXT("faceMouthWidth"), TEXT("ShapeMouthWidth"), "Narrow to wide mouth", false, 0.38f},
+		{TEXT("faceLips"), TEXT("ShapeLips"), "Thin to full lips", false, 0.38f},
+		// 2026-11-26: more of the face.
+		{TEXT("faceHeadHeight"), TEXT("ShapeHeadHeight"), "Short to long face", false, 0.34f},
+		{TEXT("faceForehead"), TEXT("ShapeForehead"), "Low to high forehead", false, 0.34f},
+		{TEXT("faceBrowRidge"), TEXT("ShapeBrowRidge"), "Smooth to heavy brow ridge", false, 0.30f},
+		{TEXT("faceEyeTilt"), TEXT("ShapeEyeTilt"), "Eyes tilt down to up", false, 0.30f},
+		{TEXT("faceEyelid"), TEXT("ShapeEyelid"), "Open to hooded eyelids", false, 0.30f},
+		{TEXT("faceEyeDepth"), TEXT("ShapeEyeDepth"), "Prominent to deep-set eyes", false, 0.30f},
+		{TEXT("faceNoseTip"), TEXT("ShapeNoseTip"), "Nose tip down to up", false, 0.34f},
+		{TEXT("faceNoseDepth"), TEXT("ShapeNoseDepth"), "Flat to prominent nose", false, 0.34f},
+		{TEXT("faceNostrils"), TEXT("ShapeNostrils"), "Narrow to flared nostrils", false, 0.34f},
+		{TEXT("faceCheeks"), TEXT("ShapeCheeks"), "Hollow to full cheeks", false, 0.34f},
+		{TEXT("faceJawJut"), TEXT("ShapeJawJut"), "Jaw back to forward", false, 0.28f},
+		{TEXT("faceEars"), TEXT("ShapeEars"), "Small to large ears", false, 0.34f},
+		{TEXT("faceEarsOut"), TEXT("ShapeEarsOut"), "Flat to sticking-out ears", false, 0.30f},
+		// The build, beyond height, weight and muscle (no slider moves a joint: the skeleton is fitted to the base).
+		{TEXT("bodyNeck"), TEXT("ShapeNeck"), "Thin to thick neck", true, 0.30f},
+		{TEXT("bodyShoulders"), TEXT("ShapeShoulders"), "Narrow to broad shoulders", true, 0.30f},
+		{TEXT("bodyChest"), TEXT("ShapeChest"), "Flat to deep chest", true, 0.28f},
+		{TEXT("bodyWaist"), TEXT("ShapeWaist"), "Narrow to thick waist", true, 0.30f},
+		{TEXT("bodyHips"), TEXT("ShapeHips"), "Narrow to wide hips", true, 0.32f},
+		{TEXT("bodyBelly"), TEXT("ShapeBelly"), "Flat to round belly", true, 0.26f},
+		{TEXT("bodyButt"), TEXT("ShapeButt"), "Flat to full bottom", true, 0.32f},
+		{TEXT("bodyThighs"), TEXT("ShapeThighs"), "Slim to thick thighs", true, 0.30f},
+		{TEXT("bodyCalves"), TEXT("ShapeCalves"), "Slim to thick calves", true, 0.28f},
+		{TEXT("bodyArms"), TEXT("ShapeArms"), "Slim to thick arms", true, 0.28f},
 	};
 	constexpr int32 CreatorFaceShapeCount = UE_ARRAY_COUNT(CreatorFaceShapes);
+	constexpr int32 CreatorFirstNewShape = 12;  // the first 12 are the 2025-11-25 face sliders
 
-	/** A random face: each part spread round the average, most of them near it (the same for every random person). */
-	template <typename FRandomFn>
-	void CreatorRandomFace(float (&Shape)[CreatorFaceShapeCount], FRandomFn&& Rand)
+	int32 CreatorShapeIndex(const TCHAR* Key)
 	{
-		for (float& Part : Shape)
+		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 		{
-			Part = FMath::Clamp((Rand() + Rand() + Rand() - 1.5f) * 2.0f * 0.38f, -1.0f, 1.0f);
+			if (FCString::Strcmp(CreatorFaceShapes[f].Key, Key) == 0)
+			{
+				return f;
+			}
 		}
+		return INDEX_NONE;
+	}
+
+	/**
+	 * Ethnicity (sneed 2026-11-26: "add all the ethnicities ... this can be a picked ethnicity? and or slide"): a picked
+	 * preset that sets the person's starting point, then every slider fine-tunes it. Each preset is:
+	 * - a blend of MakeHuman's three ethnic base shapes (its African, Asian and European macro sliders, as the morphs
+	 *   EthAfrican and EthAsian on the creator bases; European is what is left), which shape the whole face and body;
+	 * - the face and build sliders' average for that people (offsets on CreatorFaceShapes), round which each person varies;
+	 * - a skin tone range on the shared skin ramp with an undertone, natural hair and eye colours with how common each is,
+	 *   how often the hair is an afro, and a height factor.
+	 * They are broad, respectful averages: any person in game varies well beyond them and the sliders reach everything.
+	 * Random people (CreatorRandomize) are drawn from all of them, weighted towards fair skin (the project's standing look
+	 * rule: random baseline humans, fair skin bias).
+	 */
+	// Skin, fair (0) to deep (1), sRGB: the colony creator's skin slider runs along the same colours (NgSkinSwatches).
+	const float CreatorSkinRamp[][3] = {{0.96f, 0.86f, 0.80f}, {0.91f, 0.80f, 0.75f}, {0.86f, 0.72f, 0.62f}, {0.78f, 0.62f, 0.50f},
+		{0.64f, 0.47f, 0.36f}, {0.48f, 0.34f, 0.25f}, {0.33f, 0.23f, 0.17f}, {0.27f, 0.185f, 0.135f}};
+	// Natural hair (sRGB): black, dark brown, brown, light brown, blond, auburn, red, platinum blond.
+	const float CreatorHairPalette[][3] = {{0.07f, 0.06f, 0.055f}, {0.17f, 0.11f, 0.07f}, {0.32f, 0.22f, 0.14f}, {0.48f, 0.36f, 0.24f},
+		{0.78f, 0.66f, 0.45f}, {0.45f, 0.20f, 0.10f}, {0.62f, 0.27f, 0.12f}, {0.88f, 0.80f, 0.62f}};
+	// Irises (sRGB): dark brown, brown, hazel, green, blue, grey.
+	const float CreatorEyePalette[][3] = {{0.16f, 0.09f, 0.05f}, {0.32f, 0.19f, 0.09f}, {0.46f, 0.36f, 0.16f}, {0.36f, 0.50f, 0.30f},
+		{0.30f, 0.46f, 0.68f}, {0.52f, 0.56f, 0.60f}};
+	enum class ECreatorUndertone : uint8 { Neutral, Pink, Olive, Golden, Warm, Red };
+
+	struct FCreatorEthShape
+	{
+		const TCHAR* Key;
+		float Value;
+	};
+	struct FCreatorEthnicity
+	{
+		const char* Name;
+		float African;          // EthAfrican morph
+		float Asian;            // EthAsian morph
+		float ToneMin, ToneMax; // along CreatorSkinRamp
+		ECreatorUndertone Undertone;
+		float Hair[8];          // how common each CreatorHairPalette colour is
+		float Eyes[6];          // how common each CreatorEyePalette colour is
+		float Afro;             // chance of afro hair
+		float Height;           // times the average height
+		float Weight;           // added to the build's weight (-1 .. 1)
+		TArray<FCreatorEthShape> Shape;  // CreatorFaceShapes key -> average
+		float Common;           // how often random people are of it
+	};
+	const TArray<FCreatorEthnicity>& CreatorEthnicities()
+	{
+		static const TArray<FCreatorEthnicity> List = {
+			{"Northern European", 0.0f, 0.0f, 0.03f, 0.16f, ECreatorUndertone::Pink, {4, 10, 20, 24, 26, 4, 8, 4}, {16, 4, 10, 13, 42, 15}, 0.0f, 1.03f, 0.0f,
+				{{TEXT("faceHeadHeight"), 0.25f}, {TEXT("faceNoseLength"), 0.2f}, {TEXT("faceNoseDepth"), 0.2f}, {TEXT("faceEyeDepth"), 0.25f}, {TEXT("faceLips"), -0.2f}, {TEXT("faceJaw"), 0.15f}}, 13.0f},
+			{"Western European", 0.0f, 0.0f, 0.03f, 0.24f, ECreatorUndertone::Neutral, {8, 22, 30, 18, 12, 4, 4, 2}, {24, 16, 16, 12, 24, 8}, 0.0f, 1.0f, 0.0f,
+				{{TEXT("faceNoseBridge"), 0.15f}, {TEXT("faceNoseDepth"), 0.15f}, {TEXT("faceEyeDepth"), 0.15f}}, 15.0f},
+			{"Southern European", 0.04f, 0.0f, 0.14f, 0.38f, ECreatorUndertone::Olive, {30, 38, 20, 7, 3, 2, 0, 0}, {30, 28, 20, 10, 9, 3}, 0.0f, 0.99f, 0.0f,
+				{{TEXT("faceNoseBridge"), 0.3f}, {TEXT("faceNoseLength"), 0.15f}, {TEXT("faceBrowRidge"), 0.15f}, {TEXT("faceLips"), 0.1f}, {TEXT("faceBrow"), -0.1f}}, 10.0f},
+			{"Eastern European", 0.0f, 0.04f, 0.02f, 0.2f, ECreatorUndertone::Neutral, {6, 16, 26, 26, 20, 2, 2, 2}, {14, 10, 12, 18, 30, 16}, 0.0f, 1.01f, 0.0f,
+				{{TEXT("faceCheekbones"), 0.4f}, {TEXT("faceHeadWidth"), 0.2f}, {TEXT("faceJaw"), 0.15f}, {TEXT("faceNoseTip"), 0.15f}, {TEXT("faceEyelid"), 0.1f}}, 10.0f},
+			{"Middle Eastern and North African", 0.1f, 0.02f, 0.24f, 0.52f, ECreatorUndertone::Olive, {55, 35, 8, 2, 0, 0, 0, 0}, {60, 22, 12, 5, 1, 0}, 0.0f, 0.99f, 0.0f,
+				{{TEXT("faceNoseLength"), 0.35f}, {TEXT("faceNoseBridge"), 0.4f}, {TEXT("faceNoseDepth"), 0.3f}, {TEXT("faceBrowRidge"), 0.2f}, {TEXT("faceEyeDepth"), 0.2f}, {TEXT("faceLips"), 0.15f}, {TEXT("faceHeadHeight"), 0.15f}}, 7.0f},
+			{"South Asian", 0.18f, 0.12f, 0.38f, 0.74f, ECreatorUndertone::Warm, {70, 27, 3, 0, 0, 0, 0, 0}, {78, 16, 5, 1, 0, 0}, 0.0f, 0.97f, 0.0f,
+				{{TEXT("faceEyeSize"), 0.2f}, {TEXT("faceNoseWidth"), 0.15f}, {TEXT("faceNoseTip"), -0.15f}, {TEXT("faceLips"), 0.2f}, {TEXT("faceHeadHeight"), 0.1f}, {TEXT("faceBrowRidge"), 0.1f}}, 6.0f},
+			{"Central Asian", 0.0f, 0.5f, 0.12f, 0.36f, ECreatorUndertone::Golden, {55, 30, 12, 3, 0, 0, 0, 0}, {58, 20, 14, 8, 0, 0}, 0.0f, 0.99f, 0.0f,
+				{{TEXT("faceCheekbones"), 0.45f}, {TEXT("faceEyelid"), 0.4f}, {TEXT("faceHeadWidth"), 0.25f}, {TEXT("faceNoseBridge"), -0.1f}, {TEXT("faceEyeTilt"), 0.15f}}, 3.0f},
+			{"East Asian", 0.0f, 1.0f, 0.04f, 0.3f, ECreatorUndertone::Golden, {85, 14, 1, 0, 0, 0, 0, 0}, {92, 8, 0, 0, 0, 0}, 0.0f, 0.98f, -0.05f,
+				{{TEXT("faceEyelid"), 0.7f}, {TEXT("faceEyeTilt"), 0.25f}, {TEXT("faceNoseDepth"), -0.35f}, {TEXT("faceNoseBridge"), -0.3f}, {TEXT("faceCheekbones"), 0.3f}, {TEXT("faceHeadWidth"), 0.3f}, {TEXT("faceBrowRidge"), -0.4f}, {TEXT("faceEyeDepth"), -0.4f}, {TEXT("faceLips"), -0.1f}}, 7.0f},
+			{"Southeast Asian", 0.1f, 0.8f, 0.3f, 0.56f, ECreatorUndertone::Warm, {88, 12, 0, 0, 0, 0, 0, 0}, {94, 6, 0, 0, 0, 0}, 0.0f, 0.96f, 0.0f,
+				{{TEXT("faceEyelid"), 0.45f}, {TEXT("faceNoseWidth"), 0.35f}, {TEXT("faceNoseDepth"), -0.3f}, {TEXT("faceNoseTip"), 0.2f}, {TEXT("faceLips"), 0.2f}, {TEXT("faceHeadWidth"), 0.2f}, {TEXT("faceBrowRidge"), -0.25f}}, 5.0f},
+			{"Pacific Islander", 0.25f, 0.4f, 0.42f, 0.66f, ECreatorUndertone::Warm, {78, 20, 2, 0, 0, 0, 0, 0}, {88, 12, 0, 0, 0, 0}, 0.1f, 1.03f, 0.25f,
+				{{TEXT("faceHeadWidth"), 0.35f}, {TEXT("faceJaw"), 0.35f}, {TEXT("faceNoseWidth"), 0.4f}, {TEXT("faceLips"), 0.35f}, {TEXT("faceCheeks"), 0.3f}, {TEXT("bodyShoulders"), 0.3f}, {TEXT("bodyNeck"), 0.3f}}, 3.0f},
+			{"Indigenous American", 0.05f, 0.6f, 0.32f, 0.6f, ECreatorUndertone::Red, {90, 10, 0, 0, 0, 0, 0, 0}, {94, 6, 0, 0, 0, 0}, 0.0f, 0.98f, 0.0f,
+				{{TEXT("faceCheekbones"), 0.5f}, {TEXT("faceEyelid"), 0.25f}, {TEXT("faceNoseBridge"), 0.25f}, {TEXT("faceHeadWidth"), 0.25f}, {TEXT("faceJaw"), 0.2f}, {TEXT("faceEyeTilt"), 0.1f}}, 4.0f},
+			{"West African", 1.0f, 0.0f, 0.76f, 1.0f, ECreatorUndertone::Warm, {94, 6, 0, 0, 0, 0, 0, 0}, {95, 5, 0, 0, 0, 0}, 0.35f, 1.0f, 0.0f,
+				{{TEXT("faceNoseWidth"), 0.5f}, {TEXT("faceNostrils"), 0.4f}, {TEXT("faceNoseDepth"), -0.15f}, {TEXT("faceLips"), 0.55f}, {TEXT("faceJawJut"), 0.2f}, {TEXT("faceMouthWidth"), 0.2f}, {TEXT("faceForehead"), 0.15f}, {TEXT("bodyButt"), 0.25f}}, 5.0f},
+			{"East African", 0.85f, 0.0f, 0.7f, 0.98f, ECreatorUndertone::Warm, {92, 8, 0, 0, 0, 0, 0, 0}, {93, 7, 0, 0, 0, 0}, 0.3f, 1.04f, -0.2f,
+				{{TEXT("faceHeadHeight"), 0.35f}, {TEXT("faceNoseWidth"), 0.15f}, {TEXT("faceNoseLength"), 0.15f}, {TEXT("faceLips"), 0.3f}, {TEXT("faceCheekbones"), 0.25f}, {TEXT("faceHeadWidth"), -0.15f}, {TEXT("bodyShoulders"), -0.1f}}, 3.0f},
+			{"Southern African", 0.9f, 0.05f, 0.58f, 0.92f, ECreatorUndertone::Warm, {93, 7, 0, 0, 0, 0, 0, 0}, {93, 7, 0, 0, 0, 0}, 0.3f, 0.98f, 0.0f,
+				{{TEXT("faceCheekbones"), 0.35f}, {TEXT("faceNoseWidth"), 0.4f}, {TEXT("faceLips"), 0.35f}, {TEXT("faceEyelid"), 0.15f}, {TEXT("faceHeadWidth"), 0.1f}, {TEXT("bodyButt"), 0.2f}}, 2.0f},
+			{"Melanesian and Aboriginal Australian", 0.75f, 0.05f, 0.72f, 1.0f, ECreatorUndertone::Warm, {72, 18, 4, 3, 3, 0, 0, 0}, {93, 7, 0, 0, 0, 0}, 0.4f, 1.0f, 0.0f,
+				{{TEXT("faceBrowRidge"), 0.55f}, {TEXT("faceEyeDepth"), 0.4f}, {TEXT("faceNoseWidth"), 0.55f}, {TEXT("faceNostrils"), 0.3f}, {TEXT("faceLips"), 0.35f}, {TEXT("faceJawJut"), 0.2f}}, 2.0f},
+		};
+		return List;
+	}
+	// One more choice after the presets: a mix of two of them, half each.
+	inline int32 CreatorEthnicityMixed() { return CreatorEthnicities().Num(); }
+
+	/** The skin colour at Tone along CreatorSkinRamp with an undertone (sRGB). */
+	void CreatorSkinFor(float Tone, ECreatorUndertone Undertone, float* Out)
+	{
+		constexpr int32 Last = static_cast<int32>(UE_ARRAY_COUNT(CreatorSkinRamp)) - 1;
+		const float T = FMath::Clamp(Tone, 0.0f, 1.0f) * static_cast<float>(Last);
+		const int32 K = FMath::Clamp(FMath::FloorToInt32(T), 0, Last - 1);
+		for (int32 c = 0; c < 3; ++c)
+		{
+			Out[c] = FMath::Lerp(CreatorSkinRamp[K][c], CreatorSkinRamp[K + 1][c], T - static_cast<float>(K));
+		}
+		switch (Undertone)
+		{
+		case ECreatorUndertone::Pink: Out[0] *= 1.0f; Out[1] *= 0.98f; Out[2] *= 0.97f; break;
+		case ECreatorUndertone::Olive: Out[0] *= 0.975f; Out[1] *= 1.0f; Out[2] *= 0.93f; break;
+		case ECreatorUndertone::Golden: Out[0] *= 0.99f; Out[1] *= 1.005f; Out[2] *= 0.9f; break;
+		case ECreatorUndertone::Warm: Out[0] *= 1.02f; Out[1] *= 0.99f; Out[2] *= 0.94f; break;
+		case ECreatorUndertone::Red: Out[0] *= 1.04f; Out[1] *= 0.97f; Out[2] *= 0.94f; break;
+		default: break;
+		}
+		for (int32 c = 0; c < 3; ++c)
+		{
+			Out[c] = FMath::Clamp(Out[c], 0.0f, 1.0f);
+		}
+	}
+
+	template <typename FRandomFn>
+	int32 CreatorPickWeighted(const float* Weights, int32 Count, FRandomFn&& Rand)
+	{
+		float Total = 0.0f;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			Total += FMath::Max(Weights[i], 0.0f);
+		}
+		float Pick = Rand() * Total;
+		for (int32 i = 0; i < Count; ++i)
+		{
+			Pick -= FMath::Max(Weights[i], 0.0f);
+			if (Pick <= 0.0f && Weights[i] > 0.0f)
+			{
+				return i;
+			}
+		}
+		return 0;
 	}
 	const char* const CreatorPubicNames[] = {"None", "Natural", "Trimmed", "Strip"};
 
@@ -234,6 +396,10 @@ namespace
 		float Muscle = 0.0f;      // -1 soft .. 1 muscular
 		float Breasts = 0.0f;     // -1 small .. 1 large (woman's base)
 		float FaceShape[CreatorFaceShapeCount] = {};  // CreatorFaceShapes, each -1 .. 1 (0 the base's own face)
+		int32 Ethnicity = -1;     // CreatorEthnicities (CreatorEthnicityMixed: two of them), -1 none picked (the base's own)
+		int32 EthnicityMix[2] = {-1, -1};  // a mixed person's two
+		float EthAfrican = 0.0f;  // MakeHuman's African base shape, 0 .. 1 (EthAfrican morph)
+		float EthAsian = 0.0f;    // and its Asian one; European is what is left
 		float ImpEars = 0.0f;
 		float ImpFace = 0.0f;
 		float OrcFace = 0.0f;
@@ -259,6 +425,8 @@ namespace
 		float Units[CreatorUnitCount] = {};  // fine tuning on top of the expression
 		bool bBlink = true;
 		bool bTalk = false;
+		int32 LiveEmotion = 0;    // facial capture test (CreatorLiveEmotions), 0 off
+		bool bLiveTalk = false;
 		float FaceTime = 0.0f;
 		float NextBlink = 2.0f;
 		float PubicLow = 0.0f;
@@ -284,6 +452,118 @@ namespace
 			return FString::Printf(TEXT("%d %s %s"), Index + 1, bFemale ? TEXT("woman") : TEXT("man"), UTF8_TO_TCHAR(CreatorKindNames[static_cast<int32>(Kind)]));
 		}
 	};
+
+	/** The face and build sliders' average for a person's ethnicity (0 for none; half each of a mixed person's two). */
+	void CreatorShapeMean(const FCreatorPerson& P, float (&Mean)[CreatorFaceShapeCount])
+	{
+		for (float& M : Mean)
+		{
+			M = 0.0f;
+		}
+		const TArray<FCreatorEthnicity>& List = CreatorEthnicities();
+		const bool bMixed = P.Ethnicity == CreatorEthnicityMixed();
+		const int32 Parts[2] = {bMixed ? P.EthnicityMix[0] : P.Ethnicity, bMixed ? P.EthnicityMix[1] : -1};
+		const float Share = bMixed ? 0.5f : 1.0f;
+		for (const int32 Part : Parts)
+		{
+			if (!List.IsValidIndex(Part))
+			{
+				continue;
+			}
+			for (const FCreatorEthShape& Shape : List[Part].Shape)
+			{
+				const int32 f = CreatorShapeIndex(Shape.Key);
+				if (f != INDEX_NONE)
+				{
+					Mean[f] += Shape.Value * Share * 1.35f;  // first pictures: the peoples' faces too alike
+				}
+			}
+		}
+	}
+
+	/** A random face and build: each part spread round the ethnicity's average, most of them near it. */
+	template <typename FRandomFn>
+	void CreatorRandomFace(FCreatorPerson& P, FRandomFn&& Rand, bool bFace = true, bool bBody = true)
+	{
+		float Mean[CreatorFaceShapeCount];
+		CreatorShapeMean(P, Mean);
+		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+		{
+			const float Dice = (Rand() + Rand() + Rand() - 1.5f) * 2.0f;  // about -3 .. 3, spread 1
+			if (CreatorFaceShapes[f].bBody ? bBody : bFace)
+			{
+				P.FaceShape[f] = FMath::Clamp(Mean[f] + Dice * CreatorFaceShapes[f].Spread, -1.0f, 1.0f);
+			}
+		}
+	}
+
+	/**
+	 * Gives a person an ethnicity (CreatorEthnicities, or CreatorEthnicityMixed for two of them half each): its base shape,
+	 * a skin tone in its range, hair and eye colours as common there, sometimes afro hair, and a face and build round its
+	 * average. bBuild also moves height and weight its way (random people; the colony creator keeps the player's).
+	 */
+	template <typename FRandomFn>
+	void CreatorSetEthnicity(FCreatorPerson& P, int32 Index, FRandomFn&& Rand, bool bBuild)
+	{
+		const TArray<FCreatorEthnicity>& List = CreatorEthnicities();
+		if (Index < 0 || Index > CreatorEthnicityMixed())
+		{
+			P.Ethnicity = -1;
+			P.EthAfrican = P.EthAsian = 0.0f;
+			return;
+		}
+		TArray<float> Common;
+		for (const FCreatorEthnicity& E : List)
+		{
+			Common.Add(E.Common);
+		}
+		P.Ethnicity = Index;
+		P.EthnicityMix[0] = Index < List.Num() ? Index : CreatorPickWeighted(Common.GetData(), Common.Num(), Rand);
+		P.EthnicityMix[1] = P.EthnicityMix[0];
+		if (Index == CreatorEthnicityMixed())
+		{
+			for (int32 Try = 0; Try < 8 && P.EthnicityMix[1] == P.EthnicityMix[0]; ++Try)
+			{
+				P.EthnicityMix[1] = CreatorPickWeighted(Common.GetData(), Common.Num(), Rand);
+			}
+		}
+		const FCreatorEthnicity& A = List[P.EthnicityMix[0]];
+		const FCreatorEthnicity& B = List[P.EthnicityMix[1]];
+		P.EthAfrican = 0.5f * (A.African + B.African);
+		P.EthAsian = 0.5f * (A.Asian + B.Asian);
+		// Skin: in the range, the middle commoner (two dice), each parent's colouring half the time.
+		const FCreatorEthnicity& Skin = Rand() < 0.5f ? A : B;
+		const float ToneMin = 0.5f * (A.ToneMin + B.ToneMin);
+		const float ToneMax = 0.5f * (A.ToneMax + B.ToneMax);
+		float SkinColour[3];
+		CreatorSkinFor(FMath::Lerp(ToneMin, ToneMax, 0.5f * (Rand() + Rand())), Skin.Undertone, SkinColour);
+		P.Skin[0] = SkinColour[0], P.Skin[1] = SkinColour[1], P.Skin[2] = SkinColour[2];
+		const FCreatorEthnicity& HairFrom = Rand() < 0.5f ? A : B;
+		const int32 Hair = CreatorPickWeighted(HairFrom.Hair, 8, Rand);
+		const float Shade = 1.0f + 0.12f * (Rand() - 0.5f);  // a little lighter or darker than the palette's
+		for (int32 c = 0; c < 3; ++c)
+		{
+			P.Hair[c] = FMath::Clamp(CreatorHairPalette[Hair][c] * Shade, 0.0f, 1.0f);
+		}
+		const FCreatorEthnicity& EyesFrom = Rand() < 0.5f ? A : B;
+		const int32 Eyes = CreatorPickWeighted(EyesFrom.Eyes, 6, Rand);
+		P.bOwnIris = true;
+		P.IrisStrength = 0.85f;
+		for (int32 c = 0; c < 3; ++c)
+		{
+			P.Iris[c] = CreatorEyePalette[Eyes][c];
+		}
+		if (Rand() < 0.5f * (A.Afro + B.Afro))
+		{
+			P.HairStyle = 8;  // Afro (CreatorHairStyles)
+		}
+		if (bBuild)
+		{
+			P.Height *= 0.5f * (A.Height + B.Height);
+			P.Weight = FMath::Clamp(P.Weight + 0.5f * (A.Weight + B.Weight), -0.8f, 0.9f);
+		}
+		CreatorRandomFace(P, Rand);
+	}
 
 	struct FCreatorState
 	{
@@ -496,8 +776,9 @@ namespace
 
 	/**
 	 * A random baseline human (sneed: every demo and test pawn comes from the creator's randomizer; baseline humans only
-	 * for now): build, age and proportions spread round the average, a hair style and a natural hair colour, and a skin
-	 * tone weighted very heavily towards fair, with tan levels but never dark.
+	 * for now): build, age and proportions spread round the average, a hair style, then an ethnicity (2026-11-26: every
+	 * people, weighted towards fair skin as the standing look rule asks; one in 30 of mixed parentage) that gives the
+	 * skin, hair and eye colours and a face and build of their own round its average.
 	 */
 	void CreatorRandomize(FCreatorPerson& P, FRandomStream& R)
 	{
@@ -512,32 +793,23 @@ namespace
 		P.Pigment = R.FRandRange(0.3f, 0.7f);
 		P.PubicDensity = R.FRandRange(0.7f, 1.0f);
 		P.PubicCurl = R.FRandRange(0.5f, 1.0f);
-		// Skin: fair to tanned, most of them fair (the tone's share cubed), a touch of warmth or rosiness.
-		const float Tone = FMath::Pow(R.FRand(), 3.0f);
-		const float Warm = R.FRandRange(-0.015f, 0.015f);
-		CreatorSetSkin(P, FMath::Lerp(0.96f, 0.80f, Tone), FMath::Lerp(0.86f, 0.62f, Tone) + Warm, FMath::Lerp(0.80f, 0.50f, Tone) - Warm);
-		// Hair: natural colours, darker ones commoner.
-		struct FShade { float Weight; float C[3]; };
-		static const FShade Shades[] = {{30, {0.17f, 0.11f, 0.07f}}, {24, {0.32f, 0.22f, 0.14f}}, {14, {0.07f, 0.06f, 0.055f}}, {12, {0.48f, 0.36f, 0.24f}},
-			{10, {0.78f, 0.66f, 0.45f}}, {6, {0.45f, 0.20f, 0.10f}}, {3, {0.62f, 0.27f, 0.12f}}};
-		float Pick = R.FRand() * 99.0f;
-		for (const FShade& Shade : Shades)
-		{
-			Pick -= Shade.Weight;
-			if (Pick <= 0.0f)
-			{
-				P.Hair[0] = Shade.C[0], P.Hair[1] = Shade.C[1], P.Hair[2] = Shade.C[2];
-				break;
-			}
-		}
 		// Styles each base has (mh_creator's "hairs"): long, bob, ponytail, braid, short for women; short, crop, messy, long,
 		// ponytail for men, now and then bald.
 		static const int32 Women[] = {1, 1, 2, 3, 4, 5};
 		static const int32 Men[] = {5, 5, 6, 7, 1, 3, 0};
 		P.HairStyle = P.bFemale ? Women[R.RandRange(0, UE_ARRAY_COUNT(Women) - 1)] : Men[R.RandRange(0, UE_ARRAY_COUNT(Men) - 1)];
-		// A face of their own (drawn last, so everything above stays as each seed had it before faces varied).
-		CreatorRandomFace(P.FaceShape, [&R]() { return R.FRand(); });
+		// The people they come from, then their colouring, face and build from it.
+		const TArray<FCreatorEthnicity>& List = CreatorEthnicities();
+		TArray<float> Common;
+		for (const FCreatorEthnicity& E : List)
+		{
+			Common.Add(E.Common);
+		}
+		Common.Add(3.0f);  // mixed
+		const auto Rand = [&R]() { return R.FRand(); };
+		CreatorSetEthnicity(P, CreatorPickWeighted(Common.GetData(), Common.Num(), Rand), Rand, true);
 	}
+
 
 	/** The skin material to show: the 2K one (the mesh's own) or the 4K one (MakeHumanArt makes both). */
 	UMaterialInterface* CreatorSkinMaterial(const FString& Base, bool b4K)
@@ -579,6 +851,18 @@ namespace
 					Dynamic = UMaterialInstanceDynamic::Create(Wanted, Mesh);
 					Mesh->SetMaterial(i, Dynamic);
 				}
+				// Skin realism by the person (docs/design/makehuman.md "Skin realism"): deeper skin has a stronger, tighter
+				// sheen (melanin-rich skin reflects more of its light as specular and shows less scattered red), every
+				// skin a little more or less oily of its own (a stable number from its colour), and older skin shows its
+				// pores and fine lines more.
+				{
+					const float Light = 0.3f * P.Skin[0] + 0.59f * P.Skin[1] + 0.11f * P.Skin[2];
+					const float Deep = FMath::Clamp((0.86f - Light) / 0.62f, 0.0f, 1.0f);
+					const float Oily = FMath::Frac(1000.0f * (P.Skin[0] * 3.1f + P.Skin[1] * 7.3f + P.Skin[2] * 1.7f)) - 0.5f;
+					Dynamic->SetScalarParameterValue(TEXT("Specular"), FMath::Lerp(0.35f, 0.5f, Deep));
+					Dynamic->SetScalarParameterValue(TEXT("Roughness"), FMath::Clamp(FMath::Lerp(0.55f, 0.47f, Deep) - 0.06f * Oily, 0.38f, 0.62f));
+					Dynamic->SetScalarParameterValue(TEXT("MicroStrength"), 0.4f + 0.3f * FMath::Clamp(P.Older, 0.0f, 1.0f));
+				}
 				for (int32 m = 0; m < 4; ++m)
 				{
 					const FCreatorMark& Mark = P.Marks[m];
@@ -617,6 +901,8 @@ namespace
 		Set(TEXT("ImpFace"), P.ImpFace);
 		Set(TEXT("OrcFace"), P.OrcFace);
 		Set(TEXT("OrcBody"), P.OrcBody);
+		Set(TEXT("EthAfrican"), P.EthAfrican);
+		Set(TEXT("EthAsian"), P.EthAsian);
 		for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 		{
 			Set(*(FString(CreatorFaceShapes[f].Morph) + TEXT("Lo")), -P.FaceShape[f]);
@@ -636,6 +922,7 @@ namespace
 		{
 			Anim->SetSoftTissueEnabled(P.bJiggle);
 			Anim->SetBreastJiggle(P.BreastJiggle);
+			Anim->SetBreastSize(P.bFemale ? P.Breasts : -1.0f, P.Weight);
 			Anim->SetBodySoftness(P.Weight, P.Muscle, P.Older);
 			// The tail bones swing only under a tail on show (the imp's, or the Beast-Strain's furred one on the same bones).
 			Anim->SetTailAmount(P.Kind == ECreatorKind::Beast ? 1.0f : P.Tail);
@@ -663,7 +950,9 @@ namespace
 			Face[CreatorUnitMouthOpen] += FMath::Max(0.0f, 0.22f * FMath::Sin(T * 13.0f) + 0.12f * FMath::Sin(T * 7.3f + 1.0f) + 0.05f);
 			Face[CreatorUnitMouthPursing] += FMath::Max(0.0f, 0.25f * FMath::Sin(T * 5.1f + 2.0f));
 		}
-		for (int32 u = 0; u < CreatorUnitCount; ++u)
+		// A live face (facial capture, ASimPawnActor::UpdateLiveFace) moves the face units itself.
+		const bool bLiveFace = Pawn.IsLiveFaceActive();
+		for (int32 u = 0; u < CreatorUnitCount && !bLiveFace; ++u)
 		{
 			Set(*(FString(TEXT("Face_")) + CreatorUnits[u]), Face[u]);
 		}
@@ -687,7 +976,10 @@ namespace
 		const float Furrow = FMath::Max3(U(TEXT("EyebrowsLeftDown")), U(TEXT("EyebrowsRightDown")), U(TEXT("NoseCompression")));
 		const float Smile = FMath::Max3(U(TEXT("MouthCornerPuller")), 0.7f * FMath::Max(U(TEXT("EyeLeftSlit")), U(TEXT("EyeRightSlit"))), U(TEXT("MouthUpwardRetraction")));
 		const float Nose = FMath::Max3(U(TEXT("NoseLeftElevation")), U(TEXT("NoseRightElevation")), U(TEXT("NoseDepression")));
-		Mesh->SetCustomPrimitiveDataVector4(8, FVector4(Forehead, Furrow, Smile, Nose));
+		if (!bLiveFace)
+		{
+			Mesh->SetCustomPrimitiveDataVector4(8, FVector4(Forehead, Furrow, Smile, Nose));
+		}
 		Mesh->SetRelativeScale3D(FVector(P.Height));
 		// Hair colours: head hair and brows the picked colour (brows a touch darker), pubic hair a little darker than the head
 		// hair unless it has its own. The hair materials' Tint multiplies their texture.
@@ -1197,6 +1489,32 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 				}
 			}
 		}
+		// -CreatorLiveFace=<emotion>[,talk] (facial capture, docs/design/faces-mocap.md) on everyone, and
+		// -CreatorEthnicity=<number> (CreatorEthnicities; the last is mixed) for each person in turn from that one, for pictures.
+		FString LiveArg;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorLiveFace="), LiveArg, false))
+		{
+			for (int32 e = 1; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorLiveEmotions)); ++e)
+			{
+				if (LiveArg.StartsWith(UTF8_TO_TCHAR(CreatorLiveEmotions[e])))
+				{
+					for (FCreatorPerson& Person : State->People)
+					{
+						Person.LiveEmotion = e;
+						Person.bLiveTalk = LiveArg.EndsWith(TEXT(",talk"));
+					}
+				}
+			}
+		}
+		int32 EthnicityArg = -1;
+		if (FParse::Value(FCommandLine::Get(), TEXT("CreatorEthnicity="), EthnicityArg))
+		{
+			FRandomStream EthRandom(7);
+			for (int32 i = 0; i < State->People.Num(); ++i)
+			{
+				CreatorSetEthnicity(State->People[i], (EthnicityArg + i) % (CreatorEthnicityMixed() + 1), [&EthRandom]() { return EthRandom.FRand(); }, false);
+			}
+		}
 		FParse::Value(FCommandLine::Get(), TEXT("CreatorPitch="), State->CameraPitch);
 		// -CreatorWet=<0-1> for everyone, for pictures.
 		float WetArg = -1.0f;
@@ -1627,6 +1945,8 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 			}
 			if (ASimPawnActor* Pawn = Pawns->FindPawn(P.Thing))
 			{
+				// The Face tab's facial capture test, else the creator's own expression.
+				Pawn->SetLiveFace(P.LiveEmotion > 0, P.LiveEmotion > 0 ? FName(CreatorLiveEmotions[P.LiveEmotion]) : NAME_None, P.bLiveTalk);
 				CreatorApply(P, *Pawn, State->b4KSkin);
 				if (const USkeletalMeshComponent* Mesh = Pawn->GetMakeHumanMesh())
 				{
@@ -1847,6 +2167,35 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					{
 						ImGui::SliderFloat("Breasts", &P.Breasts, -1.0f, 1.0f, "%.2f");
 					}
+					ImGui::SeparatorText("Build");
+					for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+					{
+						if (CreatorFaceShapes[f].bBody)
+						{
+							ImGui::SliderFloat(CreatorFaceShapes[f].Label, &P.FaceShape[f], -1.0f, 1.0f, "%.2f");
+						}
+					}
+					if (ImGui::Button("Random build"))
+					{
+						CreatorRandomFace(P, []() { return FMath::FRand(); }, false, true);
+					}
+					ImGui::SeparatorText("Ethnicity");
+					{
+						const FString Now = P.Ethnicity < 0 ? FString(TEXT("None (the base's own)")) : CreatorPeople::EthnicityLabel(P.Ethnicity);
+						if (ImGui::BeginCombo("People", TCHAR_TO_UTF8(*Now)))
+						{
+							for (int32 e = 0; e <= CreatorEthnicityMixed(); ++e)
+							{
+								if (ImGui::Selectable(TCHAR_TO_UTF8(*CreatorPeople::EthnicityLabel(e)), P.Ethnicity == e))
+								{
+									CreatorSetEthnicity(P, e, []() { return FMath::FRand(); }, false);
+								}
+							}
+							ImGui::EndCombo();
+						}
+						ImGui::SliderFloat("African features", &P.EthAfrican, 0.0f, 1.0f, "%.2f");
+						ImGui::SliderFloat("East Asian features", &P.EthAsian, 0.0f, 1.0f, "%.2f");
+					}
 					ImGui::SliderFloat(P.bFemale ? "Labia" : "Genitals", &P.Genital, -1.0f, 1.0f, "%.2f");
 					ImGui::Checkbox("Jiggle (off: soft parts stay as animated)", &P.bJiggle);
 					if (P.bFemale)
@@ -1887,20 +2236,37 @@ void USmokeTestSubsystem::BuildCreatorPhases()
 					ImGui::SeparatorText("Shape");
 					for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 					{
-						ImGui::SliderFloat(CreatorFaceShapes[f].Label, &P.FaceShape[f], -1.0f, 1.0f, "%.2f");
+						if (!CreatorFaceShapes[f].bBody)
+						{
+							ImGui::SliderFloat(CreatorFaceShapes[f].Label, &P.FaceShape[f], -1.0f, 1.0f, "%.2f");
+						}
 					}
 					if (ImGui::Button("Random face"))
 					{
-						CreatorRandomFace(P.FaceShape, []() { return FMath::FRand(); });
+						CreatorRandomFace(P, []() { return FMath::FRand(); }, true, false);
 					}
 					ImGui::SameLine();
 					if (ImGui::Button("Average face"))
 					{
-						for (float& Part : P.FaceShape)
+						for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 						{
-							Part = 0.0f;
+							P.FaceShape[f] = CreatorFaceShapes[f].bBody ? P.FaceShape[f] : 0.0f;
 						}
 					}
+					ImGui::SeparatorText("Facial capture (live face)");
+					if (ImGui::BeginCombo("Emotion", CreatorLiveEmotions[FMath::Clamp(P.LiveEmotion, 0, 8)]))
+					{
+						for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorLiveEmotions)); ++e)
+						{
+							if (ImGui::Selectable(CreatorLiveEmotions[e], P.LiveEmotion == e))
+							{
+								P.LiveEmotion = e;
+							}
+						}
+						ImGui::EndCombo();
+					}
+					ImGui::SameLine();
+					ImGui::Checkbox("Talking##live", &P.bLiveTalk);
 					ImGui::SeparatorText("Expression");
 					for (int32 e = 0; e < static_cast<int32>(UE_ARRAY_COUNT(CreatorExpressions)); ++e)
 					{
@@ -2300,6 +2666,9 @@ namespace
 		{
 			P.FaceShape[f] = FMath::Clamp(Look.Get(CreatorFaceShapes[f].Key, P.FaceShape[f]), -1.0f, 1.0f);
 		}
+		P.Ethnicity = FMath::RoundToInt(Look.Get(TEXT("ethnicity"), static_cast<float>(P.Ethnicity)));
+		P.EthAfrican = FMath::Clamp(Look.Get(TEXT("ethAfrican"), P.EthAfrican), 0.0f, 1.0f);
+		P.EthAsian = FMath::Clamp(Look.Get(TEXT("ethAsian"), P.EthAsian), 0.0f, 1.0f);
 		P.HairStyle = FMath::RoundToInt(Look.Get(TEXT("hairStyle"), static_cast<float>(P.HairStyle)));
 		P.Hair[0] = Look.Get(TEXT("hairR"), P.Hair[0]);
 		P.Hair[1] = Look.Get(TEXT("hairG"), P.Hair[1]);
@@ -2471,6 +2840,15 @@ CreatorPeople::FLook CreatorPeople::Expanded(const FLook& Look)
 	{
 		Keep(CreatorFaceShapes[f].Key, P.FaceShape[f]);
 	}
+	Keep(TEXT("ethnicity"), static_cast<float>(P.Ethnicity));
+	Keep(TEXT("ethAfrican"), P.EthAfrican);
+	Keep(TEXT("ethAsian"), P.EthAsian);
+	if (P.bOwnIris)
+	{
+		Keep(TEXT("irisR"), P.Iris[0]);
+		Keep(TEXT("irisG"), P.Iris[1]);
+		Keep(TEXT("irisB"), P.Iris[2]);
+	}
 	Keep(TEXT("hairStyle"), static_cast<float>(P.HairStyle));
 	Keep(TEXT("hairR"), P.Hair[0]);
 	Keep(TEXT("hairG"), P.Hair[1]);
@@ -2525,12 +2903,85 @@ FString CreatorPeople::FaceShapeKey(int32 Index)
 
 void CreatorPeople::RandomFace(FLook& Look)
 {
-	float Shape[CreatorFaceShapeCount] = {};
-	CreatorRandomFace(Shape, []() { return FMath::FRand(); });
+	FCreatorPerson P = CreatorLookPerson(Look);
+	CreatorRandomFace(P, []() { return FMath::FRand(); }, true, false);
 	for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
 	{
-		Look.Values.Add(CreatorFaceShapes[f].Key, Shape[f]);
+		if (!CreatorFaceShapes[f].bBody)
+		{
+			Look.Values.Add(CreatorFaceShapes[f].Key, P.FaceShape[f]);
+		}
 	}
+}
+
+void CreatorPeople::RandomBuild(FLook& Look)
+{
+	FCreatorPerson P = CreatorLookPerson(Look);
+	CreatorRandomFace(P, []() { return FMath::FRand(); }, false, true);
+	for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+	{
+		if (CreatorFaceShapes[f].bBody)
+		{
+			Look.Values.Add(CreatorFaceShapes[f].Key, P.FaceShape[f]);
+		}
+	}
+}
+
+bool CreatorPeople::FaceShapeIsBody(int32 Index)
+{
+	return Index >= 0 && Index < CreatorFaceShapeCount && CreatorFaceShapes[Index].bBody;
+}
+
+int32 CreatorPeople::EthnicityCount()
+{
+	return CreatorEthnicities().Num();
+}
+
+FString CreatorPeople::EthnicityLabel(int32 Index)
+{
+	if (Index == CreatorEthnicityMixed())
+	{
+		return TEXT("Mixed");
+	}
+	return CreatorEthnicities().IsValidIndex(Index) ? FString(UTF8_TO_TCHAR(CreatorEthnicities()[Index].Name)) : FString();
+}
+
+int32 CreatorPeople::EthnicityOf(const FLook& Look)
+{
+	return CreatorLookPerson(Look).Ethnicity;
+}
+
+void CreatorPeople::ApplyEthnicity(FLook& Look, int32 Index)
+{
+	FCreatorPerson P = CreatorLookPerson(Look);
+	CreatorSetEthnicity(P, Index, []() { return FMath::FRand(); }, false);
+	Look.Values.Add(TEXT("ethnicity"), static_cast<float>(P.Ethnicity));
+	Look.Values.Add(TEXT("ethAfrican"), P.EthAfrican);
+	Look.Values.Add(TEXT("ethAsian"), P.EthAsian);
+	Look.Values.Add(TEXT("skinR"), P.Skin[0]);
+	Look.Values.Add(TEXT("skinG"), P.Skin[1]);
+	Look.Values.Add(TEXT("skinB"), P.Skin[2]);
+	Look.Values.Remove(TEXT("skinTone"));  // the skin slider finds the new colour's place
+	Look.Values.Add(TEXT("hairR"), P.Hair[0]);
+	Look.Values.Add(TEXT("hairG"), P.Hair[1]);
+	Look.Values.Add(TEXT("hairB"), P.Hair[2]);
+	Look.Values.Add(TEXT("irisR"), P.Iris[0]);
+	Look.Values.Add(TEXT("irisG"), P.Iris[1]);
+	Look.Values.Add(TEXT("irisB"), P.Iris[2]);
+	for (int32 f = 0; f < CreatorFaceShapeCount; ++f)
+	{
+		Look.Values.Add(CreatorFaceShapes[f].Key, P.FaceShape[f]);
+	}
+}
+
+FString CreatorPeople::EthnicFeatureKey(int32 Index)
+{
+	return Index == 0 ? TEXT("ethAfrican") : (Index == 1 ? TEXT("ethAsian") : FString());
+}
+
+FString CreatorPeople::EthnicFeatureLabel(int32 Index)
+{
+	return Index == 0 ? TEXT("African features") : (Index == 1 ? TEXT("East Asian features") : FString());
 }
 
 int32 CreatorPeople::HairStyleCount()
