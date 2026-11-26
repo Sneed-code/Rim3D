@@ -87,6 +87,12 @@ namespace
 		TEXT("The character screen's sky is held at the hour nearest 10:30, earlier, whose exposure (EV100) stays under this."), ECVF_Default);
 	TAutoConsoleVariable<float> GNgPreviewLamp(TEXT("NewGame.PreviewLamp"), 1.0f,
 		TEXT("The character screen's key lamp, times its own brightness (0: off)."), ECVF_Default);
+	TAutoConsoleVariable<float> GNgPreviewLampRadius(TEXT("NewGame.PreviewLampRadius"), 60.0f,
+		TEXT("The character screen's key lamp: its source radius (cm)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GNgPreviewLampShadows(TEXT("NewGame.PreviewLampShadows"), 0,
+		TEXT("The character screen's key lamp: 1 casts shadows."), ECVF_Default);
+	TAutoConsoleVariable<int32> GNgPreviewLampTransmission(TEXT("NewGame.PreviewLampTransmission"), 1,
+		TEXT("The character screen's key lamp: 1 shines through skin (subsurface transmission)."), ECVF_Default);
 
 	TAutoConsoleVariable<int32> GNgTitleStage(TEXT("Title.Stage"), 1,
 		TEXT("1: the title screen shows the starship stage (the character at a window in orbit); 0: the old camera round a rainforest glade."));
@@ -730,10 +736,13 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 			Lamp->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
 			Lamp->PointLightComponent->SetIntensity(NgPreviewLampIntensity * FMath::Max(GNgPreviewLamp.GetValueOnGameThread(), 0.0f));
 			Lamp->PointLightComponent->SetAttenuationRadius(900.0f);
-			Lamp->PointLightComponent->SetSourceRadius(60.0f);
-			Lamp->PointLightComponent->SetSoftSourceRadius(120.0f);
+			const float Radius = FMath::Max(GNgPreviewLampRadius.GetValueOnGameThread(), 0.0f);
+			Lamp->PointLightComponent->SetSourceRadius(Radius);
+			Lamp->PointLightComponent->SetSoftSourceRadius(Radius * 2.0f);
 			Lamp->PointLightComponent->SetLightColor(FLinearColor(1.0f, 0.95f, 0.88f));
-			Lamp->PointLightComponent->SetCastShadows(false);
+			Lamp->PointLightComponent->SetCastShadows(GNgPreviewLampShadows.GetValueOnGameThread() != 0);
+			Lamp->PointLightComponent->bTransmission = GNgPreviewLampTransmission.GetValueOnGameThread() != 0;
+			Lamp->PointLightComponent->MarkRenderStateDirty();
 		}
 	}
 	if (APointLight* Lamp = PeopleLamp.Get())
