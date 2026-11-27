@@ -1547,6 +1547,7 @@ TEST_CASE("Dismemberment: a knife hacking at a corpse takes a piece off within a
     int hits = 0;
     for (; swings < 80 && sim->health().severed(body) == 0; ++swings) {
         std::string why;
+        sim->things().registry().remove<Stamina>(hero);  // back to back blows: a fresh bar each time
         if (!sim->melee().attack(hero, kNoEntity, true, &why)) {
             MESSAGE(why);
             break;
