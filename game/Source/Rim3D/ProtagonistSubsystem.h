@@ -107,6 +107,9 @@ public:
 	int64 GetFocusCommandsSent() const { return FocusCommandsSent; }
 	/** Frames the focus HP bar was drawn. */
 	int32 GetFocusBarFramesDrawn() const { return FocusBarFramesDrawn; }
+	/** Frames the top left health and stamina bars were drawn (Elden Ring style melee only); their last shares. */
+	int32 GetVitalsFramesDrawn() const { return VitalsFramesDrawn; }
+	float GetShownStamina() const { return ShownStamina; }
 	/** The world point the focus marker sits over (cm), false with no focus. */
 	bool GetFocusPoint(FVector& OutPoint) const;
 	/** F12 Unstuck (docs/design/earthworks.md "Stuck"): 5 seconds of standing still with no actions, then the sim puts the
@@ -139,6 +142,8 @@ private:
 	void DrawHud(USimSubsystem& Bridge);
 	void UpdateFocus(APlayerController& PC, USimSubsystem& Bridge);
 	void DrawFocus(USimSubsystem& Bridge, float Top, float Scale);
+	/** Top left: your health (worst body part, red) with the green stamina bar under it (souls-combat.md). */
+	void DrawVitals(USimSubsystem& Bridge, float Left, float Top, float Scale);
 	void SubmitFocus(USimSubsystem& Bridge, colony::FocusMode Mode);
 	void ApplyBodyVisibility();
 	void BeginDeathScreen(USimSubsystem& Bridge);
@@ -176,6 +181,14 @@ private:
 	int64 ClimbsSent = 0;
 	int64 FocusCommandsSent = 0;
 	int32 FocusBarFramesDrawn = 0;
+	int32 VitalsFramesDrawn = 0;
+	float ShownStamina = 1.0f;
+	/** The bars' trails: what was lost shows pale for a moment, then runs down (Elden Ring). */
+	float HealthTrail = 1.0f;
+	float StaminaTrail = 1.0f;
+	double HealthTrailHeldUntil = 0.0;
+	double StaminaTrailHeldUntil = 0.0;
+	double VitalsLastDrawn = 0.0;
 	/** The focus a Clear was last sent for while the setting is off (so it is sent once). */
 	colony::Entity FocusClearedFor = colony::kNoEntity;
 	/** Seconds the player has been turned away from the focus and moving away from it (lock-on.md). */

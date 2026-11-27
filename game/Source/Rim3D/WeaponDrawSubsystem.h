@@ -62,6 +62,12 @@ public:
 	 *  False (and nothing sent) if not in direct mode, the game is paused, an order went out this step, or the
 	 *  pawn is not ready to swing. */
 	bool Swing();
+	/** Elden Ring style melee (snapshot souls, docs/design/souls-combat.md): one press is one attack, light or heavy, a
+	 *  running or jump attack when sprinting or in the air. Not held back by the swing under way: the sim keeps the
+	 *  press and plays it when the combo opens. bHold: the heavy button is still held (a charged heavy until released). */
+	bool SoulsSwing(bool bHeavy, bool bHold);
+	/** Lets go of a held (charging) heavy. */
+	bool SoulsRelease();
 	/** Holds the melee weapon up to block. False unless the colonist holds a melee weapon and is ready. */
 	bool Block();
 	/** Right mouse with a shield on the arm: raises the shield (facing where the camera looks) or lowers it. Sends a
@@ -284,6 +290,13 @@ private:
 	/** A click during a swing is kept this long (real seconds) and swings the moment the last one lets it (sneed
 	 *  2026-11-24: "make sure you can still punch immediately after so there's no delay between"). */
 	double SwingBufferedUntil = 0.0;
+	/** A souls press not sent yet (one order per step): kept until the next step, as heavy or light. */
+	bool bSoulsPending = false;
+	bool bSoulsPendingHeavy = false;
+	double SoulsPendingAt = 0.0;
+	/** A heavy press is held: its release goes to the sim (the charge ends). */
+	bool bSoulsHolding = false;
+	bool bSoulsReleasePending = false;
 	float FrameDelta = 0.0f;
 	/** The right-mouse shield: whether the player wants it up, for which pawn, the way it was last sent and when (real seconds). */
 	bool bShieldWanted = false;

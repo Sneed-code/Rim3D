@@ -114,6 +114,7 @@ void structTestFace(Sim& sim, Entity pawn, float x, float y) {
 // The player swings at nobody and the blow runs its course; returns the MeleeHit event.
 Event structTestSwing(Sim& sim, Entity hero, float atX, float atY) {
     structTestFace(sim, hero, atX, atY);
+    sim.things().registry().remove<Stamina>(hero);  // a fresh bar each blow: the test swings back to back
     std::string why;
     if (!sim.melee().attack(hero, kNoEntity, true, &why)) {
         MESSAGE(why);

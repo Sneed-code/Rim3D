@@ -157,6 +157,8 @@ private:
 
 	colony::Entity Thing = colony::kNoEntity;
 	bool bSprinting = false;
+	/** The sprint key was held with a swing (a heavy attack): its release doesn't switch sprint. */
+	bool bSprintKeyChorded = false;
 	float TargetSpeed = 0.0f;
 	FVector2D Position = FVector2D::ZeroVector;  // sim metres
 	int32 Level = 0;

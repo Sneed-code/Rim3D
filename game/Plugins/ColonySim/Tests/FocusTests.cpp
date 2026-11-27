@@ -8,6 +8,7 @@
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Souls.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -109,6 +110,7 @@ void focusTestFace(Sim& sim, Entity pawn, float fx, float fy) {
 void focusTestHeal(Sim& sim, Entity pawn) {
     sim.things().registry().replace<Health>(pawn, Health{});
     sim.health().refresh(pawn);
+    sim.things().registry().remove<Stamina, PoiseMeter>(pawn);  // rested too (souls-combat.md)
 }
 
 float focusTestDistance(Sim& sim, Entity a, Entity b) {

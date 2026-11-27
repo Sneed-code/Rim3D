@@ -623,6 +623,9 @@ Sim::Sim(const SimSettings& settings, std::shared_ptr<const DefDatabase> defs, E
     melee_ = std::make_unique<MeleeSystem>(*things_, map_, *combat_, *health_, *defs_, time_,
                                            splitMix64(settings.seed ^ 0x6D656C6565ULL));
     melee_->setEventLog(&events_);
+    // Elden Ring style melee (souls-combat.md): rolls and raised guards ask the melee system first (stamina, attacks).
+    combat_->setRollGate([this](Entity pawn, std::string* why) { return melee_->soulsRollGate(pawn, why); });
+    combat_->setGuardGate([this](Entity pawn, std::string* why) { return melee_->soulsGuardGate(pawn, why); });
     fighters_->setMelee(melee_.get());
     fighters_->setSeed(splitMix64(settings.seed ^ 0x7EA3ULL));  // each fighter's temper (team play)
     upperFloors_ = std::make_unique<UpperFloors>(map_, *rooms_, *things_, plants_.get());
@@ -2198,8 +2201,15 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
         const bool player = things_->registry().valid(melee->pawn) && things_->registry().all_of<PlayerControl>(melee->pawn);
         // The player's swing with no target goes at its focus, or down at a body before it (docs/design/focus.md).
         const Entity target = melee->target == kNoEntity && player ? melee_->playerTarget(melee->pawn) : melee->target;
-        const bool done = melee->mode == MeleeMode::Block ? melee_->block(melee->pawn, &error)
-                                                          : melee_->attack(melee->pawn, target, player, &error);
+        SoulsPress press;
+        press.heavy = melee->heavy;
+        press.running = melee->running;
+        press.jumping = melee->jumping;
+        press.hold = melee->hold;
+        const bool done = melee->mode == MeleeMode::Block     ? melee_->block(melee->pawn, &error)
+                          : melee->mode == MeleeMode::Release ? melee_->soulsRelease(melee->pawn) || true
+                          : melee_->soulsOn()                 ? melee_->soulsAttack(melee->pawn, target, player, press, &error)
+                                                              : melee_->attack(melee->pawn, target, player, &error);
         if (!done) {
             commandFailed(id, error);
         }
@@ -2785,6 +2795,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
     out.gameSeconds = time_.seconds;
     out.steps = time_.steps;
     out.dayMinutes = time_.dayMinutes;
+    out.souls = melee_->soulsOn();
     out.mapWidth = map_.width();
     out.mapHeight = map_.height();
     out.things.clear();
@@ -3427,6 +3438,14 @@ void Sim::writeSnapshot(Snapshot& out) const {
             view.focusPlayer = melee->focusPlayer;
             view.footwork = time_.steps < melee->footworkUntil;
             view.fightResponse = melee->response;
+            view.meleeKind = static_cast<uint8_t>(melee_->attackKind(entity));
+            view.meleeCombo = melee->combo;
+            view.meleeCharging = melee_->charging(entity);
+            view.meleeStunned = melee_->soulsStunned(entity);
+        }
+        if (melee_->soulsOn() && reg.any_of<Stamina, PoiseMeter>(entity)) {
+            view.stamina = melee_->staminaShare(entity);
+            view.poise = melee_->poiseShare(entity);
         }
         view.sprinting = pawnSprinting(entity);
         if (std::find(focusedByPlayer.begin(), focusedByPlayer.end(), entity) != focusedByPlayer.end() ||

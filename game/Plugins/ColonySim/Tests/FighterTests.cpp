@@ -2,6 +2,7 @@
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
 #include "ColonySim/Fighters.h"
+#include "ColonySim/Souls.h"
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Replay.h"
@@ -122,6 +123,7 @@ bool fightTestFailed(const Sim& sim) {
 void fightTestHeal(Sim& sim, Entity pawn) {
     sim.things().registry().replace<Health>(pawn, Health{});
     sim.health().refresh(pawn);
+    sim.things().registry().remove<Stamina, PoiseMeter>(pawn);  // rested too (souls-combat.md)
 }
 
 }  // namespace

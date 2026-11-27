@@ -52,6 +52,7 @@ constexpr float kFightShotClearance = 0.3f;  // metres below the chest the shot'
 constexpr float kFightAimTopMargin = 0.15f;  // as Combat.cpp's kCombatAimTopMargin: the highest aim over a crest
 constexpr float kFightFriendSpread = 0.3f;   // metres to either side of the target's chest a shot may stray and still miss a friend (ours)
 constexpr float kFightFriendBody = 0.3f;      // metres: a friend's body about its centre, as a column, for the shot's line (ours)
+constexpr float kFightFriendLurch = 0.4f;  // metres more round a friend a clip is moving (ours)
 constexpr float kFightFriendMaxStray = 2.0f;  // metres: the most a shot's stray at the target is allowed for (ours)
 constexpr float kFightFriendCorridor = 0.9f; // a friend this near the shot's line on the ground gets the exact check (ours)
 constexpr float kFightFallBackCap = 40.0f;  // metres from the nearest enemy beyond which falling back gains nothing
@@ -1029,7 +1030,8 @@ bool FighterSystem::friendInLine(Entity pawn, float x, float y, int level, Stanc
         const float off2 = ex * ex + ey * ey;
         // A friend's body as a solid column, not its hitboxes: a line between its legs is still a shot through it (a
         // stray hits a leg: the clubman at a manhunting megascarab, 2026-11-23).
-        const float body = kFightFriendBody + stray * s;
+        // A friend carried by a clip (a lunging blow, a stagger: souls-combat.md) may lurch into the line mid-flight.
+        const float body = kFightFriendBody + stray * s + (things_.registry().all_of<BodyMotion>(p.pawn) ? kFightFriendLurch : 0.0f);
         if (along > 0.0f && along < 1.0f && off2 <= body * body) {
             const float z = az + (bz - az) * s - map_.heightAt(p.x, p.y);
             if (z > -kFightFriendSpread && z < bodyHeight(p.stance) + kFightFriendSpread) {
@@ -1943,6 +1945,11 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         }
     }
     if (victim == kNoEntity) {
+        // Elden Ring style (souls-combat.md): a charging fighter may leap in at its target from a few metres off.
+        if (melee_->soulsOn() && info(f.target) != nullptr && melee_->charges(pawn) && melee_->aiLeap(pawn, f.target)) {
+            stop(pawn, f);
+            return true;
+        }
         return false;
     }
     const Mover* mover = things_.registry().try_get<Mover>(pawn);
@@ -1961,6 +1968,9 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         stop(pawn, f);
     }
     combat_.setStance(pawn, Stance::Standing);
+    if (melee_->soulsOn() && melee_->hasMoveset(pawn)) {
+        return melee_->aiSoulsTurn(pawn, victim);  // light combos, heavies, charges, guard counters, backing off to breathe
+    }
     if (melee_->ready(pawn) && !melee_->holdSwing(pawn, victim)) {
         melee_->attack(pawn, victim, false);
     } else {
@@ -1993,6 +2003,8 @@ void FighterSystem::shieldAct(Entity pawn, Fighter& f) {
     }
     // The nearest enemy whose shot or swing is coming at it.
     Entity threat = kNoEntity;
+    bool swingComing = false;
+    uint64_t swingSeed = 0;
     float nearest = 0.0f;
     for (const PawnInfo& p : pawns_) {
         if (p.pawn == pawn || p.faction == self->faction || p.animal || !p.able || p.level != self->level) {
@@ -2009,6 +2021,8 @@ void FighterSystem::shieldAct(Entity pawn, Fighter& f) {
         if (threat == kNoEntity || d < nearest) {
             threat = p.pawn;
             nearest = d;
+            swingComing = m != nullptr && m->target == pawn && m->phase == MeleePhase::Windup;
+            swingSeed = m != nullptr ? m->seed : 0;
         }
     }
     // Whether it would rather strike now.
@@ -2032,6 +2046,12 @@ void FighterSystem::shieldAct(Entity pawn, Fighter& f) {
                 }
             }
         }
+    }
+    // Elden Ring style (souls-combat.md): a swing coming at it is usually met with the guard (its stamina pays for the
+    // block) rather than a trade of blows; a reeling fighter can't raise it.
+    if (melee_ != nullptr && melee_->soulsOn() && swingComing && strike && !melee_->winding(pawn) &&
+        Rng(splitMix64(swingSeed ^ (uint64_t{entt::to_integral(pawn)} << 7) ^ 0x6A4DULL)).unit() < melee_->souls().aiGuardChance) {
+        strike = false;
     }
     const int hold = stats.shieldRules().aiHoldSteps;
     if (threat != kNoEntity && !strike) {

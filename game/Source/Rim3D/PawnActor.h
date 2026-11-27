@@ -66,6 +66,9 @@ public:
 	 *  pawn on the ground. False if it is already in the air, lying or ragdolled. */
 	bool StartJump();
 	bool IsJumping() const { return JumpAge >= 0.0f; }
+	/** Ends a jump in the air without its landing (a jump attack's clip takes the body over): the height eases back to
+	 *  the ground over kJumpCancelSeconds instead of dropping. */
+	void CancelJump();
 	/** How high the body is off the ground now, cm. A cat-strain jumps twice as high (and longer, as a thrown body would). */
 	float GetJumpHeight() const;
 	int32 GetJumpsPlayed() const { return JumpsPlayed; }
@@ -73,6 +76,7 @@ public:
 	float GetGroundSpeed() const { return GroundSpeed; }
 	static constexpr float kJumpHeight = 45.0f;
 	static constexpr float kJumpSeconds = 0.62f;
+	static constexpr float kJumpCancelSeconds = 0.25f;
 
 	/** Gives the pawn its seeded looks (docs/design/looks.md): height, and with the MetaHuman its body
 	 *  shape, skin and hair colour; horns for lineages that have them. Does nothing if they are unchanged. */
@@ -525,6 +529,9 @@ private:
 	float JumpSpeed = 0.0f;
 	float JumpStartLength = 0.0f;
 	bool bJumpFalling = false;
+	/** The height (cm) a cancelled jump was at, eased to nought; and how far into that ease it is (game seconds). */
+	float JumpCancelHeight = 0.0f;
+	float JumpCancelAge = 0.0f;
 	int32 JumpsPlayed = 0;
 	float GroundSpeed = 0.0f;
 	// A clip the sim is moving the body along (docs/design/body-motion.md): the def playing, the montage, and how far

@@ -1095,6 +1095,9 @@ void UProtagonistSubsystem::DrawHud(USimSubsystem& Bridge)
 	// The enemy you are locked on to: its name and the health of its worst body part, top middle.
 	DrawFocus(Bridge, Viewport->Pos.y + Margin, Scale);
 
+	// Your health and stamina, top left (sneed 2026-11-27: "green under a health bar ... in the top left").
+	DrawVitals(Bridge, Viewport->Pos.x + Margin, Viewport->Pos.y + Margin, Scale);
+
 	// Who you are, bottom left.
 	ImGui::SetNextWindowPos(ImVec2(Viewport->Pos.x + Margin, Viewport->Pos.y + Viewport->Size.y - Margin), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 	ImGui::SetNextWindowBgAlpha(0.6f);
@@ -1380,6 +1383,61 @@ bool UProtagonistSubsystem::GetFocusPoint(FVector& OutPoint) const
 	const float HeightM = FMath::Max(0.3f, Bridge->GetSim()->bodyHeightM(Focus));
 	OutPoint = Bridge->SimToWorld(Target->x, Target->y, Target->level) + FVector(0.0, 0.0, bLow ? 25.0 : HeightM * 100.0 * 0.62);
 	return true;
+}
+
+void UProtagonistSubsystem::DrawVitals(USimSubsystem& Bridge, float Left, float Top, float Scale)
+{
+	const colony::Snapshot& Snap = Bridge.GetCurrentSnapshot();
+	const colony::ThingView* Me = Snap.souls ? Snap.find(Controlled) : nullptr;
+	if (!Me)
+	{
+		return;
+	}
+	const float Health = FMath::Clamp(Me->dead ? 0.0f : Me->lowestPart, 0.0f, 1.0f);
+	const float Stamina = FMath::Clamp(Me->stamina, 0.0f, 1.0f);
+	ShownStamina = Stamina;
+	// A trail holds a moment where the bar was, then runs down to it; going up it follows at once.
+	const double Now = FPlatformTime::Seconds();
+	const float Delta = FMath::Clamp(static_cast<float>(Now - VitalsLastDrawn), 0.0f, 0.1f);
+	VitalsLastDrawn = Now;
+	const auto Trail = [Now, Delta](float Value, float& Shown, double& HeldUntil)
+	{
+		if (Value >= Shown)
+		{
+			Shown = Value;
+			HeldUntil = Now + 0.6;
+		}
+		else if (Now > HeldUntil)
+		{
+			Shown = FMath::Max(Value, Shown - 0.6f * Delta);
+		}
+	};
+	Trail(Health, HealthTrail, HealthTrailHeldUntil);
+	Trail(Stamina, StaminaTrail, StaminaTrailHeldUntil);
+
+	ImDrawList* Draw = ImGui::GetForegroundDrawList();
+	const float Width = 320.0f * Scale;
+	const auto Bar = [Draw, Left, Width, Scale](float Y, float Height, float Value, float TrailValue, ImU32 Fill, ImU32 TrailColour)
+	{
+		const ImVec2 A(Left, Y);
+		const ImVec2 B(Left + Width, Y + Height);
+		const float Edge = 1.5f * Scale;
+		Draw->AddRectFilled(ImVec2(A.x - Edge, A.y - Edge), ImVec2(B.x + Edge, B.y + Edge), IM_COL32(0, 0, 0, 170));
+		Draw->AddRectFilled(A, B, IM_COL32(25, 22, 18, 200));
+		if (TrailValue > Value)
+		{
+			Draw->AddRectFilled(ImVec2(A.x + Width * Value, A.y), ImVec2(A.x + Width * TrailValue, B.y), TrailColour);
+		}
+		if (Value > 0.0f)
+		{
+			Draw->AddRectFilled(A, ImVec2(A.x + Width * Value, B.y), Fill);
+		}
+		Draw->AddRect(ImVec2(A.x - Edge, A.y - Edge), ImVec2(B.x + Edge, B.y + Edge), IM_COL32(150, 130, 95, 200), 0.0f, Edge);
+	};
+	const float HealthHeight = 12.0f * Scale;
+	Bar(Top, HealthHeight, Health, HealthTrail, IM_COL32(170, 28, 24, 255), IM_COL32(230, 200, 120, 220));
+	Bar(Top + HealthHeight + 6.0f * Scale, 9.0f * Scale, Stamina, StaminaTrail, IM_COL32(48, 150, 60, 255), IM_COL32(200, 230, 150, 200));
+	++VitalsFramesDrawn;
 }
 
 void UProtagonistSubsystem::DrawFocus(USimSubsystem& Bridge, float Top, float Scale)

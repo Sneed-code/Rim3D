@@ -498,12 +498,18 @@ struct SetBreedingCommand {
 // swings have no spread (the player aims). Block: `pawn` raises its melee weapon for a moment.
 // Fails if the pawn can't swing or block now (downed, mid-shot, still swinging, out of reach, no
 // melee weapon to block with).
-enum class MeleeMode : uint8_t { Attack, Block };
+enum class MeleeMode : uint8_t { Attack, Block, Release };
 
+// Elden Ring style melee (SoulsRules, docs/design/souls-combat.md): an Attack press says whether it is the heavy one,
+// made sprinting or in the air, and whether the button is held (a heavy charges until a Release).
 struct MeleeCommand {
     Entity pawn = kNoEntity;
     Entity target = kNoEntity;
     MeleeMode mode = MeleeMode::Attack;
+    bool heavy = false;
+    bool running = false;
+    bool jumping = false;
+    bool hold = false;
 };
 
 // Clothes (task C15, docs/design/apparel.md). A pawn follows an outfit (an id from the snapshot's outfits):

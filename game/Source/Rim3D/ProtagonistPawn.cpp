@@ -256,9 +256,19 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		bWalk = IsDown(PC, ERim3DAction::WalkSlow);
 		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
 		// It doesn't sprint while walking slowly or aiming.
-		if (WasPressed(PC, ERim3DAction::Sprint))
+		// Shift is also the heavy attack's key when held with a swing (souls-combat.md): sprint then switches when the key
+		// comes up, and not at all if a swing was pressed while it was held.
+		if (IsDown(PC, ERim3DAction::Sprint) && IsDown(PC, ERim3DAction::HeavyAttack) && WasPressed(PC, ERim3DAction::Attack))
 		{
-			SetSprintToggle(!IsSprintToggleOn());
+			bSprintKeyChorded = true;
+		}
+		if (Rim3DKeys::WasReleased(PC, ERim3DAction::Sprint) && !Rim3DKeys::AreGameKeysBlocked())
+		{
+			if (!bSprintKeyChorded)
+			{
+				SetSprintToggle(!IsSprintToggleOn());
+			}
+			bSprintKeyChorded = false;
 		}
 		bSprinting = IsSprintToggleOn() && !bWalk && !bAimHeld;
 		if (!bUnstucking && WasPressed(PC, ERim3DAction::Jump))
