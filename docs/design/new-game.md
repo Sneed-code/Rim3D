@@ -80,7 +80,9 @@ up and down tilt; holding the right button orbits the camera round the still bod
 degrees, the eye kept over the feet); the wheel and the - + buttons zoom. The stage is cosmetic too: the sky is held at mid-morning while the screen is open
 (`USkySubsystem::SetHourOverride`; the sim's clock is untouched; the hour nearest 10:30, earlier, whose exposure stays
 under 12.25 EV, because higher the engine prints a clipping warning), plants within 3.5 m of each person on show are not
-drawn (`UTerrainSubsystem::SetPlantClearings`), a soft key light stands by the camera, and for each
+drawn (`UTerrainSubsystem::SetPlantClearings`), a soft key light stands by the camera (24000 cd: at 60000 the lit side of dark skin washed out to
+white, because skin lit that far over the exposure overflows the subsurface scattering; `NewGame.PreviewLamp*` cvars
+tune it, and the newgame smoke test's `newgame_you_dark` shot checks it on the Melanesian preset), and for each
 pawn the camera picks the direction nearest its front with no tree trunk or other person in the way, turning the body to
 face it. The mannequin a MakeHuman body is retargeted from is hidden even without a MetaHuman (it showed through).
 

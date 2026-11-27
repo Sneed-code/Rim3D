@@ -10,6 +10,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "GameFramework/PlayerController.h"
 
 #include "ColonyHudSubsystem.h"
@@ -276,6 +278,59 @@ void USmokeTestSubsystem::BuildNewGamePhases()
 		State->RerolledName = Sim->colonistOf(People[2]) ? Sim->colonistOf(People[2])->firstName : std::string();
 	};
 	Phases.Add(MoveTemp(PeoplePhase));
+
+	// 3a. You with dark skin, seen from the lit side (sneed 2026-11-26: on this screen a Melanesian woman's lit skin washed
+	// out to white; the Debug creator never showed it). -NewGameEthnicity=<label or number> picks another preset.
+	FPhase DarkPhase;
+	DarkPhase.Name = TEXT("newgame_you_dark");
+	DarkPhase.WarmupSeconds = 3.0f;
+	DarkPhase.MeasureSeconds = 0.3f;
+	DarkPhase.Setup = [=, this]()
+	{
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		const colony::PawnLooks* Looks = People.empty() ? nullptr : Sim->things().registry().try_get<colony::PawnLooks>(People[0]);
+		CreatorPeople::FLook Look;
+		if (!Looks || !CreatorPeople::Decode(UTF8_TO_TCHAR(Looks->creator.c_str()), Look))
+		{
+			Fail(TEXT("newgame_you_dark: your creator look did not read"));
+			return;
+		}
+		State->YourLook = Looks->creator;
+		FString Wanted = TEXT("Melanesian and Aboriginal Australian");
+		FParse::Value(FCommandLine::Get(), TEXT("NewGameEthnicity="), Wanted);
+		int32 Picked = Wanted.IsNumeric() ? FCString::Atoi(*Wanted) : INDEX_NONE;
+		for (int32 e = 0; Picked == INDEX_NONE && e < CreatorPeople::EthnicityCount(); ++e)
+		{
+			Picked = CreatorPeople::EthnicityLabel(e) == Wanted ? e : INDEX_NONE;
+		}
+		if (Picked == INDEX_NONE)
+		{
+			Fail(FString::Printf(TEXT("newgame_you_dark: no ethnicity '%s'"), *Wanted));
+			return;
+		}
+		CreatorPeople::ApplyEthnicity(Look, Picked);
+		Hud()->SubmitPeopleLookForTest(People[0], 0, Look);
+		Hud()->SetPeopleOrbitForTest(35.0f);
+		UE_LOG(LogTemp, Display, TEXT("NEWGAME dark skin: you as %s"), *CreatorPeople::EthnicityLabel(Picked));
+	};
+	DarkPhase.Verify = [=, this]()
+	{
+		const colony::Sim* Sim = Bridge()->GetSim();
+		const std::vector<colony::Entity> People = Sim ? Sim->startingColonistSlots() : std::vector<colony::Entity>();
+		if (const USkySubsystem* Sky = GetWorld()->GetSubsystem<USkySubsystem>())
+		{
+			UE_LOG(LogTemp, Display, TEXT("NEWGAME dark skin: sky at %.2f h, exposure %.1f EV"), Sky->GetHourOverride(), Sky->GetExposure());
+		}
+		Hud()->SetPeopleOrbitForTest(0.0f);
+		CreatorPeople::FLook Back;
+		if (!People.empty() && !State->YourLook.empty() && CreatorPeople::Decode(UTF8_TO_TCHAR(State->YourLook.c_str()), Back))
+		{
+			Hud()->SubmitPeopleLookForTest(People[0], 0, Back);  // the default woman again for the pages after
+		}
+		State->YourLook.clear();
+	};
+	Phases.Add(MoveTemp(DarkPhase));
 
 	// 3b. Clothes on, spinning: the cargo pack's cotton shown on the body (cosmetic), the body turning on the turntable.
 	FPhase ClothesPhase;

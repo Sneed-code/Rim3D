@@ -142,6 +142,7 @@ public:
 	void SetPeopleSpinForTest(float Rate) { PeopleSpinRate = Rate; }
 	/** The right-button orbit of the character screen's camera, degrees round the body (smoke test). */
 	void SetPeopleOrbitForTest(float Degrees) { PeopleOrbit = Degrees; }
+	void SubmitPeopleLookForTest(colony::Entity Pawn, int32 Slot, const CreatorPeople::FLook& Look) { SubmitPeopleLook(Pawn, Slot, Look); }
 	/** Start on the people page, as the button does. */
 	void LandColonyForTest();
 

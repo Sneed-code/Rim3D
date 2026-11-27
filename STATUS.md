@@ -2,6 +2,14 @@
 
 Updated 2026-11-27.
 
+White skin on the "You" screen fixed (sneed, 2026-11-27; Unreal only, no art step): sneed's update had applied. The
+screen's key lamp at the camera (60000 cd) lit dark skin so far over the exposure that the subsurface scattering lost the
+skin colour and the lit side came out white (crown, neck, shoulder in his braid picture; face, chest, arms head on).
+Lamp off or scattering off gave brown skin; radius, shadows, transmission, hair, exposure and hour didn't matter. The lamp
+is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still well lit; 0.5x clipped on the chest).
+The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
+`PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
+
 14 new models (sneed, 2026-11-27; data and art steps): **Codex** (medium) steel stock, silver coins, gold ingots, a woven sack of rice, ears of corn, go-juice injectors and a neutroamine canister, replacing their box shapes; **Neon** (high) rigged and animated gazelle, ostrich, duck, hare, squirrel, sheep and yak, replacing their stand-ins (`assets/animal_art.json`; no animal def is drawn by a stand-in model now except polar bear, caribou and muskox). Briefs in `tools/codex_assets` and `tools/neon_assets`; previews on branch claude/shots-batch8-vmjf7f.
 
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
