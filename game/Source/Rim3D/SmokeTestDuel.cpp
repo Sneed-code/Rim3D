@@ -37,6 +37,8 @@ namespace
 	// The player is healed when its worst body part falls under this share (a practice fight: no YOU DIED); in the watch the
 	// opponent too.
 	constexpr float DuelSmokePracticeHealth = 0.9f;  // a charged blow to the head takes most of it at once
+	// Many small cuts bleed to death while no one part looks hurt: healed past this much blood lost too.
+	constexpr float DuelSmokePracticeBlood = 0.1f;
 	// Seconds after the opponent falls before the next one comes.
 	constexpr float DuelSmokeRematchSeconds = 4.0f;
 	constexpr int DuelSmokeSkill = 10;
@@ -201,7 +203,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		Arm(State->Me, State->bMeArmed);
 		Arm(State->Foe, State->bFoeArmed);
 		const colony::ThingView* Me = DuelSmokeFind(*B, State->Me);
-		if (Me && !Me->dead && (Me->downed || Me->lowestPart < DuelSmokePracticeHealth))
+		if (Me && !Me->dead && (Me->downed || Me->lowestPart < DuelSmokePracticeHealth || Me->bloodLoss > DuelSmokePracticeBlood))
 		{
 			DuelSmokeHeal(Sim, State->Me);
 		}
@@ -209,7 +211,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		if (bWatch)
 		{
 			const colony::ThingView* Foe = DuelSmokeFind(*B, State->Foe);
-			if (Foe && !Foe->dead && (Foe->downed || Foe->lowestPart < DuelSmokePracticeHealth))
+			if (Foe && !Foe->dead && (Foe->downed || Foe->lowestPart < DuelSmokePracticeHealth || Foe->bloodLoss > DuelSmokePracticeBlood))
 			{
 				DuelSmokeHeal(Sim, State->Foe);
 			}
