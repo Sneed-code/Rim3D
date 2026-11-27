@@ -1,3 +1,4 @@
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -263,8 +264,55 @@ TEST_CASE("Explosives: a hard blast knocks a pawn down and away, and it gets up 
     sim->step();
     CHECK(exploSaw(*sim, EventType::CommandFailed));
     exploHeal(*sim, pawn);
-    sim->stepMany(120);
+    sim->stepMany(400);
     CHECK(sim->combat().knockedDownFor(pawn) == 0);
+    CHECK(sim->things().registry().get<Posture>(pawn).stance == Stance::Standing);
+}
+
+TEST_CASE("Explosives: a knocked down pawn gets up with the get-up clip, never snapped up, and that survives a save") {
+    // sneed (2026-11-27): "when a pawn falls over and gets up they just kind of unnaturally snap back up fast".
+    auto sim = exploSim();
+    const Entity pawn = exploPawn(*sim, 40, 40, "Gun_Revolver");
+    exploHeal(*sim, pawn);
+    exploBlast(*sim, 39.7f, 40.5f);
+    EXPLO_REQUIRE(sim->combat().knockedDownFor(pawn) > 0);
+    const DefId getUp = sim->combat().motion().clipId("Motion_GetUp");
+    EXPLO_REQUIRE(getUp.valid());
+    // Down until the fall is over, then the get-up clip plays, still knocked down (it can't act) but no longer lying.
+    int steps = 0;
+    while (!sim->combat().gettingUp(pawn) && steps < 600) {
+        exploHeal(*sim, pawn);
+        CHECK(sim->combat().knockedDownFor(pawn) > 0);
+        sim->step();
+        ++steps;
+    }
+    EXPLO_REQUIRE(sim->combat().gettingUp(pawn));
+    CHECK(sim->things().registry().get<BodyMotion>(pawn).clip == getUp);
+    const int rising = sim->combat().knockedDownFor(pawn);
+    CHECK(rising >= 100);  // over 4 seconds, not a snap
+    Snapshot snap;
+    sim->writeSnapshot(snap);
+    const ThingView* view = snap.find(pawn);
+    EXPLO_REQUIRE(view != nullptr);
+    CHECK_FALSE(view->knockedDown);
+    CHECK(view->motionClip == getUp);
+    sim->stepMany(10);
+    sim->submit(ShootCommand{pawn, kNoEntity, 60.0f, 40.0f, 1.0f, true});
+    sim->step();
+    CHECK(exploSaw(*sim, EventType::CommandFailed));
+    // A save mid-way keeps it getting up.
+    SaveLoadResult loaded = loadSim(saveSim(*sim), exploDefs());
+    CHECK_MESSAGE(loaded.error.empty(), loaded.error);
+    EXPLO_REQUIRE(loaded.sim != nullptr);
+    CHECK(loaded.sim->combat().gettingUp(pawn));
+    CHECK(loaded.sim->combat().knockedDownFor(pawn) == sim->combat().knockedDownFor(pawn));
+    CHECK(loaded.sim->stateHash() == sim->stateHash());
+    for (int i = 0; i < rising + 5; ++i) {
+        exploHeal(*sim, pawn);
+        sim->step();
+    }
+    CHECK(sim->combat().knockedDownFor(pawn) == 0);
+    CHECK_FALSE(sim->combat().gettingUp(pawn));
     CHECK(sim->things().registry().get<Posture>(pawn).stance == Stance::Standing);
 }
 
@@ -672,4 +720,23 @@ TEST_CASE("Explosives: the belt's stacks and a throw plan's start, for the playe
     CHECK(plan.startX == doctest::Approx(40.5f));
     CHECK(plan.startZ > sim->map().heightAt(40.5f, 40.5f) + 0.5f);
     CHECK(plan.landX == doctest::Approx(46.5f).epsilon(0.1));
+}
+
+TEST_CASE("Motion data: a bullet's stagger is a short flinch on the spot, with a clip for every side") {
+    // sneed (2026-11-27): "when I shoot someone, esp in the head, the body staggers".
+    auto sim = exploSim();
+    const BodyMotionSystem& motion = sim->combat().motion();
+    for (const char* name : {"Motion_FlinchBack", "Motion_FlinchForward", "Motion_FlinchLeft", "Motion_FlinchRight"}) {
+        const DefId id = motion.clipId(name);
+        CHECK_MESSAGE(id.valid(), name);
+        if (id.valid()) {
+            const float moved = std::fabs(motion.forwardAt(id, 0.3f));
+            CHECK_MESSAGE(moved < 0.5f, name);  // a flinch, not the stumble of a club blow
+        }
+    }
+    const Entity pawn = exploPawn(*sim, 40, 40);
+    sim->stepMany(3);
+    sim->combat().stagger(pawn, HitFrom{true, 20.0f, 40.5f});
+    EXPLO_REQUIRE(sim->combat().motion().moving(pawn));
+    CHECK(sim->things().registry().get<BodyMotion>(pawn).upper);
 }

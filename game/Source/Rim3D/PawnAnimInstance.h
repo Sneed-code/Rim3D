@@ -78,6 +78,10 @@ struct FSimPawnAnimInputs
 	ESimPawnZone PatchZone = ESimPawnZone::Torso;
 	/** Off for a ragdoll and for far pawns: the layer does nothing and forgets its springs. */
 	bool bHitLayer = true;
+	/** 0 to 1: how much a montage in the upper-body slot leaves the arms as they are beneath it (a hit react or a
+	 *  stagger: the chest, neck and head reel, the arms keep holding the gun or hanging; sneed 2026-11-27: "when I
+	 *  shoot a pawn sometimes they raise their right arm then lower it"). */
+	float UpperArmsKept = 0.0f;
 };
 
 /** What the animation did, copied back after each update. Read by the smoke test. */

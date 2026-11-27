@@ -2560,8 +2560,27 @@ void CombatSystem::step(Rng& rng) {
     std::sort(scratch_.begin(), scratch_.end());
     for (const Entity pawn : scratch_) {
         KnockedDown& k = reg.get<KnockedDown>(pawn);
-        if (--k.stepsLeft > 0 && !health_.incapacitated(pawn)) {
+        if (k.side < 0 && !k.gettingUp) {
+            k.side = motion_->knockdownSide(pawn);
+        }
+        const bool out = health_.incapacitated(pawn);
+        if (k.stepsLeft > 0) {
+            --k.stepsLeft;
+        }
+        // Still falling (the knockdown clip plays on past the time down): it lies there until the fall is over.
+        if (!out && (k.stepsLeft > 0 || (!k.gettingUp && motion_->moving(pawn)))) {
             continue;
+        }
+        if (!out && !k.gettingUp) {
+            // Then up, with the get-up clip, standing at its end (still knocked down until then: it can't act).
+            if (const int steps = motion_->getUp(pawn, k.side); steps > 0) {
+                k.gettingUp = true;
+                k.stepsLeft = steps;
+                if (Posture* posture = reg.try_get<Posture>(pawn)) {
+                    posture->stance = k.before;
+                }
+                continue;
+            }
         }
         if (Posture* posture = reg.try_get<Posture>(pawn)) {
             posture->stance = k.before;
@@ -2758,7 +2777,7 @@ bool CombatSystem::knockDown(Entity pawn, const HitFrom& from, float push, int s
     if (steps < 0) {
         steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * push));
     }
-    reg.emplace<KnockedDown>(pawn, KnockedDown{steps, posture.stance});
+    reg.emplace<KnockedDown>(pawn, KnockedDown{steps, posture.stance, false, -1});
     posture.stance = Stance::Prone;
     if (Shooter* shooter = reg.try_get<Shooter>(pawn);
         shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
@@ -2812,7 +2831,13 @@ int CombatSystem::staggerWaitFor(Entity pawn) const {
 
 int CombatSystem::knockedDownFor(Entity pawn) const {
     const KnockedDown* k = things_.registry().valid(pawn) ? things_.registry().try_get<KnockedDown>(pawn) : nullptr;
-    return k != nullptr ? k->stepsLeft : 0;
+    // Still down while the fall's clip plays on past stepsLeft: at least 1 until it is up.
+    return k != nullptr ? std::max(1, k->stepsLeft) : 0;
+}
+
+bool CombatSystem::gettingUp(Entity pawn) const {
+    const KnockedDown* k = things_.registry().valid(pawn) ? things_.registry().try_get<KnockedDown>(pawn) : nullptr;
+    return k != nullptr && k->gettingUp;
 }
 
 // An outside part of the pawn's body, by its share of the body, among those still there.
@@ -3026,7 +3051,13 @@ ExplosionResult CombatSystem::explode(const Explosion& ex) {
         }
         Posture& posture = reg.get<Posture>(pawn);
         const int steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * amount));
-        KnockedDown& knocked = reg.get_or_emplace<KnockedDown>(pawn, KnockedDown{0, posture.stance});
+        KnockedDown& knocked = reg.get_or_emplace<KnockedDown>(pawn, KnockedDown{0, posture.stance, false, -1});
+        if (knocked.gettingUp) {
+            // Thrown down again while getting up: down afresh, the new fall's way.
+            knocked.gettingUp = false;
+            knocked.side = -1;
+            knocked.stepsLeft = 0;
+        }
         knocked.stepsLeft = std::max(knocked.stepsLeft, steps);
         posture.stance = Stance::Prone;
         if (Shooter* shooter = reg.try_get<Shooter>(pawn);
@@ -3873,6 +3904,8 @@ void CombatSystem::hashThing(Entity e, StateHasher& h) const {
     if (const KnockedDown* k = reg.try_get<KnockedDown>(e)) {
         h.add(k->stepsLeft);
         h.add(static_cast<int>(k->before));
+        h.add(k->gettingUp ? 1 : 0);
+        h.add(k->side);
     }
     if (const RecoilKick* k = reg.try_get<RecoilKick>(e)) {
         h.add(k->up);
