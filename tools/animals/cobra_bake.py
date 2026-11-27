@@ -18,6 +18,34 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 
+
+def darkenColourMaps(material_names, tint, name_hint):
+    """Multiply the colour map's RGB by tint (alpha kept) and pack it, so the GLB carries the darker picture."""
+    import numpy as np
+    done = set()
+    for mat in bpy.data.materials:
+        if mat.node_tree is None or (material_names and mat.name not in material_names):
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != "TEX_IMAGE" or node.image is None or node.image.name in done:
+                continue
+            if name_hint and name_hint.lower() not in node.image.name.lower():
+                continue
+            if not any(link.to_socket.name == "Base Color" for out in node.outputs for link in out.links):
+                continue  # only the colour map, never the normal or opacity maps
+            img = node.image
+            px = np.empty(len(img.pixels), dtype=np.float32)
+            img.pixels.foreach_get(px)
+            px = px.reshape(-1, 4)
+            px[:, :3] *= np.array(tint, dtype=np.float32)
+            img.pixels.foreach_set(px.ravel())
+            img.update()
+            img.pack()
+            done.add(img.name)
+            print("tinted", img.name, tint)
+    return done
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 if len(args) == 0:
@@ -92,6 +120,10 @@ for f in frames:
     root.keyframe_insert("location", frame=f)
     root.keyframe_insert("rotation_quaternion" if root.rotation_mode == "QUATERNION" else "rotation_euler", frame=f)
 print("baked action", action.name, tuple(action.frame_range))
+# The file's snake skin is near white; a cobra is olive brown.
+if not darkenColourMaps(None, (0.55, 0.42, 0.26), None):
+    print("WARNING: no colour map found to tint")
+
 os.makedirs(os.path.dirname(out), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=True)
 print("EXPORTED", out)

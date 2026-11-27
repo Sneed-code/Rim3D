@@ -17,6 +17,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
+#include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Misc/FileHelper.h"
@@ -344,9 +345,30 @@ namespace
 		const TSharedPtr<FJsonObject>* Roles = nullptr;
 		if (Entry->TryGetObjectField(TEXT("clips"), Roles))
 		{
+			// A clip that serves several roles (the cobra's one slither for idle, walk and gallop) is renamed for the
+			// first and copied for the others, which can't find it by its old name any more.
+			TMap<FString, UAnimSequence*> Taken;
 			for (const TPair<FString, TSharedPtr<FJsonValue>>& Role : (*Roles)->Values)
 			{
 				const FString Wanted = Role.Value->AsString();
+				if (UAnimSequence** Earlier = Taken.Find(Wanted))
+				{
+					const FString CopyName = Model + TEXT("AnimalArmature_") + Role.Key;
+					// A copy left by an earlier run would keep the old motion: replace it.
+					if (UObject* Old = LoadObject<UObject>(nullptr, *(Folder / CopyName + TEXT(".") + CopyName), nullptr, LOAD_NoWarn | LOAD_Quiet))
+					{
+						ObjectTools::ForceDeleteObjects({Old}, false);
+					}
+					UAnimSequence* Copy = Cast<UAnimSequence>(Tools.DuplicateAsset(CopyName, Folder, *Earlier));
+					if (!Copy)
+					{
+						UE_LOG(LogAnimalArt, Error, TEXT("%s: cannot copy %s for %s"), *Model, *(*Earlier)->GetName(), *Role.Key);
+						bOk = false;
+						continue;
+					}
+					bOk = AnimalArtSave(Copy) && bOk;
+					continue;
+				}
 				UAnimSequence* Match = nullptr;
 				for (UAnimSequence* Clip : Clips)
 				{
@@ -369,6 +391,7 @@ namespace
 					AnimalArtClampBoneScale(Meshes[0], Match, Limit);
 				}
 				bOk = AnimalArtRename(Tools, Match, Folder, Model + TEXT("AnimalArmature_") + Role.Key) && bOk;
+				Taken.Add(Wanted, Match);
 			}
 		}
 		return bOk;
