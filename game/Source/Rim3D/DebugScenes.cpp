@@ -28,7 +28,7 @@ namespace
 			TEXT("A woman, a man and an imp on the creator bodies with every slider, hair and clothes."),
 			TEXT("-SmokeTest=creator -SmokeTimeout=14700")},
 		{TEXT("duel"), TEXT("Sword and shield duel"), TEXT("Play"),
-			TEXT("Elden Ring style melee: you and a hostile pawn, each with a gladius and a shield. Click attack, Shift + click heavy (hold to charge), right mouse guard, T roll."),
+			TEXT("Elden Ring style melee: you and a hostile pawn, each with a gladius and a shield. Click attack, hold left click heavy (keep holding to charge), right mouse guard, T roll, light attack on a reeling or turned-away foe is a critical hit. Esc menu."),
 			TEXT("-SmokeTest=duel -SmokeTimeout=14700")},
 		{TEXT("duel_watch"), TEXT("Sword and shield duel (watch)"), TEXT("Watch"),
 			TEXT("The same duel with both sides fighting on their own, from the side."), TEXT("-SmokeTest=duel -DuelWatch -SmokeTimeout=1800")},

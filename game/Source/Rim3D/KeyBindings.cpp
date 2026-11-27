@@ -44,8 +44,7 @@ namespace
 			{ERim3DAction::Patch, TEXT("Patch"), TEXT("Patch a bleeding wound"), TEXT("Fighting"), EKeys::H},
 			{ERim3DAction::Grenade, TEXT("Grenade"), TEXT("Throw a grenade (hold to aim; at the locked-on enemy in third person)"), TEXT("Fighting"), EKeys::G},
 			{ERim3DAction::NextGrenade, TEXT("NextGrenade"), TEXT("Next kind of grenade"), TEXT("Fighting"), EKeys::R},
-			{ERim3DAction::Attack, TEXT("Attack"), TEXT("Shoot / swing"), TEXT("Fighting"), EKeys::LeftMouseButton},
-			{ERim3DAction::HeavyAttack, TEXT("HeavyAttack"), TEXT("Heavy attack (hold with swing; keep holding to charge)"), TEXT("Fighting"), EKeys::LeftShift},
+			{ERim3DAction::Attack, TEXT("Attack"), TEXT("Shoot / swing (hold for a heavy swing)"), TEXT("Fighting"), EKeys::LeftMouseButton},
 			{ERim3DAction::AimBlock, TEXT("AimBlock"), TEXT("Aim / block (hold)"), TEXT("Fighting"), EKeys::RightMouseButton},
 			{ERim3DAction::FocusNextTarget, TEXT("FocusNextTarget"), TEXT("Focus the next enemy"), TEXT("Fighting"), EKeys::Tab},
 			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("Lock on / let go"), TEXT("Fighting"), EKeys::MiddleMouseButton},
@@ -287,6 +286,25 @@ namespace Rim3DKeys
 		}
 	}
 
+	bool IsAutoFocusAttackerEnabled()
+	{
+		bool bEnabled = true;
+		if (GConfig)
+		{
+			GConfig->GetBool(KeyBindSection, TEXT("AutoFocusAttacker"), bEnabled, GGameUserSettingsIni);
+		}
+		return bEnabled;
+	}
+
+	void SetAutoFocusAttackerEnabled(bool bEnabled)
+	{
+		if (GConfig)
+		{
+			GConfig->SetBool(KeyBindSection, TEXT("AutoFocusAttacker"), bEnabled, GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+	}
+
 	bool IsCapturing()
 	{
 		return GKeyBindCapture.IsValid();
@@ -302,6 +320,11 @@ namespace Rim3DKeys
 		if (ImGui::Checkbox("Lock-on focus (face and aim at the enemy you focus)", &bLockOn))
 		{
 			SetLockOnFocusEnabled(bLockOn);
+		}
+		bool bAutoFocus = IsAutoFocusAttackerEnabled();
+		if (ImGui::Checkbox("Lock on to an enemy who swings at you (when facing them, locked on to nobody)", &bAutoFocus))
+		{
+			SetAutoFocusAttackerEnabled(bAutoFocus);
 		}
 		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Click a key, then press the new one. Esc cancels.");
 		FString LastGroup;

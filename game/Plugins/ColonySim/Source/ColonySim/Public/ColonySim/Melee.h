@@ -328,6 +328,10 @@ public:
     bool counterOpen(Entity pawn) const;
     bool charging(Entity pawn) const;
     SoulsAttack attackKind(Entity pawn) const;
+    // Open to a riposte (souls-combat.md "Critical attacks"): reeling from a poise or guard break, still on its feet.
+    bool exposed(Entity pawn) const;
+    // The critical attack a light press by `pawn` at `target` would be now (Riposte, Backstab, GroundStab), or None.
+    SoulsAttack criticalFor(Entity pawn, Entity target) const;
     // The fighter AI's Elden Ring style turn with an enemy in reach (or leap range): true if it did something (an
     // attack, backing off to get its breath). Called by FighterSystem::meleeAct when souls are on.
     bool aiSoulsTurn(Entity pawn, Entity victim);

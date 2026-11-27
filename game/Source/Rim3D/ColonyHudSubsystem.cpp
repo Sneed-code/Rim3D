@@ -80,6 +80,7 @@ namespace
 	constexpr int32 HudMugshotSize = 512;
 	constexpr float HudMugshotFov = 20.0f;       // degrees
 	constexpr float HudMugshotDistance = 85.0f;  // cm from the face: about 30 cm of head in the picture, chin to crown
+	constexpr double HudMugshotSettleSeconds = 3.0;  // a body's first seconds: its creator look, hair and face still settling
 	constexpr float HudMugshotLift = 2.0f;       // cm from the head bone up to the middle of the face (9 framed the forehead, PC 2026-11-26)
 
 	TAutoConsoleVariable<int32> GHudShowUi(
@@ -941,18 +942,15 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 		const int32 TabCount = static_cast<int32>(EHudTab::Count) - 1;
 		const float TabHeight = ColonyHud::BarButtonHeight();
 		UQuestPanelSubsystem* Quests = GetWorld()->GetSubsystem<UQuestPanelSubsystem>();
-		// Every tab is as wide as the widest label (with its icon and padding) needs, so no label is ever drawn smaller than Build's
-		// (sneed 2026-11-25). Quests is measured with a waiting count, the longest it can read.
-		float TabWidth = 0.0f;
-		for (int32 MeasureIndex = 1; MeasureIndex <= TabCount; ++MeasureIndex)
+		// Each tab is as wide as its own icon and label need, no wider (sneed 2026-11-27: no empty padding; longer words get
+		// wider buttons, leaving room on the right).
+		const auto TabWidthFor = [&](const FString& Label)
 		{
-			const EHudTab MeasureTab = static_cast<EHudTab>(MeasureIndex);
-			const FString Measured = MeasureTab == EHudTab::Quests ? FString(TEXT("Quests (9)")) : FString(TabLabel(MeasureTab));
-			const float MeasuredText = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Measured)).x;
+			const float MeasuredText = ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x;
 			const float MeasuredIcon = FMath::Max(ImGui::GetTextLineHeight() * 1.25f, TabHeight * 0.80f);
 			// Snug: the small pad HudIcons::Button leaves either side, no more (sneed 2026-11-25).
-			TabWidth = FMath::Max(TabWidth, MeasuredIcon + Style.ItemInnerSpacing.x + MeasuredText + 2.0f * Style.FramePadding.y);
-		}
+			return MeasuredIcon + Style.ItemInnerSpacing.x + MeasuredText + 2.0f * Style.FramePadding.y;
+		};
 		for (int32 Index = 1; Index <= TabCount; ++Index)
 		{
 			const EHudTab Tab = static_cast<EHudTab>(Index);
@@ -971,6 +969,7 @@ void UColonyHudSubsystem::DrawBar(USimSubsystem& Bridge, float Scale)
 			}
 			// The tab's painted icon sits left of its label. The icon file keeps its old name "tab_inventory" for the Storage tab.
 			UTexture* TabIcon = HudIcons::Get(Tab == EHudTab::Inventory ? FString(TEXT("tab_inventory")) : TEXT("tab_") + FString(TabLabel(Tab)).ToLower(), TabHeight);
+			const float TabWidth = TabIcon ? TabWidthFor(Label) : ImGui::CalcTextSize(TCHAR_TO_UTF8(*Label)).x + 2.0f * Style.FramePadding.x;
 			if (TabIcon ? HudIcons::Button(TabIcon, Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight))
 					: ColonyHud::Button(Label + TEXT("##tab"), Open == Tab, ImVec2(TabWidth, TabHeight)))
 			{
@@ -1615,7 +1614,12 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		const uint32 Key = static_cast<uint32>(entt::to_integral(View.id));
 		const uint64 Signature = HudLookSignature(Snapshot, View);
 		FMugshot* Shot = Mugshots.Find(Key);
-		if (Shot && Shot->Target && Shot->Signature == Signature)
+		if (!Shot)
+		{
+			Shot = &Mugshots.Add(Key);
+			Shot->FirstSeen = Now;
+		}
+		if (Shot->Target && Shot->Signature == Signature && Shot->bSettled)
 		{
 			continue;
 		}
@@ -1625,14 +1629,18 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		{
 			continue;
 		}
-		// A new look waits for them to stand still and upright (not bent over a job or mid-stride), unless there is no
-		// picture yet.
-		if (Shot && Shot->Target && (View.posture != colony::PawnPosture::Stand || View.vx * View.vx + View.vy * View.vy > 0.04f))
+		ASimPawnActor* Actor = Pawns->FindPawn(View.id);
+		if (!Actor)
 		{
 			continue;
 		}
-		ASimPawnActor* Actor = Pawns->FindPawn(View.id);
-		if (!Actor)
+		// A good picture: standing still and upright (not bent over a job, mid-stride or mid-swing), with its MakeHuman body
+		// built a few seconds ago (hair and face settled). Until then a first stand-in is taken once the body has had
+		// HudMugshotSettleSeconds, and taken again when they stand still (sneed 2026-11-27: every portrait close, head on).
+		const bool bStill = View.posture == colony::PawnPosture::Stand && View.vx * View.vx + View.vy * View.vy <= 0.0004f &&
+			View.meleePhase == colony::MeleePhase::Ready && !View.meleeStunned;
+		const bool bBuilt = Now - Shot->FirstSeen >= HudMugshotSettleSeconds && (Actor->GetMakeHumanMesh() || !Actor->GetBody() || Now - Shot->FirstSeen >= 4.0 * HudMugshotSettleSeconds);
+		if (!bBuilt || (Shot->Target && !bStill))
 		{
 			continue;
 		}
@@ -1660,10 +1668,6 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 			// capture, PC 2026-11-20): unlit, so a face reads the same at any hour.
 			MugshotCapture->ShowFlags.SetLighting(false);
 			MugshotCapture->ShowFlags.SetEyeAdaptation(false);
-		}
-		if (!Shot)
-		{
-			Shot = &Mugshots.Add(Key);
 		}
 		if (!Shot->Target)
 		{
@@ -1720,6 +1724,7 @@ void UColonyHudSubsystem::UpdateMugshots(USimSubsystem& Bridge)
 		MugshotCapture->CaptureScene();
 		Shot->Signature = Signature;
 		Shot->MadeAt = Now;
+		Shot->bSettled = bStill;
 		++Stats.MugshotsMade;
 		return;  // one a check
 	}

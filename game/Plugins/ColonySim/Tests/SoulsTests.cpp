@@ -386,14 +386,18 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     CHECK(sim->melee().soulsStunned(foe));
     CHECK_FALSE(sim->melee().ready(foe));
     CHECK(sim->melee().poiseShare(foe) == doctest::Approx(1.0f));  // a break refills it
-    // A second break soon after the first knocks down; a third right after can't (knockdown immunity).
+    // A second break soon after the first knocks down; a third right after can't (knockdown immunity). The stagger is
+    // cut short first: a light press at a reeling man is a riposte, not a poise blow.
     reg.get<PoiseMeter>(foe).value = 1.0f;
+    reg.get<Melee>(foe).stunUntil = 0;
     for (int i = 0; i < 40 && !reg.all_of<KnockedDown>(foe); ++i) {
         reg.remove<Stamina>(hero);
         soulsTestRunOut(*sim, hero);
         reg.get<Position>(hero).x = reg.get<Position>(foe).x - 1.0f;
         reg.get<Position>(hero).y = reg.get<Position>(foe).y;
         soulsTestHeal(*sim, foe);
+        reg.get<Melee>(foe).stunUntil = 0;  // not reeling: a poise blow, not a riposte
+        soulsTestFace(*sim, foe, -1.0f, 0.0f);
         if (sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why)) {
             for (int s = 0; s < 30 && !reg.all_of<KnockedDown>(foe); ++s) {
                 sim->step();
@@ -420,6 +424,8 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
         reg.get<Position>(hero).x = reg.get<Position>(foe).x - 1.0f;
         reg.get<Position>(hero).y = reg.get<Position>(foe).y;
         soulsTestHeal(*sim, foe);
+        reg.get<Melee>(foe).stunUntil = 0;  // not reeling: a poise blow, not a riposte
+        soulsTestFace(*sim, foe, -1.0f, 0.0f);
         if (sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why)) {
             for (int s = 0; s < 30; ++s) {
                 sim->step();
@@ -434,6 +440,125 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     }
     CHECK(stagger2);
     CHECK_FALSE(knocked);
+}
+
+TEST_CASE("Souls: a light press at a man reeling from a broken guard is a riposte: unblockable, heavy, and it throws him down") {
+    auto sim = soulsTestSim(21);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.7f, 30.5f, "Melee_Gladius");
+    soulsTestShield(*sim, foe);
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    // Not reeling: a plain light attack.
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::None);
+    // Reeling from a guard break (or a poise break): open to a riposte.
+    Melee& fm = reg.get_or_emplace<Melee>(foe);
+    fm.stunUntil = sim->time().steps + 45;
+    fm.guardStun = false;
+    CHECK(sim->melee().exposed(foe));
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::Riposte);
+    // A block's own short stun is not an opening.
+    fm.guardStun = true;
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::None);
+    fm.guardStun = false;
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Riposte);
+    // Caught: he can't raise his shield while the blade comes.
+    sim->submit(ShieldCommand{foe, true, true, -1.0f, 0.0f});
+    sim->step();
+    CHECK_FALSE(sim->combat().shieldUp(foe));
+    bool hit = false;
+    float amount = 0.0f;
+    for (int s = 0; s < 90 && !hit; ++s) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit") {
+                hit = true;
+                amount = e.amount;
+            }
+        }
+    }
+    CHECK(hit);
+    MESSAGE("riposte took " << amount);
+    CHECK(reg.all_of<KnockedDown>(foe));  // thrown to the ground
+}
+
+TEST_CASE("Souls: from behind a turned back, a light press is a backstab that always lands and knocks down") {
+    auto sim = soulsTestSim(22);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.6f, 30.5f, "Melee_Gladius");
+    entt::registry& reg = sim->things().registry();
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);  // facing the hero: no backstab
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::None);
+    soulsTestFace(*sim, foe, 0.0f, 1.0f);  // side on: no backstab
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::None);
+    soulsTestFace(*sim, foe, 1.0f, 0.0f);  // back turned
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::Backstab);
+    // A heavy press from behind stays a heavy (Elden Ring: only the light attack crits).
+    std::string why;
+    SoulsPress heavy;
+    heavy.heavy = true;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, heavy, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Heavy);
+    soulsTestRunOut(*sim, hero);
+    reg.remove<Stamina>(hero);
+    reg.get<Position>(hero).x = 30.5f;
+    reg.get<Position>(hero).y = 30.5f;
+    reg.get<Position>(foe).x = 31.6f;
+    reg.get<Position>(foe).y = 30.5f;
+    soulsTestFace(*sim, foe, 1.0f, 0.0f);
+    soulsTestHeal(*sim, foe);
+    reg.remove<KnockedDown>(foe);
+    reg.get<Posture>(foe).stance = Stance::Standing;
+    if (Melee* m = reg.try_get<Melee>(foe)) {
+        m->stunUntil = 0;
+    }
+    SOULS_REQUIRE(sim->melee().criticalFor(hero, foe) == SoulsAttack::Backstab);
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Backstab);
+    bool hit = false;
+    for (int s = 0; s < 90 && !hit; ++s) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            hit = hit || (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit");
+        }
+    }
+    CHECK(hit);
+    CHECK(reg.all_of<KnockedDown>(foe));
+}
+
+TEST_CASE("Souls: a man knocked down but still in the fight takes a stab on the ground, whatever the press") {
+    auto sim = soulsTestSim(23);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.5f, 30.5f, "Melee_Gladius");
+    entt::registry& reg = sim->things().registry();
+    SOULS_REQUIRE(sim->combat().knockDown(foe, HitFrom{true, 30.5f, 30.5f}, 1.0f, 120));
+    for (int s = 0; s < 3; ++s) {
+        sim->step();
+    }
+    SOULS_REQUIRE(reg.all_of<KnockedDown>(foe));
+    reg.get<Position>(hero).x = reg.get<Position>(foe).x - 1.0f;
+    reg.get<Position>(hero).y = reg.get<Position>(foe).y;
+    CHECK(sim->melee().criticalFor(hero, foe) == SoulsAttack::GroundStab);
+    SoulsPress heavy;
+    heavy.heavy = true;
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, heavy, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::GroundStab);
+    bool hit = false;
+    for (int s = 0; s < 90 && !hit; ++s) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            hit = hit || (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit");
+        }
+    }
+    CHECK(hit);
+    // Downed for good (not just knocked down): the old finishers, not a ground stab.
+    CHECK(sim->melee().criticalFor(hero, hero) == SoulsAttack::None);
 }
 
 TEST_CASE("Souls: two sword-and-shield fighters duel it out with combos, heavies and blocks, the same way every run") {
@@ -470,7 +595,7 @@ TEST_CASE("Souls: two sword-and-shield fighters duel it out with combos, heavies
     bool over = false;
     const uint64_t first = duel(11, swings, heavies, blocks, staggers, over);
     MESSAGE("swings " << swings << ", heavies " << heavies << ", blocks " << blocks << ", staggers " << staggers << ", over " << over);
-    CHECK(swings >= 10);
+    CHECK(swings >= 8);  // ripostes and backstabs end fights sooner (2026-11-27)
     CHECK(heavies >= 1);
     CHECK(blocks >= 1);
     int swings2 = 0;
@@ -487,6 +612,7 @@ TEST_CASE("Souls: an attack, its combo press and the stamina and poise bars come
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     const Entity foe = soulsTestPawn(*sim, 31.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);  // face to face (a turned back would be a backstab)
     std::string why;
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
     sim->step();

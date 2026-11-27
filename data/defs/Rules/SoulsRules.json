@@ -1,7 +1,7 @@
 [
   {
     "defName": "SoulsRules",
-    "source": "sneed 2026-11-27 (stamina: a 100 bar, light 10, heavy 20, a blocked hit half its attack's cost, a roll 30, refills over 2 s of no use, a raised guard stops the refill) and Elden Ring's shape as players measured it (poise refills 30 s after the last hit, light/heavy/charged stance damage about 1 : 1.6 : 2.4, running, jumping, rolling attacks and guard counters); the rest ours (docs/design/souls-combat.md). enabled false turns all of it off and melee is what it was.",
+    "source": "sneed 2026-11-27 (stamina: a 100 bar, light 10, heavy 20, a blocked hit half its attack's cost, a roll 30, refills over 2 s of no use, a raised guard stops the refill) and Elden Ring's shape as players measured it (poise refills 30 s after the last hit, light/heavy/charged stance damage about 1 : 1.6 : 2.4, running, jumping, rolling attacks and guard counters; critical attacks about 3x a normal blow, ripostes about 25% above backstabs); the rest ours (docs/design/souls-combat.md). enabled false turns all of it off and melee is what it was.",
     "enabled": true,
     "staminaMax": 100,
     "regenSeconds": 2.0,
@@ -34,6 +34,11 @@
     "guardBreakSteps": 45,
     "blockStunSteps": 10,
     "counterSteps": 30,
+    "criticalRange": 1.8,
+    "backstabRange": 1.5,
+    "backstabCos": -0.6,
+    "criticalHoldSteps": 12,
+    "criticalKnockdown": 6,
     "idealInset": 0.4,
     "warpBack": 0.3,
     "aiStaminaFloor": 25,
@@ -55,7 +60,10 @@
       "Jump":         {"stamina": 14, "damage": 1.3, "poise": 1.5, "speed": 1.0, "maxWarp": 1.2},
       "JumpHeavy":    {"stamina": 24, "damage": 1.9, "poise": 2.2, "speed": 1.1, "maxWarp": 1.0, "hyperArmor": true, "knockdown": true},
       "Roll":         {"stamina": 10, "damage": 1.0, "poise": 1.0, "speed": 1.5, "maxWarp": 0.8},
-      "GuardCounter": {"stamina": 20, "damage": 1.8, "poise": 2.4, "speed": 1.2, "maxWarp": 0.8, "hyperArmor": true}
+      "GuardCounter": {"stamina": 20, "damage": 1.8, "poise": 2.4, "speed": 1.2, "maxWarp": 0.8, "hyperArmor": true},
+      "Riposte":      {"stamina": 10, "damage": 3.2, "poise": 0, "speed": 1.0, "maxWarp": 1.2, "hyperArmor": true},
+      "Backstab":     {"stamina": 10, "damage": 2.6, "poise": 0, "speed": 1.0, "maxWarp": 1.0, "hyperArmor": true},
+      "GroundStab":   {"stamina": 10, "damage": 1.8, "poise": 0, "speed": 1.1, "maxWarp": 1.0}
     },
     "movesets": {
       "OneHandSword": {
@@ -64,13 +72,16 @@
         "weaponPoise": 12,
         "clips": {
           "Light": ["Motion_OneHand_Slash1", "Motion_SS_Attack4", "Motion_OneHand_Slash3"],
-          "Heavy": ["Motion_OneHand_Slash5", "Motion_OneHand_Slash3"],
+          "Heavy": ["Motion_SS_Slash4", "Motion_SS_Overhead"],
           "Running": ["Motion_SS_Attack3"],
           "RunningHeavy": ["Motion_OneHand_Attack2"],
           "Jump": ["Motion_SS_Jump"],
           "JumpHeavy": ["Motion_SS_JumpHeavy"],
           "Roll": ["Motion_OneHand_Slash1"],
-          "GuardCounter": ["Motion_OneHand_Slash5"]
+          "GuardCounter": ["Motion_OneHand_Slash5"],
+          "Riposte": ["Motion_SS_Riposte"],
+          "Backstab": ["Motion_SS_Riposte"],
+          "GroundStab": ["Motion_Knife_Stab_Low"]
         }
       }
     }

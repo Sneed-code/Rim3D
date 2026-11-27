@@ -1129,7 +1129,9 @@ void UColonyHudSubsystem::DrawTitlePage(USimSubsystem& Bridge, float Scale)
 		return bClicked;
 	};
 
-	if (bInGame && Item(TEXT("Back to the game"), FString(), true, 0.0f))
+	// Back to the game, or Esc again (sneed 2026-11-27: Esc brings the menu up while walking and puts it away).
+	const bool bEscBack = bInGame && GFrameCounter > MainMenuOpenedFrame + 2 && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !bSettingsOpen;
+	if ((bInGame && Item(TEXT("Back to the game"), FString(), true, 0.0f)) || bEscBack)
 	{
 		bMainMenuOpen = false;
 	}

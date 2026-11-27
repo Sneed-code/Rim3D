@@ -25,8 +25,9 @@ namespace colony {
 namespace {
 
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
-constexpr const char* kSoulsKindNames[kSoulsAttackKinds] = {"Light", "Heavy",     "Charged", "Running",     "RunningHeavy",
-                                                            "Jump",  "JumpHeavy", "Roll",    "GuardCounter"};
+constexpr const char* kSoulsKindNames[kSoulsAttackKinds] = {"Light",     "Heavy", "Charged",      "Running", "RunningHeavy",
+                                                            "Jump",      "JumpHeavy", "Roll", "GuardCounter", "Riposte",
+                                                            "Backstab",  "GroundStab"};
 
 // The pawn can act at all (Melee.cpp's meleeAble): not downed, stunned, patching or knocked down.
 bool soulsAble(const entt::registry& reg, Entity pawn) {
@@ -87,6 +88,9 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
         {24.0f, 1.9f, 2.2f, 0.9f},   // JumpHeavy
         {10.0f, 1.0f, 1.0f, 1.5f},   // Roll
         {20.0f, 1.8f, 2.4f, 1.1f},   // GuardCounter
+        {10.0f, 3.2f, 0.0f, 1.0f},   // Riposte (Elden Ring: about 3x for a straight sword)
+        {10.0f, 2.6f, 0.0f, 1.0f},   // Backstab (ripostes about 25% above backstabs)
+        {10.0f, 1.8f, 0.0f, 1.0f},   // GroundStab
     };
     for (size_t i = 0; i < kSoulsAttackKinds; ++i) {
         r.kinds[i].stamina = defaults[i][0];
@@ -132,6 +136,11 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     whole("guardBreakSteps", r.guardBreakSteps);
     whole("blockStunSteps", r.blockStunSteps);
     whole("counterSteps", r.counterSteps);
+    num("criticalRange", r.criticalRange);
+    num("backstabRange", r.backstabRange);
+    num("backstabCos", r.backstabCos);
+    whole("criticalHoldSteps", r.criticalHoldSteps);
+    num("criticalKnockdown", r.criticalKnockdown);
     num("idealInset", r.idealInset);
     num("warpBack", r.warpBack);
     num("aiStaminaFloor", r.aiStaminaFloor);
@@ -281,11 +290,58 @@ SoulsAttack MeleeSystem::attackKind(Entity pawn) const {
     return m != nullptr && m->phase != MeleePhase::Ready ? m->kind : SoulsAttack::None;
 }
 
-// A blow at a body on the ground (a downed enemy, a corpse before the player) keeps its low blows and finishers.
+bool MeleeSystem::exposed(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    return souls_.enabled && m != nullptr && now() < m->stunUntil && !m->guardStun && !reg.any_of<KnockedDown>(pawn) &&
+           !health_.incapacitated(pawn);
+}
+
+SoulsAttack MeleeSystem::criticalFor(Entity pawn, Entity target) const {
+    const entt::registry& reg = things_.registry();
+    const SoulsMoveset* ms = movesetOf(pawn);
+    if (ms == nullptr || target == kNoEntity || target == pawn || !reg.valid(target) || !things_.spawned(target) ||
+        !reg.all_of<Position, Posture>(target) || !reg.all_of<Position, Posture>(pawn)) {
+        return SoulsAttack::None;
+    }
+    const Health* h = reg.try_get<Health>(target);
+    if ((h != nullptr && h->dead) || health_.incapacitated(target)) {
+        return SoulsAttack::None;  // downed or dead: the old finishers
+    }
+    const Position& a = reg.get<Position>(pawn);
+    const Position& b = reg.get<Position>(target);
+    if (a.level != b.level) {
+        return SoulsAttack::None;
+    }
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
+    const float d = std::sqrt(dx * dx + dy * dy);
+    const float extra = std::max(0.0f, combat_.motion().bodyRadius(target) - kPawnRadius);
+    const auto hasClip = [ms](SoulsAttack kind) { return !ms->clips[soulsIndex(kind)].empty(); };
+    if (reg.all_of<KnockedDown>(target)) {
+        return hasClip(SoulsAttack::GroundStab) && d <= souls_.criticalRange + extra ? SoulsAttack::GroundStab : SoulsAttack::None;
+    }
+    if (exposed(target) && hasClip(SoulsAttack::Riposte) && d <= souls_.criticalRange + extra) {
+        return SoulsAttack::Riposte;
+    }
+    const Posture& vp = reg.get<Posture>(target);
+    const float fl = std::sqrt(vp.facingX * vp.facingX + vp.facingY * vp.facingY);
+    if (hasClip(SoulsAttack::Backstab) && d > 1e-3f && fl > 1e-3f && d <= souls_.backstabRange + extra &&
+        bodySizeOf(target) < souls_.noKnockdownBodySize && (vp.facingX * dx + vp.facingY * dy) / (d * fl) < souls_.backstabCos) {
+        return SoulsAttack::Backstab;
+    }
+    return SoulsAttack::None;
+}
+
+// A blow at a body on the ground (a downed enemy, a corpse before the player) keeps its low blows and finishers; one
+// knocked down but still in the fight takes a ground stab when the moveset has one.
 bool MeleeSystem::soulsLowTarget(Entity pawn, Entity target, bool player) const {
     const entt::registry& reg = things_.registry();
     if (target != kNoEntity) {
         if (!reg.valid(target)) {
+            return false;
+        }
+        if (reg.all_of<KnockedDown>(target) && criticalFor(pawn, target) == SoulsAttack::GroundStab) {
             return false;
         }
         const Health* h = reg.try_get<Health>(target);
@@ -361,7 +417,15 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
     if (now() < m.stunUntil) {
         return fail("staggered");
     }
-    const SoulsAttack kind = soulsKindFor(pawn, &m, press);
+    SoulsAttack kind = soulsKindFor(pawn, &m, press);
+    // A light press at a foe that is open to it is a critical attack (Elden Ring: R1 near a stance-broken foe, or behind
+    // one); one knocked to the ground takes a stab whatever the press.
+    if (target != kNoEntity && !press.jumping) {
+        const SoulsAttack crit = criticalFor(pawn, target);
+        if (crit == SoulsAttack::GroundStab || (crit != SoulsAttack::None && !press.heavy)) {
+            kind = crit;
+        }
+    }
     // In reach: a lunging kind reaches as far as it may be carried in. The player swings anyway (Elden Ring): at nobody,
     // straight ahead, when the target is too far.
     if (target != kNoEntity) {
@@ -515,7 +579,12 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
         m.engagedAt = now();
         const Position& to = reg.get<Position>(target);
         face(pawn, to.x, to.y);
-        prepareDefense(target, pawn, windup, m.seed);
+        if (kind == SoulsAttack::Riposte || kind == SoulsAttack::Backstab) {
+            // Caught (Elden Ring's critical lock): the victim can't guard, roll or strike back until it is thrown down.
+            soulsInterrupt(target, windup + souls_.criticalHoldSteps, true);
+        } else if (!soulsCriticalKind(kind)) {
+            prepareDefense(target, pawn, windup, m.seed);
+        }
     }
     if (clip != nullptr && combat_.motion().hasClips(pawn)) {
         const Posture& posture = reg.get<Posture>(pawn);
@@ -754,6 +823,15 @@ bool MeleeSystem::soulsGuard(Entity attacker, const Melee& m, Entity victim, flo
 void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, float toolPower, const HitFrom& from) {
     entt::registry& reg = things_.registry();
     if (!reg.valid(victim) || !things_.spawned(victim) || !soulsAble(reg, victim) || !reg.all_of<Posture, Position>(victim)) {
+        return;
+    }
+    if (soulsCriticalKind(m.kind)) {
+        // A riposte or a backstab throws the victim to the ground (no poise needed, no immunity); a ground stab keeps it
+        // down where it lies.
+        if (m.kind != SoulsAttack::GroundStab && bodySizeOf(victim) < souls_.noKnockdownBodySize) {
+            soulsInterrupt(victim, 0, true);
+            combat_.knockDown(victim, from, souls_.criticalKnockdown);
+        }
         return;
     }
     const SoulsMoveset* ms = m.kind != SoulsAttack::None ? movesetOf(attacker) : nullptr;

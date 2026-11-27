@@ -296,6 +296,11 @@ private:
 	double SoulsPendingAt = 0.0;
 	/** A heavy press is held: its release goes to the sim (the charge ends). */
 	bool bSoulsHolding = false;
+	/** The attack button went down at this real time and is still down: let go before WeaponSoulsHeavyHoldSeconds it is a
+	 *  light attack, held past it a heavy that charges while held (sneed 2026-11-27: hold left click for the strong attack). */
+	bool bSoulsButtonDown = false;
+	bool bSoulsHeavyFired = false;
+	double SoulsButtonAt = 0.0;
 	bool bSoulsReleasePending = false;
 	float FrameDelta = 0.0f;
 	/** The right-mouse shield: whether the player wants it up, for which pawn, the way it was last sent and when (real seconds). */

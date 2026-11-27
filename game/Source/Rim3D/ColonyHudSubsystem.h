@@ -125,8 +125,10 @@ public:
 	// ---- The main menu (new colony, load, settings, quit) ------------------------------------
 	/** Shown at launch when the game was started without a scenario (not in smoke tests), and from Menu > New colony. */
 	/** Also settles the launch check (a smoke test opening the menu keeps it open). */
-	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; bMainMenuChecked = true; }
+	void SetMainMenuOpen(bool bOpen) { bMainMenuOpen = bOpen; bMainMenuChecked = true; MainMenuOpenedFrame = GFrameCounter; }
 	bool IsMainMenuOpen() const { return bMainMenuOpen; }
+	/** The frame SetMainMenuOpen was last called: the Esc that opened the menu doesn't close it again that frame. */
+	uint64 MainMenuOpenedFrame = 0;
 	/** The main menu's page: 0 title, 1 scenario, 2 load, 3 people (docs/design/new-game.md). For the smoke test. */
 	int32 GetMainMenuPage() const { return MainMenuPage; }
 	void SetMainMenuPageForTest(int32 Page) { MainMenuPage = Page; }
@@ -202,6 +204,11 @@ private:
 		TObjectPtr<UTextureRenderTarget2D> Target;
 		uint64 Signature = 0;
 		double MadeAt = 0.0;
+		/** Taken standing still and upright with the body built and settled: a stand-in shot (taken early, walking,
+		 *  bent over a job) is taken again once they are (sneed 2026-11-27: Moss's and Chip's were off). */
+		bool bSettled = false;
+		/** Real time the pawn was first seen (its body and hair need a moment to build and settle). */
+		double FirstSeen = 0.0;
 	};
 
 	USimSubsystem* GetBridge() const;

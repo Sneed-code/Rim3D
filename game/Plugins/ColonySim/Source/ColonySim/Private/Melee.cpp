@@ -1580,6 +1580,21 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         }
     }
 
+    // A critical attack always meets its held victim, through the middle of the body (souls-combat.md).
+    if (soulsCriticalKind(m.kind) && hit.kind != ProjectileHitKind::Pawn && m.target != kNoEntity && reg.valid(m.target) &&
+        things_.spawned(m.target) && reg.all_of<Position>(m.target)) {
+        const Position& t = reg.get<Position>(m.target);
+        const float gap = std::sqrt((t.x - ox) * (t.x - ox) + (t.y - oy) * (t.y - oy));
+        if (t.level == pos.level && gap <= strikeReach + souls_.criticalRange) {
+            hit.kind = ProjectileHitKind::Pawn;
+            hit.thing = m.target;
+            hit.part = combat_.hitboxPart(m.target, "torso");
+            hit.x = t.x;
+            hit.y = t.y;
+            hit.z = oz;
+        }
+    }
+
     Event e;
     e.type = EventType::MeleeHit;
     e.thing = pawn;

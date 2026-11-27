@@ -783,7 +783,11 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		// the local body walk on, and the sim hands the swing to the upper body when that move comes in (freeFeetToWalk).
 		const bool bStepInSwing = View->motionClip.valid() && !View->motionFreeFeet && View->meleeFinisher == 0 && !View->meleeLow &&
 			(View->meleePhase == colony::MeleePhase::Windup || View->meleePhase == colony::MeleePhase::Recovery);
-		const bool bWalksOutOfSwing = bStepInSwing && Body->GetTargetSpeed() > 0.5f;
+		// Not an Elden Ring style attack (souls-combat.md): the sim ends it when you walk past its cancel point, and until
+		// then the body stays in its clip. A local body walking on meanwhile drifted off and snapped back when the next clip
+		// began (sneed 2026-11-27: "the player jars suddenly").
+		const bool bSoulsSwing = View->meleeKind != 255;
+		const bool bWalksOutOfSwing = bStepInSwing && !bSoulsSwing && Body->GetTargetSpeed() > 0.5f;
 		if (!Body->IsClimbing() && !bWalksOutOfSwing && (((View->motionClip.valid() || View->motionPush) && !View->motionFreeFeet) || View->meleeFinisher != 0 || View->rollPhase != 0))
 		{
 			// A roll too (sneed 2026-11-23: "at the last bit of a roll it resets my character"): the local body used to stay
@@ -791,7 +795,18 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 			// jumped back to it and the hair reset with the jump. Now it is carried along with the sim's roll.
 			// A stagger or a knockdown carries the colonist: the keys wait and the body is where the sim's clip takes it,
 			// so nothing snaps back a metre when it ends. (The player's own swings leave the feet to the keys.)
-			Body->SetSimPosition(FVector2D(View->x, View->y));
+			// Between the last two steps, as the body is drawn: the newest step alone moved it 30 times a second.
+			FVector2D SimAt(View->x, View->y);
+			if (const colony::ThingView* Prev = Bridge->GetPreviousSnapshot().find(Controlled); Prev && Prev->level == View->level)
+			{
+				const float A = FMath::Clamp(Bridge->GetBlendAlpha(), 0.0f, 1.0f);
+				const FVector2D From(Prev->x, Prev->y);
+				if (FVector2D::Distance(From, SimAt) < 1.0)
+				{
+					SimAt = FMath::Lerp(From, SimAt, static_cast<double>(A));
+				}
+			}
+			Body->SetSimPosition(SimAt);
 		}
 		else if (!Body->IsClimbing() && Body->Reconcile(FVector2D(View->x, View->y)))
 		{
@@ -822,6 +837,17 @@ void UProtagonistSubsystem::Tick(float DeltaTime)
 		if (bBuildUi)
 		{
 			UpdateBuildUi(*PC);
+		}
+		else if (!bAsleep && PC->WasInputKeyJustPressed(EKeys::Escape))
+		{
+			// Esc brings up the menu (settings, load, quit, back to the game) while walking, the duel scene's too (sneed
+			// 2026-11-27); with a building in hand it puts that down instead (UHandsOnSubsystem).
+			const UOrdersSubsystem* EscOrders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
+			UColonyHudSubsystem* EscHud = GetWorld()->GetSubsystem<UColonyHudSubsystem>();
+			if (EscHud && !EscHud->IsMainMenuOpen() && !(EscOrders && EscOrders->IsDirectBuilding()))
+			{
+				EscHud->SetMainMenuOpen(true);
+			}
 		}
 		if (!bAsleep)
 		{
@@ -1272,6 +1298,59 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 	}
 	UpdateFlick(PC, Bridge, Focus);
 	UpdateTurnAway(Bridge);
+	UpdateAutoFocus(PC, Bridge, Focus);
+}
+
+// sneed 2026-11-27: an enemy who swings at you in melee while you are locked on to nobody and face them gets locked on
+// to by itself (Settings > Controls turns it off). Facing: within ProtagonistAutoFocusCos of the camera's look.
+void UProtagonistSubsystem::UpdateAutoFocus(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus)
+{
+	if (Focus != colony::kNoEntity || !Rim3DKeys::IsAutoFocusAttackerEnabled() || Controlled == colony::kNoEntity)
+	{
+		return;
+	}
+	const colony::Snapshot& Snapshot = Bridge.GetCurrentSnapshot();
+	const colony::ThingView* Me = Snapshot.find(Controlled);
+	if (!Me || Me->dead || Me->downed)
+	{
+		return;
+	}
+	const double Yaw = FMath::DegreesToRadians(PC.GetControlRotation().Yaw);
+	const FVector2D Look(FMath::Cos(Yaw), FMath::Sin(Yaw));
+	colony::Entity Best = colony::kNoEntity;
+	float BestDistance = 6.0f;  // metres: a swing from further is a leap that hasn't reached you yet
+	for (const colony::ThingView& View : Snapshot.things)
+	{
+		if (View.category != colony::ThingCategory::Pawn || View.dead || View.downed || View.id == Controlled ||
+			View.meleeTarget != Controlled || View.meleePhase != colony::MeleePhase::Windup)
+		{
+			continue;
+		}
+		const FVector2D To(View.x - Me->x, View.y - Me->y);
+		const float Distance = static_cast<float>(To.Size());
+		if (Distance < 0.05f || Distance > BestDistance || FVector2D::DotProduct(To / Distance, Look) < 0.5)
+		{
+			continue;  // too far, or behind you or off to the side (about 60 degrees either way of the view)
+		}
+		Best = View.id;
+		BestDistance = Distance;
+	}
+	if (Best != colony::kNoEntity && Best != AutoFocusSentFor)
+	{
+		colony::FocusCommand Command;
+		Command.pawn = Controlled;
+		Command.target = Best;
+		Command.mode = colony::FocusMode::Set;
+		Command.anySide = bFocusAnySide;
+		Bridge.Submit(Command);
+		++FocusCommandsSent;
+		++AutoFocusesSent;
+		AutoFocusSentFor = Best;
+	}
+	else if (Best == colony::kNoEntity)
+	{
+		AutoFocusSentFor = colony::kNoEntity;
+	}
 }
 
 namespace
