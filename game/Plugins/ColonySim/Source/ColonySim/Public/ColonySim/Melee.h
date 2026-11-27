@@ -5,6 +5,7 @@
 #include "ColonySim/Entity.h"
 #include "ColonySim/Events.h"
 #include "ColonySim/FightResponse.h"
+#include "ColonySim/Souls.h"
 
 #include <cstdint>
 #include <functional>
@@ -15,6 +16,7 @@
 namespace colony {
 
 class CombatSystem;
+struct HitFrom;
 class HealthSystem;
 class Map;
 class StateHasher;
@@ -92,6 +94,32 @@ struct Melee {
     uint8_t finisher = 0;
     int64_t finisherFrom = 0;
     int finisherSteps = 0;
+    // Elden Ring style attacks (SoulsRules, docs/design/souls-combat.md; melee section 8).
+    SoulsAttack kind = SoulsAttack::None;  // the attack under way, or the last one (None: an old-style swing)
+    uint8_t combo = 0;              // its place in its light or heavy chain
+    int windupSteps = 0;            // its whole wind-up and recovery, in steps
+    int recoverySteps = 0;
+    int64_t endedAt = 0;            // the step its last attack's recovery ended (the combo starts over after a while)
+    SoulsAttack buffered = SoulsAttack::None;  // a press during an attack: it plays as soon as the combo allows
+    Entity bufferedTarget = kNoEntity;
+    bool bufferedHold = false;
+    bool holding = false;           // a heavy's button is held: it stops at its charge point
+    int chargeSteps = -1;           // steps held at the charge point; -1 not yet there, -2 charged and let go
+    float chargeRate = 1.0f;        // its clip's rate before it stopped
+    int aiChargeFor = 0;            // the fighter AI lets go of a charge after this many steps
+    uint8_t aiChain = 0;            // light presses the fighter AI still means to chain
+    int64_t stunUntil = 0;          // staggered, guard broken or block-stunned: no attacking, guarding or rolling
+    int64_t counterUntil = 0;       // a heavy press before this step is a guard counter
+    bool guardStun = false;         // stunUntil is a block's stun: the guard may stay up
+    int64_t rollEndsAt = 0;         // the step its last roll ends (an attack right after is a rolling attack)
+};
+
+// A press of the attack buttons (MeleeCommand), Elden Ring style.
+struct SoulsPress {
+    bool heavy = false;    // the strong attack (Shift + left mouse)
+    bool running = false;  // sprinting when pressed
+    bool jumping = false;  // in the air when pressed
+    bool hold = false;     // the button is held: a heavy charges until MeleeMode::Release
 };
 
 // One finisher (MeleeRules `finishers`, ours: RimWorld has none). Keyed by weapon def name or attack style; `move` names
@@ -269,6 +297,43 @@ public:
     // still swinging or recovering, nothing to hit with, or the target out of reach.
     // `fists` swings the body's own tools even with a weapon in the hands (a social fight, C20).
     bool attack(Entity pawn, Entity target, bool player, std::string* why = nullptr, bool fists = false);
+    // Elden Ring style melee (SoulsRules; docs/design/souls-combat.md). On when SoulsRules `enabled`.
+    const SoulsRules& souls() const { return souls_; }
+    bool soulsOn() const { return souls_.enabled; }
+    // Tests of the melee from before (parries wearing a guard down and the like) switch it off; the game reads it from
+    // the data only.
+    void setSoulsEnabled(bool on) { souls_.enabled = on; }
+    // The pawn swings with a moveset (its weapon or its body has one), so its attacks are light/heavy combos.
+    bool hasMoveset(Entity pawn) const;
+    // A press: starts the attack its kind and the moment call for (a combo's next blow, a running, jumping, rolling
+    // attack or a guard counter), or keeps it for when the attack under way lets it chain. False, with a reason, if
+    // it can't: out of stamina, staggered, nothing to swing.
+    bool soulsAttack(Entity pawn, Entity target, bool player, const SoulsPress& press, std::string* why = nullptr);
+    // The heavy's button let go: a held charge goes on (charged if held long enough).
+    bool soulsRelease(Entity pawn);
+    // Stamina (absent: full) and its share of the bar; poise's share of its meter.
+    float stamina(Entity pawn) const;
+    float staminaShare(Entity pawn) const;
+    float poiseShare(Entity pawn) const;
+    float poiseMax(Entity pawn) const;
+    // Takes `points` of stamina (to no less than 0). False, taking none, if it has none left.
+    bool spendStamina(Entity pawn, float points);
+    // CombatSystem asks before a roll starts (it takes the roll's stamina) and before a guard goes up. With an attack
+    // past its cancel point, the attack ends for it.
+    bool soulsRollGate(Entity pawn, std::string* why);
+    bool soulsGuardGate(Entity pawn, std::string* why);
+    // The player walks: an attack past its cancel point ends (true: the feet are free now).
+    bool soulsCancel(Entity pawn);
+    bool soulsStunned(Entity pawn) const;
+    bool counterOpen(Entity pawn) const;
+    bool charging(Entity pawn) const;
+    SoulsAttack attackKind(Entity pawn) const;
+    // The fighter AI's Elden Ring style turn with an enemy in reach (or leap range): true if it did something (an
+    // attack, backing off to get its breath). Called by FighterSystem::meleeAct when souls are on.
+    bool aiSoulsTurn(Entity pawn, Entity victim);
+    // A charging fighter's leap from a few metres off (a running heavy). True if it leapt.
+    bool aiLeap(Entity pawn, Entity victim);
+
     // The player's block: raises the weapon (or a person's fists) for playerBlockSteps (after blockSteps); sent again
     // while it is up (the button held) it stays up playerBlockHoldSteps longer. Not with a gun in hand.
     bool block(Entity pawn, std::string* why = nullptr);
@@ -406,9 +471,25 @@ private:
         std::vector<DefId> lowAttackClips;  // the same for blows at a body on the ground (MeleeRules lowAttacks)
         int finisher = 0;                // 1 + its MeleeRules finishers index (0: none): its blow at a body on the ground
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
+        int moveset = -1;                // its SoulsRules moveset (index), or -1
     };
 
     const ToolSet* toolsOf(Entity pawn, bool& weapon, bool fists = false) const;
+    // Souls (Souls.cpp).
+    const SoulsMoveset* movesetOf(Entity pawn) const;
+    bool soulsLowTarget(Entity pawn, Entity target, bool player) const;
+    bool soulsStart(Entity pawn, Entity target, bool player, SoulsAttack kind, bool hold, std::string* why);
+    SoulsAttack soulsKindFor(Entity pawn, const Melee* m, const SoulsPress& press) const;
+    bool soulsGuard(Entity attacker, const Melee& m, Entity victim, float power, DefId damageType, Event& e);
+    void soulsPoise(Entity attacker, const Melee& m, Entity victim, float toolPower, const HitFrom& from);
+    void soulsInterrupt(Entity pawn, int steps, bool dropGuard);
+    void soulsEnd(Entity pawn, Melee& m);
+    float soulsCost(Entity attacker, const Melee& m) const;
+    bool soulsStepWindup(Entity pawn, Melee& m);
+    void soulsStepRecovery(Entity pawn, Melee& m);
+    void soulsStep();
+    float bodySizeOf(Entity pawn) const;
+    bool humanlike(Entity pawn) const;
     const Tool* toolOf(Entity pawn, const Melee& m) const;
     void prepareDefense(Entity defender, Entity attacker, int stepsToHit, uint64_t seed);
     void defend(Entity defender, Melee& d);
@@ -436,6 +517,7 @@ private:
     const GameTime& time_;
     uint64_t seed_;
     MeleeRules rules_;
+    SoulsRules souls_;
     std::vector<uint8_t> arcTypes_;  // by DamageTypes DefId value: 1 for a sweeping blow
     std::vector<ToolSet> tools_;  // by Things DefId value: a melee weapon's tools, or a pawn def's body tools
     std::vector<Entity> order_;

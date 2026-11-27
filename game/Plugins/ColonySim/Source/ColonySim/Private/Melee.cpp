@@ -38,7 +38,7 @@ bool meleeDeadBody(const entt::registry& reg, Entity e) {
 // The player's own swing at someone standing: the clip is drawn on the upper body and the feet stay the player's
 // (BodyMotion::freeFeet). A blow at someone on the ground keeps the whole body's clip.
 bool meleeFreeFeet(const Melee& m) {
-    return m.player && !m.low;
+    return m.player && !m.low && m.kind == SoulsAttack::None;  // an Elden Ring style attack is the whole body's
 }
 
 // Names are prefixed because Unreal's unity builds merge .cpp files together.
@@ -252,6 +252,7 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                          const GameTime& time, uint64_t seed)
     : things_(things), map_(map), combat_(combat), health_(health), defs_(defs), time_(time), seed_(seed) {
     meleeReadRules(defs_, rules_);
+    soulsReadRules(defs_, souls_);
     arcTypes_.assign(defs_.size(), 0);
     for (const std::string& name : rules_.arcDamageTypes) {
         const DefId id = defs_.idOf("DamageTypes", name);
@@ -378,6 +379,15 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                 }
             }
         }
+        // Its Elden Ring style moveset (souls-combat.md): listed by weapon (or a creature's race def), else by style.
+        for (size_t i = 0; i < souls_.movesets.size(); ++i) {
+            const SoulsMoveset& ms = souls_.movesets[i];
+            const bool named = std::find(ms.weapons.begin(), ms.weapons.end(), def.defName()) != ms.weapons.end();
+            const bool styled = weapon && std::find(ms.styles.begin(), ms.styles.end(), style) != ms.styles.end();
+            if (named || (styled && set.moveset < 0)) {
+                set.moveset = static_cast<int>(i);
+            }
+        }
         // A finisher at the downed (sneed 2026-11-20): the weapon's own entry if it has one, else its style's.
         if (weapon) {
             for (size_t i = 0; i < rules_.finishers.size(); ++i) {
@@ -422,6 +432,10 @@ bool MeleeSystem::strongSwing(Entity pawn) const {
     const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
     if (m == nullptr) {
         return false;
+    }
+    if (m->kind != SoulsAttack::None) {
+        return m->kind == SoulsAttack::Heavy || m->kind == SoulsAttack::Charged || m->kind == SoulsAttack::RunningHeavy ||
+               m->kind == SoulsAttack::JumpHeavy || m->kind == SoulsAttack::GuardCounter;
     }
     const Tool* tool = toolOf(pawn, *m);
     if (tool == nullptr) {
@@ -665,8 +679,8 @@ bool MeleeSystem::ready(Entity pawn) const {
         return false;
     }
     const Melee* m = reg.try_get<Melee>(pawn);
-    return (m == nullptr || m->phase == MeleePhase::Ready) && !combat_.switching(pawn) && !isDressing(reg, pawn) &&
-           !reg.all_of<Blocking>(pawn);
+    return (m == nullptr || (m->phase == MeleePhase::Ready && now() >= m->stunUntil)) && !combat_.switching(pawn) &&
+           !isDressing(reg, pawn) && !reg.all_of<Blocking>(pawn);
 }
 
 bool MeleeSystem::winding(Entity pawn) const {
@@ -676,6 +690,10 @@ bool MeleeSystem::winding(Entity pawn) const {
 
 bool MeleeSystem::freeFeetToWalk(Entity pawn, float move) {
     if (!combat_.motion().holdsBody(pawn)) {
+        return true;
+    }
+    // An Elden Ring style attack past its cancel point ends when the player walks (souls-combat.md).
+    if (souls_.enabled && move >= 0.005f && soulsCancel(pawn)) {
         return true;
     }
     const Melee* m = things_.registry().try_get<Melee>(pawn);
@@ -702,6 +720,11 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
         }
         return false;
     };
+    // Elden Ring style (souls-combat.md): a pawn with a moveset swings a light attack of its combo; a blow at a body on
+    // the ground keeps its low blow or finisher below.
+    if (souls_.enabled && !fists && hasMoveset(pawn) && !soulsLowTarget(pawn, target, player)) {
+        return soulsAttack(pawn, target, player, SoulsPress{}, why);
+    }
     if (!things_.spawned(pawn) || !reg.all_of<Posture, Mover>(pawn)) {
         return fail("that is not a pawn on the map");
     }
@@ -710,6 +733,9 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     if (combat_.rollLocked(pawn)) {
         return fail("rolling");
+    }
+    if (const Melee* stunned = reg.try_get<Melee>(pawn); stunned != nullptr && now() < stunned->stunUntil) {
+        return fail("staggered");
     }
     if (combat_.switching(pawn)) {
         return fail("switching weapons");
@@ -750,7 +776,17 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
             return fail("the target is out of reach");
         }
     }
+    // Stamina (souls-combat.md): every swing costs some, and none is left for one at 0.
+    if (souls_.enabled) {
+        if (stamina(pawn) <= 0.0f) {
+            return fail("out of stamina");
+        }
+        Melee probe;
+        probe.weaponTool = weapon;
+        spendStamina(pawn, soulsCost(pawn, probe));
+    }
     Melee& m = reg.get_or_emplace<Melee>(pawn);
+    m.kind = SoulsAttack::None;
     m.seed = splitMix64(seed_ ^ (static_cast<uint64_t>(now()) << 20) ^ (uint64_t{entt::to_integral(pawn)} * 0x9E3779B97F4A7C15ULL));
     Rng rng(m.seed);
     float total = 0.0f;
@@ -1458,6 +1494,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
         blow = held != nullptr ? combat_.meleeDamageFactor(held->weapon, tool->damageType) : 1.0f;
     }
     blow *= swingDamage(pawn) * combat_.traitMeleeDamage(pawn);  // melee skill (real-time-combat.md) and traits (Wimp)
+    if (m.kind != SoulsAttack::None) {
+        blow *= souls_.kinds[static_cast<size_t>(m.kind)].damage;  // a heavy, charged or jumping blow (souls-combat.md)
+    }
     const float power = tool->power * blow;
     const float penetration = tool->penetration * blow;
     const Position& pos = reg.get<Position>(pawn);
@@ -1588,7 +1627,14 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
                 ++armBlocks_;
             }
         }
-        if (vm != nullptr && blocking(victim) && facing && meleeAble(reg, victim) && !(!victimArmed && m.weaponTool)) {
+        // Elden Ring style guard (souls-combat.md): a raised shield or weapon facing the blow takes it for stamina.
+        if (souls_.enabled && soulsGuard(pawn, m, victim, power, tool->damageType, e)) {
+            if (events_ != nullptr) {
+                events_->push_back(std::move(e));
+            }
+            return;
+        }
+        if (!souls_.enabled && vm != nullptr && blocking(victim) && facing && meleeAble(reg, victim) && !(!victimArmed && m.weaponTool)) {
             // The weapon takes it, and the blocker staggers: no swing of its own for a moment.
             e.message = "blocked";
             ++blocks_;
@@ -1621,6 +1667,9 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             e.amount = power;
             ++hits_;
             combat_.noteHurt(victim, pawn);
+            if (souls_.enabled) {
+                soulsPoise(pawn, m, victim, tool->power, HitFrom{true, pos.x, pos.y, true});
+            }
         } else {
             const PawnHitResult result =
                 combat_.hitPawn(victim, hit.part, tool->damageType, power, penetration, splitMix64(m.seed ^ 0x417ULL),
@@ -1648,7 +1697,11 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             }
             combat_.wearApparel(victim, result);
             if (!result.deflected && !corpse) {
-                combat_.jolt(victim, result.part, tool->damageType, power, result.amount, HitFrom{true, pos.x, pos.y, true});  // poise and stagger (part C)
+                if (souls_.enabled) {
+                    soulsPoise(pawn, m, victim, tool->power, HitFrom{true, pos.x, pos.y, true});  // Elden Ring poise (souls-combat.md)
+                } else {
+                    combat_.jolt(victim, result.part, tool->damageType, power, result.amount, HitFrom{true, pos.x, pos.y, true});  // poise and stagger (part C)
+                }
                 combat_.noteHurt(victim, pawn);
             }
             return;
@@ -1670,6 +1723,7 @@ bool MeleeSystem::arcSwing(DefId damageType) const {
 
 void MeleeSystem::step() {
     entt::registry& reg = things_.registry();
+    soulsStep();
     if (reg.view<Melee>().empty()) {
         return;
     }
@@ -1681,7 +1735,9 @@ void MeleeSystem::step() {
     // Defenders first: a sidestep or a raised weapon that is due happens before this step's strikes.
     for (const Entity pawn : order_) {
         Melee& d = reg.get<Melee>(pawn);
-        if (d.defense != MeleeDefense::None && now() >= d.reactAt) {
+        if (d.defense != MeleeDefense::None && now() < d.stunUntil) {
+            d.defense = MeleeDefense::None;  // reeling: it can't defend (souls-combat.md)
+        } else if (d.defense != MeleeDefense::None && now() >= d.reactAt) {
             defend(pawn, d);
         }
     }
@@ -1699,9 +1755,16 @@ void MeleeSystem::step() {
             case MeleePhase::Ready:
                 break;
             case MeleePhase::Recovery:
+                if (m.kind != SoulsAttack::None) {
+                    soulsStepRecovery(pawn, m);  // the combo's next blow (it may start a new wind-up)
+                    if (m.phase != MeleePhase::Recovery) {
+                        break;
+                    }
+                }
                 if (--m.stepsLeft <= 0) {
                     m.phase = MeleePhase::Ready;
                     m.stepsLeft = 0;
+                    m.endedAt = now();
                 }
                 break;
             case MeleePhase::Windup:
@@ -1714,6 +1777,9 @@ void MeleeSystem::step() {
                     const Position& to = reg.get<Position>(m.target);
                     face(pawn, to.x, to.y);  // follows the target until the line is fixed
                 }
+                if (m.kind != SoulsAttack::None && soulsStepWindup(pawn, m)) {
+                    break;  // a heavy held drawn back (charging)
+                }
                 --m.stepsLeft;
                 if (!m.committed && m.stepsLeft <= rules_.commitSteps) {
                     commit(pawn, m);
@@ -1722,7 +1788,14 @@ void MeleeSystem::step() {
                     strike(pawn, m);
                     m.noDefendUntil = std::max(m.noDefendUntil, now() + rules_.recoveryNoDefendSteps);
                     const Tool* tool = toolOf(pawn, m);
+                    if (m.phase != MeleePhase::Windup) {
+                        break;  // the strike ended it (it struck a guard that broke it, or the like)
+                    }
                     m.phase = MeleePhase::Recovery;
+                    if (m.kind != SoulsAttack::None) {
+                        m.stepsLeft = std::max(1, m.recoverySteps);
+                        break;
+                    }
                     m.stepsLeft = m.finisher != 0 ? std::max(1, m.finisherSteps - static_cast<int>(now() - m.finisherFrom))
                                   : tool != nullptr
                                       ? std::max(1, static_cast<int>(std::lround(
@@ -1736,6 +1809,18 @@ void MeleeSystem::step() {
 }
 
 void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
+    if (const Stamina* st = things_.registry().try_get<Stamina>(e)) {
+        h.add(uint64_t{0x57A41});
+        h.add(st->value);
+        h.add(st->lastUse);
+    }
+    if (const PoiseMeter* p = things_.registry().try_get<PoiseMeter>(e)) {
+        h.add(uint64_t{0x9015E});
+        h.add(p->value);
+        h.add(p->lastHit);
+        h.add(p->lastBreak);
+        h.add(p->knockdownImmuneUntil);
+    }
     const Melee* m = things_.registry().try_get<Melee>(e);
     if (m == nullptr) {
         return;
@@ -1781,6 +1866,23 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(static_cast<int>(m->finisher));
     h.add(m->finisherFrom);
     h.add(m->finisherSteps);
+    h.add(static_cast<int>(m->kind));
+    h.add(static_cast<int>(m->combo));
+    h.add(m->windupSteps);
+    h.add(m->recoverySteps);
+    h.add(m->endedAt);
+    h.add(static_cast<int>(m->buffered));
+    h.add(entt::to_integral(m->bufferedTarget));
+    h.add(m->bufferedHold);
+    h.add(m->holding);
+    h.add(m->chargeSteps);
+    h.add(m->chargeRate);
+    h.add(m->aiChargeFor);
+    h.add(static_cast<int>(m->aiChain));
+    h.add(m->stunUntil);
+    h.add(m->counterUntil);
+    h.add(m->guardStun);
+    h.add(m->rollEndsAt);
 }
 
 // ---- Fight response, focus and footwork (docs/design/focus.md) ----------------------------------

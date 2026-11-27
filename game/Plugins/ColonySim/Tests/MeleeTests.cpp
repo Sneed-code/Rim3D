@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Souls.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Replay.h"
 #include "ColonySim/Save.h"
@@ -152,6 +153,7 @@ void meleeTestSkill(Sim& sim, Entity pawn, int level, const char* trait = nullpt
 void meleeTestHeal(Sim& sim, Entity pawn) {
     sim.things().registry().replace<Health>(pawn, Health{});
     sim.health().refresh(pawn);
+    sim.things().registry().remove<Stamina, PoiseMeter>(pawn);  // rested too (souls-combat.md)
 }
 
 void meleeTestFace(Sim& sim, Entity pawn, float fx, float fy) {
@@ -196,6 +198,7 @@ double meleeTestHitRate(int skill, int swings, uint64_t seed) {
             }
         }
         meleeTestHeal(*sim, target);
+        meleeTestHeal(*sim, attacker);
         meleeTestFace(*sim, target, -1.0f, 0.0f);
     }
     return static_cast<double>(hits) / swings;
@@ -464,6 +467,7 @@ TEST_CASE("Melee: an unarmed fighter sidesteps the swings it reads in time; a sl
 
 TEST_CASE("Melee: a pawn with a melee weapon parries swings from the front until its guard breaks") {
     auto sim = meleeTestSim(41);
+    sim->melee().setSoulsEnabled(false);  // the parry from before Elden Ring style melee (souls-combat.md has its guard)
     const Entity attacker = meleeTestPawn(*sim, 30.5f, 30.5f, "Melee_Mace");
     const Entity blocker = meleeTestPawn(*sim, 31.5f, 30.5f, "Melee_Gladius");
     meleeTestSkill(*sim, attacker, 20);

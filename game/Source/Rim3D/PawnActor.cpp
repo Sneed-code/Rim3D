@@ -720,11 +720,25 @@ bool ASimPawnActor::StartJump()
 	return true;
 }
 
+void ASimPawnActor::CancelJump()
+{
+	if (!IsJumping())
+	{
+		return;
+	}
+	JumpCancelHeight = GetJumpHeight();
+	JumpCancelAge = 0.0f;
+	JumpAge = -1.0f;
+	bJumpFalling = false;
+}
+
 float ASimPawnActor::GetJumpHeight() const
 {
 	if (!IsJumping())
 	{
-		return 0.0f;
+		// A jump cut short by a jump attack comes down smoothly (an ease out over kJumpCancelSeconds).
+		const float T = FMath::Clamp(JumpCancelAge / kJumpCancelSeconds, 0.0f, 1.0f);
+		return JumpCancelHeight * (1.0f - T) * (1.0f - T);
 	}
 	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds. A higher jump
 	// (the lineage's factor) takes longer by its square root, as a thrown body does.
@@ -736,6 +750,11 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 {
 	if (!IsJumping())
 	{
+		JumpCancelAge += GameDelta;
+		if (JumpCancelAge >= kJumpCancelSeconds)
+		{
+			JumpCancelHeight = 0.0f;
+		}
 		return;
 	}
 	USimPawnAnimInstance* Anim = GetAnim();

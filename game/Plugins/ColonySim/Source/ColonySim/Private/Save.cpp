@@ -467,6 +467,8 @@ struct SaveEntity {
     std::optional<SaveThrower> thrower;     // section "explosives"
     std::optional<KnockedDown> knocked;     // section "explosives"
     std::optional<Melee> melee;             // section "melee" (F8)
+    std::optional<Stamina> stamina;         // section "melee" 8 (souls-combat.md)
+    std::optional<PoiseMeter> poiseMeter;   // section "melee" 8
     std::optional<Social> social;           // section "social" (C20)
     std::optional<SocialFight> socialFight; // section "social" (C20)
     std::optional<Lovin> lovin;             // section "social" 2 (docs/design/lovin.md)
@@ -1135,7 +1137,13 @@ void saveCommandTail(Ar& ar, Type& c) {
         ar.value("pawn", melee->pawn);
         ar.value("target", melee->target);
         ar.value("mode", melee->mode);
-        ar.require(melee->mode <= MeleeMode::Block, "the save file has a bad melee mode");
+        ar.require(melee->mode <= MeleeMode::Release, "the save file has a bad melee mode");
+        if (ar.sectionVersion() >= 9) {  // Elden Ring style presses (souls-combat.md)
+            ar.value("heavy", melee->heavy);
+            ar.value("running", melee->running);
+            ar.value("jumping", melee->jumping);
+            ar.value("hold", melee->hold);
+        }
     } else if constexpr (std::is_same_v<Type, SetOutfitCommand>) {
         auto* setOutfit = &c;
         ar.value("pawn", setOutfit->pawn);
@@ -2777,6 +2785,27 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("finisherFrom", m.finisherFrom);
         ar.value("finisherSteps", m.finisherSteps);
     }
+    if (ar.sectionVersion() >= 8) {  // Elden Ring style attacks (souls-combat.md)
+        ar.value("kind", m.kind);
+        ar.require(m.kind < SoulsAttack::Count || m.kind == SoulsAttack::None, "the save file has a bad attack kind");
+        ar.value("combo", m.combo);
+        ar.value("windupSteps", m.windupSteps);
+        ar.value("recoverySteps", m.recoverySteps);
+        ar.value("endedAt", m.endedAt);
+        ar.value("buffered", m.buffered);
+        ar.require(m.buffered < SoulsAttack::Count || m.buffered == SoulsAttack::None, "the save file has a bad attack kind");
+        ar.value("bufferedTarget", m.bufferedTarget);
+        ar.value("bufferedHold", m.bufferedHold);
+        ar.value("holding", m.holding);
+        ar.value("chargeSteps", m.chargeSteps);
+        ar.value("chargeRate", m.chargeRate);
+        ar.value("aiChargeFor", m.aiChargeFor);
+        ar.value("aiChain", m.aiChain);
+        ar.value("stunUntil", m.stunUntil);
+        ar.value("counterUntil", m.counterUntil);
+        ar.value("guardStun", m.guardStun);
+        ar.value("rollEndsAt", m.rollEndsAt);
+    }
 }
 
 template <typename Ar>
@@ -3590,7 +3619,7 @@ void saveSections(Ar& ar, SaveData& d) {
         ar.value("repaths", d.repaths);
         ar.list("setupErrors", d.setupErrors, [&](std::string& s) { ar.text(nullptr, s); });
     });
-    ar.section("commands", 8, [&] { saveCommandsSection(ar, d); });
+    ar.section("commands", 9, [&] { saveCommandsSection(ar, d); });
     ar.section("things", 1, [&] { saveThingsSection(ar, d); });
     std::vector<SaveEntity>& e = d.entities;
     ar.section("movement", 3, [&] {
@@ -3827,8 +3856,22 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 7, [&] {
+    ar.section("melee", 8, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
+        if (ar.sectionVersion() >= 8) {  // Elden Ring style stamina and poise (souls-combat.md)
+            saveParts(ar, "stamina", e, &SaveEntity::stamina, [&](Stamina& st) {
+                ar.value("value", st.value);
+                ar.value("lastUse", st.lastUse);
+                ar.require(st.value >= -1.0f && st.value <= 1.0e4f, "the save file has an impossible stamina");
+            });
+            saveParts(ar, "poiseMeter", e, &SaveEntity::poiseMeter, [&](PoiseMeter& p) {
+                ar.value("value", p.value);
+                ar.value("lastHit", p.lastHit);
+                ar.value("lastBreak", p.lastBreak);
+                ar.value("knockdownImmuneUntil", p.knockdownImmuneUntil);
+                ar.require(p.value >= -1.0f && p.value <= 1.0e5f, "the save file has an impossible poise meter");
+            });
+        }
     });
     ar.section("social", 3, [&] {
         saveParts(ar, "social", e, &SaveEntity::social, [&](Social& social) { saveSocialPart(ar, social, ar.sectionVersion() >= 2); });
@@ -4664,6 +4707,12 @@ void SimSaveAccess::collectEntity(const Sim& sim, Entity e, SaveEntity& out) {
     if (const Melee* melee = reg.try_get<Melee>(e)) {
         out.melee = *melee;
     }
+    if (const Stamina* stamina = reg.try_get<Stamina>(e)) {
+        out.stamina = *stamina;
+    }
+    if (const PoiseMeter* meter = reg.try_get<PoiseMeter>(e)) {
+        out.poiseMeter = *meter;
+    }
     if (const Social* social = reg.try_get<Social>(e)) {
         out.social = *social;
     }
@@ -5274,6 +5323,12 @@ bool SimSaveAccess::restoreEntity(Sim& sim, SaveEntity& e, std::string& error) {
     }
     if (e.melee) {
         reg.emplace<Melee>(entity, *e.melee);
+    }
+    if (e.stamina) {
+        reg.emplace<Stamina>(entity, *e.stamina);
+    }
+    if (e.poiseMeter) {
+        reg.emplace<PoiseMeter>(entity, *e.poiseMeter);
     }
     if (e.social) {
         reg.emplace<Social>(entity, *e.social);

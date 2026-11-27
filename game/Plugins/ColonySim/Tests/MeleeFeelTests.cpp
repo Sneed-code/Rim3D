@@ -7,6 +7,7 @@
 #include "ColonySim/Health.h"
 #include "ColonySim/Jobs.h"
 #include "ColonySim/Melee.h"
+#include "ColonySim/Souls.h"
 #include "ColonySim/Movement.h"
 #include "ColonySim/Save.h"
 #include "ColonySim/Snapshot.h"
@@ -107,6 +108,7 @@ void feelTestFace(Sim& sim, Entity pawn, float x, float y) {
 void feelTestHeal(Sim& sim, Entity pawn) {
     sim.things().registry().replace<Health>(pawn, Health{});
     sim.health().refresh(pawn);
+    sim.things().registry().remove<Stamina, PoiseMeter>(pawn);  // rested too (souls-combat.md)
 }
 
 // Steps from the start of a swing until the pawn can swing again.
@@ -264,8 +266,14 @@ TEST_CASE("Swing speed: the club swings twice as fast, other melee weapons half 
     const float f = feelTestSim(1)->melee().rules().attackTimeFactor;
     CHECK(club >= static_cast<int>(32.0f * f));
     CHECK(club <= static_cast<int>(std::ceil(36.0f * f)));
-    CHECK(gladius >= static_cast<int>(43.0f * f));
-    CHECK(gladius <= static_cast<int>(std::ceil(48.0f * f)));
+    if (feelTestSim(1)->melee().soulsOn()) {
+        // Elden Ring style (souls-combat.md): the gladius swings its moveset's light attack, about a second all told.
+        CHECK(gladius >= 20);
+        CHECK(gladius <= 40);
+    } else {
+        CHECK(gladius >= static_cast<int>(43.0f * f));
+        CHECK(gladius <= static_cast<int>(std::ceil(48.0f * f)));
+    }
     CHECK(longsword >= static_cast<int>(26.0f * f));
     CHECK(longsword <= static_cast<int>(std::ceil(30.0f * f)));
 }
