@@ -10,6 +10,8 @@ is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still w
 The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
 `PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
 
+14 new models (sneed, 2026-11-27; data and art steps): **Codex** (medium) steel stock, silver coins, gold ingots, a woven sack of rice, ears of corn, go-juice injectors and a neutroamine canister, replacing their box shapes; **Neon** (high) rigged and animated gazelle, ostrich, duck, hare, squirrel, sheep and yak, replacing their stand-ins (`assets/animal_art.json`; no animal def is drawn by a stand-in model now except polar bear, caribou and muskox). Briefs in `tools/codex_assets` and `tools/neon_assets`; previews on branch claude/shots-batch8-vmjf7f.
+
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
 **skin**: colonists showed only clothes, hair, eyes and teeth. Everyone wears the 4K skin since 2026-11-25, but only the
 2K skin got the garment cover texture; the 4K one read the parameter's default, the engine's Black, whose alpha 1 reads as
