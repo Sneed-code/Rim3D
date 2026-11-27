@@ -9,6 +9,7 @@
 #include "SmokeTest.h"
 
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -22,6 +23,7 @@
 #include "ColonySim/Colonist.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Health.h"
+#include "ColonySim/Looks.h"
 #include "ColonySim/Melee.h"
 #include "ColonySim/Plants.h"
 #include "ColonySim/Sim.h"
@@ -101,6 +103,24 @@ namespace
 		{
 			Sim.things().registry().replace<colony::Health>(Pawn, colony::Health{});
 			Sim.health().refresh(Pawn);
+		}
+	}
+
+	/** A woman drawn as one of the creator's random people (sneed 2026-11-27: female pawns fight in the duel): the look
+	 *  travels through the sim as creator text, the way a new game's colonists do. */
+	void DuelSmokeWoman(colony::Sim& Sim, colony::Entity Pawn, int32 Seed)
+	{
+		entt::registry& Registry = Sim.things().registry();
+		if (colony::Colonist* Record = Registry.try_get<colony::Colonist>(Pawn))
+		{
+			Record->female = true;
+		}
+		if (colony::PawnLooks* Looks = Registry.try_get<colony::PawnLooks>(Pawn))
+		{
+			Looks->female = true;
+			Looks->beard = "None";
+			Looks->naturalBeard = "None";
+			Looks->creator = "seed=" + std::to_string(Seed) + ";female=1;";
 		}
 	}
 
@@ -191,6 +211,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		{
 			Fail(TEXT("duel: opponent ") + Problem);
 		}
+		DuelSmokeWoman(Sim, State->Foe, 7100 + State->Rematches * 37);
 		B->Submit(colony::SetFactionCommand{State->Foe, 2});
 		State->bFoeArmed = false;
 		State->FoeDownSince = -1.0f;
@@ -283,6 +304,14 @@ void USmokeTestSubsystem::BuildDuelPhases()
 			Fail(TEXT("USimSubsystem or USimPawnSubsystem did not start"));
 			return;
 		}
+		// MakeHuman bodies (not the grey mannequins) in daylight.
+		for (const TPair<const TCHAR*, float>& Var : {TPair<const TCHAR*, float>(TEXT("Pawns.MetaHumans"), 1.0f), TPair<const TCHAR*, float>(TEXT("Sky.Hour"), 10.0f)})
+		{
+			if (IConsoleVariable* Found = IConsoleManager::Get().FindConsoleVariable(Var.Key))
+			{
+				Found->Set(Var.Value, ECVF_SetByCode);
+			}
+		}
 		FSimStartOptions Options;
 		Options.Seed = 42;
 		Options.MapSize = 96;
@@ -354,6 +383,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 			{
 				Fail(TEXT("duel: ") + Problem);
 			}
+			DuelSmokeWoman(Sim, Place.Key, Place.Key == State->Me ? 4242 : 7100);
 			B->Submit(colony::SpawnThingCommand{"Melee_Gladius", Place.Value, 1});
 		}
 		B->Submit(colony::SetFactionCommand{State->Foe, 2});
@@ -374,7 +404,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 				if (Protagonist->EnterDirectMode(State->Me))
 				{
 					State->bControlled = true;
-					Notes.Add(TEXT("duel: you hold a gladius and a shield; Shift + left mouse is a heavy attack"));
+					Notes.Add(TEXT("duel: you hold a gladius and a shield; hold left click for a heavy attack"));
 				}
 			}
 		}

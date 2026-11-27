@@ -98,7 +98,7 @@ namespace
 	// A clip the sim moves the body along (docs/design/body-motion.md): blended in short (its blow is timed to the
 	// sim's step), a little longer from a clip still playing (the next swing, a stagger on a stagger: 0.08 s was a
 	// visible snap), out over 0.25 s. Blending never shifts the clip's moment, only how much of it shows.
-	const float PawnMotionBlendIn = 0.1f;
+	const float PawnMotionBlendIn = 0.15f;  // 0.1 popped into a sword blow from walking (sneed 2026-11-27: "jars suddenly")
 	const float PawnMotionFollowBlendIn = 0.16f;
 	const float PawnMotionBlendOut = 0.25f;
 	// A react to a hit (upper body): blended in over 0.12 s, out over 0.3 s, and not restarted within 0.35 s.

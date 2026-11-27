@@ -36,7 +36,9 @@ struct PoiseMeter {
     int64_t knockdownImmuneUntil = 0;
 };
 
-// The kinds of attack (Elden Ring's R1, R2, charged R2, running R1/R2, jumping R1/R2, rolling R1, guard counter).
+// The kinds of attack (Elden Ring's R1, R2, charged R2, running R1/R2, jumping R1/R2, rolling R1, guard counter), and
+// the critical attacks (sneed 2026-11-27): a riposte through the chest of a foe whose guard or poise just broke, a
+// backstab from behind, and a stab down into a foe knocked to the ground.
 enum class SoulsAttack : uint8_t {
     Light,
     Heavy,
@@ -47,12 +49,19 @@ enum class SoulsAttack : uint8_t {
     JumpHeavy,
     Roll,
     GuardCounter,
+    Riposte,
+    Backstab,
+    GroundStab,
     Count,
     None = 255,
 };
 constexpr size_t kSoulsAttackKinds = static_cast<size_t>(SoulsAttack::Count);
 COLONY_API const char* soulsAttackName(SoulsAttack kind);
 COLONY_API bool soulsAttackFromName(const std::string& name, SoulsAttack& out);
+// A critical attack (riposte, backstab, ground stab): it can't be guarded or dodged and always meets its target.
+inline bool soulsCriticalKind(SoulsAttack kind) {
+    return kind == SoulsAttack::Riposte || kind == SoulsAttack::Backstab || kind == SoulsAttack::GroundStab;
+}
 
 // One kind's numbers. Stamina is a share of a 100 point bar (sneed: light 10, heavy 20).
 struct SoulsKind {
@@ -121,6 +130,16 @@ struct SoulsRules {
     int guardBreakSteps = 45;
     int blockStunSteps = 10;
     int counterSteps = 30;
+    // Critical attacks (Elden Ring: a light attack at a foe whose stance or guard just broke is a riposte, one from
+    // behind a backstab; both lock the two together and throw the victim to the ground, 2.5 to 4 times a normal blow).
+    // A riposte needs the victim stunned by a poise or guard break, in front within criticalRange metres; a backstab
+    // needs the attacker within backstabRange metres behind (the victim's facing and the way to the attacker at a cosine
+    // under backstabCos). The victim is held for the wind-up and criticalHoldSteps after, then knocked down.
+    float criticalRange = 1.8f;
+    float backstabRange = 1.5f;
+    float backstabCos = -0.6f;        // about 53 degrees either side of straight behind
+    int criticalHoldSteps = 12;
+    float criticalKnockdown = 6.0f;   // the knockdown's force (CombatSystem::knockDown's push)
     float guardBreakPoise = 2.0f;     // a guard break takes this share of the blocker's poise on top
     // Lining up the blow (Elden Ring's tracking): the attacker turns to its target until `trackShare` of the wind-up,
     // and is carried in or back to stand `idealInset` metres inside its reach at the blow.

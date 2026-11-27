@@ -2,6 +2,20 @@
 
 Updated 2026-11-27.
 
+Sword and shield follow-up (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`): **heavy attack**
+is holding left click (0.22 s, `Melee.HeavyHoldSeconds`; kept held it charges), Shift + click is gone, and the heavy has
+its own clips (the sword and shield overhead blow, then slash 4). **Critical attacks** as Elden Ring has them: a click at
+a foe reeling from a poise or guard break is a riposte (the sword lunge through the chest, 3.2x), one from behind a
+backstab (2.6x); both catch the victim, can't be blocked, always land and throw it to the ground; any press at a foe
+knocked down is a stab on the ground (1.8x); downed bodies keep the old finishers. **Auto lock-on** to an enemy who swings
+at you while you face them and are locked on to nobody (Settings > Controls toggle). **Shield** always rides the forearm
+(it floated in front of the head whenever the guard was up without the block clip). **Duel** fighters are women drawn as
+random creator people (MakeHuman, not mannequins) in daylight; **Esc** brings up the menu while walking, Esc again or Back
+to the game puts it away. **Jolts**: the player's local body no longer walks on during a sword clip and snaps back, it
+follows the sim between steps, and whole-body clips blend in over 0.15 s. **HUD**: each bottom tab is as wide as its own
+icon and label. **Mugshots**: retaken once each colonist stands still with the body built (first ones were taken
+mid-stride or before the body and hair had settled).
+
 Elden Ring style melee, sword and shield first (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`):
 **stamina** for every pawn (light 10, heavy 20, half on a blocked hit, roll 30, refills over 2 s, not while the guard is
 up; out of stamina breaks the guard), shown green under a red health bar top left. **Attacks**: one press one attack,

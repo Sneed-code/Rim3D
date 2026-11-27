@@ -2467,8 +2467,8 @@ void UFightSubsystem::DrawHud()
 				if (Bridge->GetCurrentSnapshot().souls)
 				{
 					// Elden Ring style melee (souls-combat.md).
-					ImGui::TextUnformatted("Left mouse attack   Shift + left mouse heavy (hold to charge)   Right mouse guard   T roll");
-					ImGui::TextUnformatted("Sprint or jump, then attack: running or jump attack");
+					ImGui::TextUnformatted("Click attack   Hold left click heavy (keep holding to charge)   Right mouse guard   T roll");
+					ImGui::TextUnformatted("Sprint or jump, then attack: running or jump attack   Click a reeling foe or one from behind: critical hit");
 				}
 				else
 				{

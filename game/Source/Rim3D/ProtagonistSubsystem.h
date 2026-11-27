@@ -105,6 +105,7 @@ public:
 	int32 GetFlicksSent() const { return FlicksSent; }
 	/** FocusCommands sent so far (smoke tests). */
 	int64 GetFocusCommandsSent() const { return FocusCommandsSent; }
+	int64 GetAutoFocusesSent() const { return AutoFocusesSent; }
 	/** Frames the focus HP bar was drawn. */
 	int32 GetFocusBarFramesDrawn() const { return FocusBarFramesDrawn; }
 	/** Frames the top left health and stamina bars were drawn (Elden Ring style melee only); their last shares. */
@@ -191,9 +192,13 @@ private:
 	double VitalsLastDrawn = 0.0;
 	/** The focus a Clear was last sent for while the setting is off (so it is sent once). */
 	colony::Entity FocusClearedFor = colony::kNoEntity;
+	/** The enemy the last automatic lock-on went to (none once nobody swings at you), and how many were sent. */
+	colony::Entity AutoFocusSentFor = colony::kNoEntity;
+	int64 AutoFocusesSent = 0;
 	/** Seconds the player has been turned away from the focus and moving away from it (lock-on.md). */
 	float TurnAwaySeconds = 0.0f;
 	void UpdateTurnAway(USimSubsystem& Bridge);
+	void UpdateAutoFocus(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus);
 	/** A quick sideways mouse flick while locked on with melee switches target (lock-on.md). */
 	void UpdateFlick(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus);
 	float FlickX = 0.0f;

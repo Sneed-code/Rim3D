@@ -48,7 +48,7 @@ enum class ERim3DAction : uint8
 	Patch,           // patch a bleeding wound (body health part B)
 	Unstuck,         // F12: after 5 s standing still, moved to the nearest clear spot (docs/design/earthworks.md)
 	NextGrenade,     // R: the next kind of grenade on the belt (frag, molotov...) for G
-	HeavyAttack,     // held with Attack: a heavy attack (Elden Ring style melee, souls-combat.md); Left Shift like sprint
+	HeavyAttack,     // unused since 2026-11-27 (holding Attack is the heavy, souls-combat.md); kept so saved bindings still read
 	Count
 };
 
@@ -76,6 +76,10 @@ namespace Rim3DKeys
 	/** Lock-on focus on or off (the focus thread's setting; saved, on by default). */
 	RIM3D_API bool IsLockOnFocusEnabled();
 	RIM3D_API void SetLockOnFocusEnabled(bool bEnabled);
+	/** Lock on by itself to an enemy who swings at you in melee while you face them and are locked on to nobody (sneed
+	 *  2026-11-27; saved, on by default). */
+	RIM3D_API bool IsAutoFocusAttackerEnabled();
+	RIM3D_API void SetAutoFocusAttackerEnabled(bool bEnabled);
 
 	/** Draws the rebind list with ImGui inside a window someone else began. Click a key, then press the new one (Esc cancels). */
 	RIM3D_API void DrawControlsPage(float Scale);

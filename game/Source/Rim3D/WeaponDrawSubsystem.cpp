@@ -19,6 +19,7 @@
 #include "GunRangeSubsystem.h"
 #include "HoldDraw.h"
 #include "MakeHumanAnimInstance.h"
+#include "ColonyHudSubsystem.h"
 #include "OrdersSubsystem.h"
 #include "PawnActor.h"
 #include "PawnAnimInstance.h"
@@ -80,6 +81,9 @@ namespace
 	constexpr float WeaponSoulsRunSpeed = 2.5f;
 	// A souls press kept this long (real seconds) without going (paused, busy) is dropped.
 	constexpr double WeaponSoulsPressSeconds = 0.6;
+	// Held this long, the attack button gives a heavy instead of a light (Elden Ring's R1/R2 on one button, sneed 2026-11-27).
+	TAutoConsoleVariable<float> GWeaponSoulsHeavyHold(TEXT("Melee.HeavyHoldSeconds"), 0.22f,
+		TEXT("Seconds the attack button is held before the swing is a heavy attack (kept held, it charges)."), ECVF_Default);
 	// Hit-stop, real seconds: a hit, armor that turned the blow, a blow a weapon took.
 	constexpr float WeaponHitStopBase = 0.05f;
 	constexpr float WeaponHitStopMax = 0.12f;
@@ -1736,7 +1740,10 @@ void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::Thin
 	{
 		OnArm = HoldDraw::WeaponWorld(Frame, Hold, Gear.size);
 	}
-	const float FloatRaise = bArm && bClipRaises ? 0.0f : Raise;
+	// With the arm's bones it always stays on the forearm (sneed 2026-11-27: it floated in front of the head whenever the
+	// guard was up and the block clip wasn't, as in a souls attack's recovery); the guard clip lifts the arm with it.
+	(void)bClipRaises;
+	const float FloatRaise = bArm ? 0.0f : Raise;
 	FTransform World;
 	World.SetLocation(FMath::Lerp(OnArm.GetLocation(), Raised.GetLocation(), static_cast<double>(FloatRaise)));
 	World.SetRotation(FQuat::Slerp(OnArm.GetRotation(), Raised.GetRotation(), FloatRaise));
@@ -2144,6 +2151,14 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 		HoldShield(false);
 		return;
 	}
+	// The menu (Esc) is up: its clicks are not swings.
+	if (const UColonyHudSubsystem* MenuHud = GetWorld()->GetSubsystem<UColonyHudSubsystem>(); MenuHud && MenuHud->IsMainMenuOpen())
+	{
+		HoldShield(false);
+		bSoulsButtonDown = false;
+		bSoulsPending = false;
+		return;
+	}
 	// With a building in hand the mouse buttons plan it and cancel it (UHandsOnSubsystem).
 	const UOrdersSubsystem* Orders = GetWorld()->GetSubsystem<UOrdersSubsystem>();
 	if (Orders && Orders->IsDirectBuilding())
@@ -2158,15 +2173,34 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 	const bool bSoulsInput = SoulsMe && SoulsBridge->GetCurrentSnapshot().souls && SoulsBridge->GetSim()->melee().hasMoveset(SoulsMe->id);
 	if (bSoulsInput)
 	{
-		// Elden Ring style (docs/design/souls-combat.md): each press is one attack; Shift held with it is a heavy, kept
-		// held it charges until let go. A press that can't go this step (one order a step) goes the next.
+		// Elden Ring style (docs/design/souls-combat.md): each press is one attack. A click is a light attack; held past
+		// Melee.HeavyHoldSeconds it is a heavy with its own clip, and kept held it charges until let go (sneed
+		// 2026-11-27). A press that can't go this step (one order a step) goes the next.
 		const bool bAttackDown = Rim3DKeys::IsDown(PC, ERim3DAction::Attack);
 		if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
 		{
+			bSoulsButtonDown = true;
+			bSoulsHeavyFired = false;
+			SoulsButtonAt = RealNow;
+		}
+		if (bSoulsButtonDown && !bSoulsHeavyFired && bAttackDown && RealNow - SoulsButtonAt >= GWeaponSoulsHeavyHold.GetValueOnGameThread())
+		{
+			bSoulsHeavyFired = true;
 			bSoulsPending = true;
 			SoulsPendingAt = RealNow;
-			bSoulsPendingHeavy = Rim3DKeys::IsDown(PC, ERim3DAction::HeavyAttack);
+			bSoulsPendingHeavy = true;
 			bSoulsReleasePending = false;
+		}
+		if (bSoulsButtonDown && !bAttackDown)
+		{
+			bSoulsButtonDown = false;
+			if (!bSoulsHeavyFired)
+			{
+				bSoulsPending = true;
+				SoulsPendingAt = RealNow;
+				bSoulsPendingHeavy = false;
+				bSoulsReleasePending = false;
+			}
 		}
 		if (bSoulsPending && RealNow - SoulsPendingAt > WeaponSoulsPressSeconds)
 		{
