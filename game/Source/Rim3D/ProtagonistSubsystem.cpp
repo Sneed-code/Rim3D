@@ -1432,7 +1432,7 @@ void UProtagonistSubsystem::DrawVitals(USimSubsystem& Bridge, float Left, float 
 		{
 			Draw->AddRectFilled(A, ImVec2(A.x + Width * Value, B.y), Fill);
 		}
-		Draw->AddRect(ImVec2(A.x - Edge, A.y - Edge), ImVec2(B.x + Edge, B.y + Edge), IM_COL32(150, 130, 95, 200), 0.0f, ImDrawFlags_None, Edge);
+		Draw->AddRect(ImVec2(A.x - Edge, A.y - Edge), ImVec2(B.x + Edge, B.y + Edge), IM_COL32(150, 130, 95, 200), 0.0f, Edge);
 	};
 	const float HealthHeight = 12.0f * Scale;
 	Bar(Top, HealthHeight, Health, HealthTrail, IM_COL32(170, 28, 24, 255), IM_COL32(230, 200, 120, 220));
