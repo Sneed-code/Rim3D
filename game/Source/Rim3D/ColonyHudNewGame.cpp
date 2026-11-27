@@ -51,7 +51,9 @@ namespace
 	// The character screen's stage (cosmetic): the hour the sky is held at, the key light (candelas, real units like the
 	// sun's lux in data/look.json), and how far out from the body the camera's line must be clear of trees.
 	constexpr float NgPreviewHour = 10.5f;
-	constexpr float NgPreviewLampIntensity = 60000.0f;
+	// 24000 cd: brighter (60000 until 2026-11-27) pushed lit dark skin past what the subsurface scattering keeps and it came
+	// out white (the brightest of 0.3x/0.4x/0.5x with no white on the Melanesian preset; 0.5x clipped on the chest).
+	constexpr float NgPreviewLampIntensity = 24000.0f;
 	constexpr float NgPreviewClearMetres = 5.5f;
 	// Plants within this many metres of a person on show are not drawn while the screen is open (a cosmetic clearing).
 	constexpr float NgPreviewClearingMetres = 3.5f;
@@ -82,6 +84,18 @@ namespace
 	// The title's starship stage (ATitleStage) stands this high over the map's corner, far above anything drawn there.
 	constexpr double NgTitleStageHeightCm = 3000000.0;
 
+	// For finding and tuning the screen's light (sneed 2026-11-26: lit dark skin washed out to white on "You").
+	TAutoConsoleVariable<float> GNgPreviewMaxEV(TEXT("NewGame.PreviewMaxEV"), NgPreviewMaxEV,
+		TEXT("The character screen's sky is held at the hour nearest 10:30, earlier, whose exposure (EV100) stays under this."), ECVF_Default);
+	TAutoConsoleVariable<float> GNgPreviewLamp(TEXT("NewGame.PreviewLamp"), 1.0f,
+		TEXT("The character screen's key lamp, times its own brightness (0: off)."), ECVF_Default);
+	TAutoConsoleVariable<float> GNgPreviewLampRadius(TEXT("NewGame.PreviewLampRadius"), 60.0f,
+		TEXT("The character screen's key lamp: its source radius (cm)."), ECVF_Default);
+	TAutoConsoleVariable<int32> GNgPreviewLampShadows(TEXT("NewGame.PreviewLampShadows"), 0,
+		TEXT("The character screen's key lamp: 1 casts shadows."), ECVF_Default);
+	TAutoConsoleVariable<int32> GNgPreviewLampTransmission(TEXT("NewGame.PreviewLampTransmission"), 1,
+		TEXT("The character screen's key lamp: 1 shines through skin (subsurface transmission)."), ECVF_Default);
+
 	TAutoConsoleVariable<int32> GNgTitleStage(TEXT("Title.Stage"), 1,
 		TEXT("1: the title screen shows the starship stage (the character at a window in orbit); 0: the old camera round a rainforest glade."));
 
@@ -94,7 +108,7 @@ namespace
 		}
 		const float Day = static_cast<float>(FMath::Fmod(static_cast<double>(Bridge.GetGameSeconds()) / colony::kSecondsPerDay, static_cast<double>(colony::kDaysPerYear)));
 		float Hour = Preferred;
-		while (Hour > 6.5f && Sky.ComputeState(*Bridge.GetSim(), Hour, Day).ExposureEV + Sky.GetLook().DarkerEV > NgPreviewMaxEV)
+		while (Hour > 6.5f && Sky.ComputeState(*Bridge.GetSim(), Hour, Day).ExposureEV + Sky.GetLook().DarkerEV > GNgPreviewMaxEV.GetValueOnGameThread())
 		{
 			Hour -= 0.25f;
 		}
@@ -722,12 +736,15 @@ void UColonyHudSubsystem::UpdatePeopleCamera(colony::Entity Pawn)
 		{
 			Lamp->PointLightComponent->SetMobility(EComponentMobility::Movable);
 			Lamp->PointLightComponent->SetIntensityUnits(ELightUnits::Candelas);
-			Lamp->PointLightComponent->SetIntensity(NgPreviewLampIntensity);
+			Lamp->PointLightComponent->SetIntensity(NgPreviewLampIntensity * FMath::Max(GNgPreviewLamp.GetValueOnGameThread(), 0.0f));
 			Lamp->PointLightComponent->SetAttenuationRadius(900.0f);
-			Lamp->PointLightComponent->SetSourceRadius(60.0f);
-			Lamp->PointLightComponent->SetSoftSourceRadius(120.0f);
+			const float Radius = FMath::Max(GNgPreviewLampRadius.GetValueOnGameThread(), 0.0f);
+			Lamp->PointLightComponent->SetSourceRadius(Radius);
+			Lamp->PointLightComponent->SetSoftSourceRadius(Radius * 2.0f);
 			Lamp->PointLightComponent->SetLightColor(FLinearColor(1.0f, 0.95f, 0.88f));
-			Lamp->PointLightComponent->SetCastShadows(false);
+			Lamp->PointLightComponent->SetCastShadows(GNgPreviewLampShadows.GetValueOnGameThread() != 0);
+			Lamp->PointLightComponent->bTransmission = GNgPreviewLampTransmission.GetValueOnGameThread() != 0;
+			Lamp->PointLightComponent->MarkRenderStateDirty();
 		}
 	}
 	if (APointLight* Lamp = PeopleLamp.Get())

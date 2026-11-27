@@ -11,7 +11,15 @@ walking mid-attack. **Poise**: staggers when it breaks, knockdowns from charged 
 chained knockdowns, hyperarmour on heavies, big bodies never fall. **AI** fights the same way (guards, heavies against
 a guard, charges, combos by skill, leaps in). `SoulsRules.enabled false` puts melee back as it was; weapons without a
 moveset (everything but the gladius and plasma sword for now) keep the old swing. Debug > Sword and shield duel (play)
-and (watch). Four new clips need `-run=MotionClips` (art step). Next: the spear's flicking, more movesets.
+and (watch). Four new clips measured by `-run=MotionClips` and committed. Next: the spear's flicking, more movesets.
+
+White skin on the "You" screen fixed (sneed, 2026-11-27; Unreal only, no art step): sneed's update had applied. The
+screen's key lamp at the camera (60000 cd) lit dark skin so far over the exposure that the subsurface scattering lost the
+skin colour and the lit side came out white (crown, neck, shoulder in his braid picture; face, chest, arms head on).
+Lamp off or scattering off gave brown skin; radius, shadows, transmission, hair, exposure and hour didn't matter. The lamp
+is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still well lit; 0.5x clipped on the chest).
+The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
+`PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
 
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
 **skin**: colonists showed only clothes, hair, eyes and teeth. Everyone wears the 4K skin since 2026-11-25, but only the
