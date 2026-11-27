@@ -17,7 +17,7 @@ TEST_CASE("buildings 2: power, climate, light, floors and furniture load from th
 
     for (const char* name : {"PowerConduit", "PowerSwitch", "WoodFiredGenerator", "SolarGenerator", "WindTurbine",
                              "Battery", "Heater", "Cooler", "Vent", "PassiveCooler", "Campfire", "StandingLamp",
-                             "SunLamp", "TorchLamp", "Armchair", "EndTable", "Dresser", "PlantPot", "Column"}) {
+                             "SunLamp", "TorchLamp", "Armchair", "DiningChair", "EndTable", "Dresser", "PlantPot", "Column"}) {
         const Def* d = db.find("Things", name);
         CHECK_MESSAGE(d != nullptr, name);
         if (d == nullptr) continue;
@@ -39,5 +39,7 @@ TEST_CASE("buildings 2: power, climate, light, floors and furniture load from th
     CHECK(db.find("Things", "TorchLamp")->number("glower.radius") == doctest::Approx(10.0));
     CHECK(db.find("Things", "Campfire")->number("glower.radius") > 0);
     CHECK(db.find("Things", "Armchair")->number("stats.comfort") == doctest::Approx(0.8));
+    CHECK(db.find("Things", "DiningChair")->number("stats.comfort") == doctest::Approx(0.7));
+    CHECK(db.find("Things", "DiningChair")->number("stats.beauty") == doctest::Approx(8));
     CHECK(db.find("Things", "Column")->text("passability") == "Impassable");
 }
