@@ -14,6 +14,34 @@ import sys
 
 import bpy
 
+
+def darkenColourMaps(material_names, tint, name_hint):
+    """Multiply the colour map's RGB by tint (alpha kept) and pack it, so the GLB carries the darker picture."""
+    import numpy as np
+    done = set()
+    for mat in bpy.data.materials:
+        if mat.node_tree is None or (material_names and mat.name not in material_names):
+            continue
+        for node in mat.node_tree.nodes:
+            if node.type != "TEX_IMAGE" or node.image is None or node.image.name in done:
+                continue
+            if name_hint and name_hint.lower() not in node.image.name.lower():
+                continue
+            if not any(link.to_socket.name == "Base Color" for out in node.outputs for link in out.links):
+                continue  # only the colour map, never the normal or opacity maps
+            img = node.image
+            px = np.empty(len(img.pixels), dtype=np.float32)
+            img.pixels.foreach_get(px)
+            px = px.reshape(-1, 4)
+            px[:, :3] *= np.array(tint, dtype=np.float32)
+            img.pixels.foreach_set(px.ravel())
+            img.update()
+            img.pack()
+            done.add(img.name)
+            print("tinted", img.name, tint)
+    return done
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 if not args:
@@ -98,6 +126,11 @@ for mat in bpy.data.materials:
                 mat.node_tree.links.remove(alpha.links[0])
                 mat.node_tree.links.new(src_sock, cut.inputs[0])
                 mat.node_tree.links.new(cut.outputs[0], alpha)
+
+# A panther, not a snow leopard: the grey coat with dark rosettes darkened to near black (rosettes still faintly show,
+# as on a real black leopard). The PC's first shots read dark grey under the sun.
+if not darkenColourMaps(None, (0.28, 0.28, 0.3), "Diffuse"):
+    print("WARNING: no Diffuse colour map found to darken")
 
 os.makedirs(os.path.dirname(out), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=True, export_animation_mode="NLA_TRACKS",
