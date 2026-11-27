@@ -3,7 +3,7 @@
 Unreal's FBX import gave every one of its eight motions the whole file's timeline (all 9.7 s, the jump's length), so
 walk and run played their loop and then stood still for eight seconds; it also wired the colour map into emission.
 Blender reads each motion with its own frames, so this writes them as separate glTF animations (each sampled over its
-own range at the file's 60 fps), with no emission, and the textures packed in.
+own range at the file's 60 fps), with no emission, matte fur (the FBX says roughness 0), whiskers as a hard cut-out, and the textures packed in.
 
   blender -b --factory-startup --python tools/animals/leopard_glb.py -- [<in.fbx> <out.glb>]
 
@@ -48,7 +48,7 @@ for action in bpy.data.actions:
 
 # No glow: the colour map was also wired into emission.
 for mat in bpy.data.materials:
-    if not mat.use_nodes:
+    if mat.node_tree is None:
         continue
     for node in mat.node_tree.nodes:
         if node.type == "BSDF_PRINCIPLED":
@@ -61,6 +61,22 @@ for mat in bpy.data.materials:
             strength = node.inputs.get("Emission Strength")
             if strength is not None:
                 strength.default_value = 0.0
+            # The FBX gives roughness 0 (a mirror shine) and no specular: fur is matte.
+            for name, value in (("Roughness", 0.75), ("Specular IOR Level", 0.3)):
+                sock = node.inputs.get(name)
+                if sock is not None and not sock.is_linked:
+                    sock.default_value = value
+            # The colour map's alpha cuts out the whiskers; a hard cut-out (glTF MASK) instead of see-through blending,
+            # so the body stays opaque, sorts and casts shadows.
+            alpha = node.inputs.get("Alpha")
+            if alpha is not None and alpha.is_linked:
+                src_sock = alpha.links[0].from_socket
+                cut = mat.node_tree.nodes.new("ShaderNodeMath")
+                cut.operation = "GREATER_THAN"
+                cut.inputs[1].default_value = 0.5
+                mat.node_tree.links.remove(alpha.links[0])
+                mat.node_tree.links.new(src_sock, cut.inputs[0])
+                mat.node_tree.links.new(cut.outputs[0], alpha)
 
 os.makedirs(os.path.dirname(out), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=True, export_animation_mode="NLA_TRACKS",
