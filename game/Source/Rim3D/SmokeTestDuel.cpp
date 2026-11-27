@@ -34,8 +34,9 @@
 namespace
 {
 	const FVector DuelSmokeOrigin(-1700000.0, 0.0, 0.0);
-	// The player is healed when its worst body part falls under this share (a practice fight: no YOU DIED).
-	constexpr float DuelSmokePracticeHealth = 0.35f;
+	// The player is healed when its worst body part falls under this share (a practice fight: no YOU DIED); in the watch the
+	// opponent too.
+	constexpr float DuelSmokePracticeHealth = 0.9f;  // a charged blow to the head takes most of it at once
 	// Seconds after the opponent falls before the next one comes.
 	constexpr float DuelSmokeRematchSeconds = 4.0f;
 	constexpr int DuelSmokeSkill = 10;
@@ -51,7 +52,7 @@ namespace
 		bool bControlled = false;
 		float FoeDownSince = -1.0f;
 		float Clock = 0.0f;
-		float LastHeal = 0.0f;
+		bool bMeDeadNoted = false;
 		int32 Rematches = 0;
 		// Seen in the snapshot: attacks begun, heavies, staggers (stunned edges).
 		uint64 SwingsAtStart = 0;
@@ -204,15 +205,19 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		{
 			DuelSmokeHeal(Sim, State->Me);
 		}
-		// The watch keeps both on their feet a while longer, so each screenshot has a fight in it.
-		if (bWatch && State->Clock - State->LastHeal > 3.0f)
+		// The watch keeps both on their feet, so each screenshot has a fight in it.
+		if (bWatch)
 		{
-			State->LastHeal = State->Clock;
 			const colony::ThingView* Foe = DuelSmokeFind(*B, State->Foe);
-			if (Foe && !Foe->dead)
+			if (Foe && !Foe->dead && (Foe->downed || Foe->lowestPart < DuelSmokePracticeHealth))
 			{
 				DuelSmokeHeal(Sim, State->Foe);
 			}
+		}
+		if (Me && Me->dead && !State->bMeDeadNoted)
+		{
+			State->bMeDeadNoted = true;
+			Notes.Add(TEXT("duel: you were killed outright (a blow from over the practice heal)"));
 		}
 		const colony::ThingView* Foe = DuelSmokeFind(*B, State->Foe);
 		if (!Foe || Foe->dead || Foe->downed)
@@ -425,9 +430,11 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		const USimSubsystem* B = Bridge();
 		const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 		const uint64 Swings = B && B->GetSim() ? B->GetSim()->melee().swings() - State->SwingsAtStart : 0;
-		Notes.Add(FString::Printf(TEXT("duel: %llu swings, %d heavies, %d staggers, %d new opponents, stamina bar %d frames"),
+		const colony::ThingView* Me = B ? DuelSmokeFind(*B, State->Me) : nullptr;
+		Notes.Add(FString::Printf(TEXT("duel: %llu swings, %d heavies, %d staggers, %d new opponents, stamina bar %d frames, hud %d frames, direct %d, you %s"),
 			static_cast<unsigned long long>(Swings), State->Heavies, State->Staggers, State->Rematches,
-			Protagonist ? Protagonist->GetVitalsFramesDrawn() : 0));
+			Protagonist ? Protagonist->GetVitalsFramesDrawn() : 0, Protagonist ? Protagonist->GetHudFramesDrawn() : 0,
+			Protagonist && Protagonist->IsDirectMode() ? 1 : 0, !Me ? TEXT("gone") : (Me->dead ? TEXT("dead") : (Me->downed ? TEXT("downed") : TEXT("standing")))));
 		if (Swings < 6)
 		{
 			Fail(FString::Printf(TEXT("duel: only %llu swings in the watch, expected at least 6"), static_cast<unsigned long long>(Swings)));
