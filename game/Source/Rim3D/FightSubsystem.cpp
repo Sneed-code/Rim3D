@@ -95,6 +95,12 @@ namespace
 	constexpr float FightRagdollHitPerDamage = 40.0f;
 	constexpr float FightRagdollHitMin = 250.0f;
 	constexpr float FightRagdollHitMax = 900.0f;
+	// A shot or blow on the soft flesh (MakeHuman's jiggle bones): the velocity kick, cm/s per point of damage, its
+	// bounds, and how far round the hit it reaches (cm). The creator's club gives about 300 at 40 cm.
+	constexpr float FightFleshKickPerDamage = 30.0f;
+	constexpr float FightFleshKickMin = 180.0f;
+	constexpr float FightFleshKickMax = 650.0f;
+	constexpr float FightFleshKickRadius = 32.0f;
 
 	struct FFightParticleLook
 	{
@@ -732,12 +738,22 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 				ASimPawnActor* Actor = Pawns->FindPawn(Tracer.Target);
 				if (Actor)
 				{
-					// A react on the upper body (a stumble when the sim staggered it) over legs that keep what they were doing; the lean goes on top.
-					if (HitView && !HitView->downed && !HitView->dead && Actor->PlayHitClip(Dir, HitView->staggeredFor > 0))
+					// The struck zone is knocked along the hit and wobbles back, whatever else the body does: small hits
+					// that stagger nothing too (body-health.md part E). First, so the react below knows where it landed.
+					if (StaggerBridge)
+					{
+						Actor->KickZone(*StaggerBridge, Tracer.Part, At, Dir, FMath::Clamp(Tracer.Amount / 20.0f, 0.25f, 1.0f));
+						++ZoneKicks;
+					}
+					// A react on the upper body (a stumble when the sim staggered it, or any shot to the head: sneed
+					// 2026-11-27, "when I shoot someone esp in the head the body staggers") over legs that keep what they
+					// were doing; the arms stay as they were (no arm thrown up), and the lean goes on top, full for the head.
+					const bool bHeadHit = Actor->GetLastKickZone() == ESimPawnZone::Head;
+					if (HitView && !HitView->downed && !HitView->dead && Actor->PlayHitClip(Dir, HitView->staggeredFor > 0 || bHeadHit))
 					{
 						++HitClipsPlayed;
 					}
-					Actor->PlayHitReaction(Dir, Strength);
+					Actor->PlayHitReaction(Dir, bHeadHit ? 1.0f : Strength);
 					++HitReactionsPlayed;
 					// A body lying limp (a corpse, the knocked out) jolts where it was hit: the struck bone is knocked
 					// along the shot or blow, a little up, and the ragdoll wakes (sneed, 2026-11-22).
@@ -747,13 +763,8 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 						Actor->PushRagdollAt(At, (Dir.GetSafeNormal() + FVector::UpVector * 0.35f).GetSafeNormal() * JoltSpeed);
 						++RagdollHitPushes;
 					}
-					// The struck zone is knocked along the hit and wobbles back, whatever else the body does: small hits
-					// that stagger nothing too (body-health.md part E).
-					if (StaggerBridge)
-					{
-						Actor->KickZone(*StaggerBridge, Tracer.Part, At, Dir, FMath::Clamp(Tracer.Amount / 20.0f, 0.25f, 1.0f));
-						++ZoneKicks;
-					}
+					// The soft flesh where it landed jiggles, the living and the dead alike (sneed 2026-11-27).
+					Actor->KickFlesh(At, Dir.GetSafeNormal() * FMath::Clamp(Tracer.Amount * FightFleshKickPerDamage, FightFleshKickMin, FightFleshKickMax), FightFleshKickRadius);
 				}
 				if (bFullBlood)
 				{
@@ -840,6 +851,7 @@ void UFightSubsystem::SpawnBodyThroughHit(const FFightTracer& Tracer)
 		SpawnBurst(EFightParticle::Blood, At, Dir + FVector::UpVector * 0.3f, 14, 300.0f, 0.5f, 4.0f, 0.7f, 980.0f);
 		SpawnBurst(EFightParticle::Blood, At, -Dir + FVector::UpVector * 0.4f, 6, 160.0f, 0.6f, 3.5f, 0.5f, 980.0f);
 		SpawnBodyDecal(*Actor, At, Dir, 10.0f);
+		Actor->KickFlesh(At, Dir.GetSafeNormal() * FMath::Clamp(Tracer.Amount * FightFleshKickPerDamage, FightFleshKickMin, FightFleshKickMax), FightFleshKickRadius);
 		if (UPrimitiveComponent* Body = Hit.GetComponent(); Body && Body->IsSimulatingPhysics(Hit.BoneName))
 		{
 			FVector Push = Dir * 6000.0f;

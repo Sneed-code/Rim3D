@@ -99,6 +99,11 @@ struct MotionRules {
     std::string flinchClip[4] = {"Motion_FlinchBack", "Motion_FlinchForward", "Motion_FlinchLeft", "Motion_FlinchRight"};
     std::string knockdownClip[4] = {"Motion_KnockdownBack", "Motion_KnockdownForward", "Motion_KnockdownLeft", "Motion_KnockdownRight"};
     std::string getUpClip = "Motion_GetUp";
+    // Getting up after a knockdown (sneed 2026-11-27: "when a pawn falls over and gets up they just snap back up fast"):
+    // the get-up clip over this many seconds, its frame turned by getUpTurn degrees (to the right) from the facing for
+    // the way the body fell (back, forward, left, right), so it starts lying as the fall left it.
+    float getUpSeconds = 4.2f;
+    float getUpTurn[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     // Plain pushes, for bodies with no clips (animals) or clips not there yet.
     float staggerMetres = 0.5f;
     int staggerSteps = 12;
@@ -161,6 +166,11 @@ public:
     // for the way it goes, its path stretched so the body lands at least `metres` away (at most 4 times the clip's
     // own); anyone without the clip gets a plain push of `metres` over `steps`. False for a zero direction.
     bool blastThrow(Entity pawn, float pushX, float pushY, float metres, int steps);
+    // Which way the knockdown clip playing on the pawn throws it (0 back, 1 forward, 2 left, 3 right), -1 if none.
+    int knockdownSide(Entity pawn) const;
+    // A knocked-down person gets up (MotionRules getUpClip over getUpSeconds, its frame turned by getUpTurn for `side`).
+    // The steps it takes, 0 if no clip plays (an animal, or the clip isn't there): then it is up at once.
+    int getUp(Entity pawn, int side);
     // A quick step along (dx, dy): to the body's left or right it is the sidestep clip, otherwise (or with no clip)
     // a plain push of sidestepMetres.
     bool sidestep(Entity pawn, float dx, float dy);
