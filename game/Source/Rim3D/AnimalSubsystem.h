@@ -46,6 +46,10 @@ struct FSimAnimalModel
 	bool bFitFromPose = false;
 	/** `sizeFix` in the art table: a last multiplier on the fit, for a file whose skin and skeleton disagree (the wolf spider). */
 	float SizeFix = 1.0f;
+	/** `"recentre": true` in the art table (with `"fit": "pose"`): the file's body sits away from its origin (the
+	 *  Animated3D leopard stands 28 m off it), so each actor moves its body back over the actor by the middle of its
+	 *  skeleton in the idle pose. */
+	bool bRecentre = false;
 	/** Degrees the mesh is turned so it faces the actor's forward (`yaw` in the art table's imports; Quaternius -90). */
 	float YawOffset = -90.0f;
 	/** How far the walk and gallop clips go per second at scale 1, in cm (`walkCm`, `gallopCm`). */
@@ -121,6 +125,8 @@ private:
 	TMap<FName, FVector3f> ImportLooks;
 	/** Imports whose size is measured on the posed skeleton (`"fit": "pose"`). */
 	TSet<FName> FitFromPose;
+	/** Imports with `"recentre": true`. */
+	TSet<FName> Recentred;
 	/** `sizeFix` by model. */
 	TMap<FName, float> SizeFixes;
 	/** Models already in Unreal's format (Fab packs): `assets` (mesh and clip object paths by role) and `parts`. */

@@ -1,5 +1,11 @@
 # Neon assets (Google Gemini 4 Neon) and AI Studio sounds
 
+> **Rule (sneed, 2026-11-27, standing): never make living things (animals, insects, any creature) with Neon or
+> Codex.** They looked awful. Living things come from free Fab or Sketchfab models only; Neon and Codex make
+> machines (mechanoids), buildings and items. The AI-made animals (batches 7 to 9, PRs #472, #476, #481) and the
+> two chitinids were taken out again and their briefs deleted.
+
+
 Tested 2026-11-21/22 for sneed, who has Google AI Pro. Neon is a second headless asset maker next to Codex
 (`codex-models.md`); same briefs, same deliverables (GLB, PBR maps, previews, contact sheet, README).
 

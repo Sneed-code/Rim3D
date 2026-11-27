@@ -21,18 +21,18 @@
 namespace
 {
 	const FVector AnimalSmokeOrigin(-900000.0, 0.0, 0.0);
-	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar, thrumbo), plus the grizzly and chicken.
-	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"), TEXT("Thrumbo"),
+	// Every def A4 has art for, the realistic Sketchfab ones (monkey, cat, cougar), plus the grizzly and chicken.
+	const TCHAR* const AnimalSmokeDefs[] = {TEXT("Cow"), TEXT("Muffalo"), TEXT("Deer"), TEXT("Husky"), TEXT("TimberWolf"),
 		TEXT("Alpaca"), TEXT("Cat"), TEXT("WildBoar"), TEXT("Cougar"), TEXT("GrizzlyBear"), TEXT("Chicken"), TEXT("Monkey"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Lion"), TEXT("Raptor"), TEXT("TRex")};
 	constexpr float AnimalSmokeSpacing = 2.0f;
 	// The realistic Sketchfab models, side by side in daylight for a close look (phase animals_close).
-	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Thrumbo"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Muffalo"), TEXT("Raptor"), TEXT("TRex")};
+	const TCHAR* const AnimalSmokeCloseDefs[] = {TEXT("Monkey"), TEXT("Cat"), TEXT("Cougar"), TEXT("Elephant"), TEXT("Rhinoceros"), TEXT("Muffalo"), TEXT("Raptor"), TEXT("TRex")};
 
 	// The 2026-11-22 batch that replaced the husky stand-in (phase animals_new): big ones in the back row, small ones in front.
 	const TCHAR* const AnimalSmokeNewBigDefs[] = {TEXT("GrizzlyBear"), TEXT("PolarBear"), TEXT("Caribou"), TEXT("Muskox"), TEXT("Yak"), TEXT("Dromedary"),
 		TEXT("Gazelle"), TEXT("Goat"), TEXT("Sheep"), TEXT("Megaspider"), TEXT("Spelopede"), TEXT("Boomalope"), TEXT("Panther"), TEXT("Cassowary")};
 	const TCHAR* const AnimalSmokeNewSmallDefs[] = {TEXT("Capybara"), TEXT("Iguana"), TEXT("Chicken"), TEXT("Duck"), TEXT("Goose"), TEXT("Turkey"),
-		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab"), TEXT("Cobra"), TEXT("Tortoise"), TEXT("Boomrat")};
+		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab"), TEXT("Cobra"), TEXT("Boomrat")};
 
 	// The remnant war machines on their own models (phase remnants, docs/design/codex-models.md): drawn by the animal
 	// subsystem, not as people.
