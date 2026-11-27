@@ -30,6 +30,27 @@ bpy.ops.import_scene.fbx(filepath=src, use_anim=True)
 scene = bpy.context.scene
 print("scene fps", scene.render.fps, scene.render.fps_base)
 
+# The FBX comes in as an armature scaled 0.01 (centimetres) around a mesh in metres. glTF keeps that 0.01 on the root
+# node and Unreal's importer applies it on top, giving a 4 cm panther. Bake the scale into the rig, the mesh and the
+# motions' bone moves so the root is 1.0 and the cat stays its 4.5 m (AnimalArt fits it to lengthM).
+arm0 = next(o for o in scene.objects if o.type == "ARMATURE")
+factor = arm0.scale[0]
+if abs(factor - 1.0) > 1e-6:
+    for o in scene.objects:
+        o.select_set(o == arm0 or o.parent == arm0)
+    bpy.context.view_layer.objects.active = arm0
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    for action in bpy.data.actions:
+        # Blender 5 keeps F-curves in layered actions (layers > strips > channel bags).
+        curves = [fc for layer in action.layers for strip in layer.strips for bag in strip.channelbags for fc in bag.fcurves]
+        for fc in curves:
+            if fc.data_path.endswith(".location"):
+                for kp in fc.keyframe_points:
+                    kp.co[1] *= factor
+                    kp.handle_left[1] *= factor
+                    kp.handle_right[1] *= factor
+    print("baked armature scale", factor, "into the rig and the motions")
+
 # Each motion keeps its own frames (no manual range stretching it to the file's timeline).
 arm = next(o for o in scene.objects if o.type == "ARMATURE")
 for action in bpy.data.actions:
