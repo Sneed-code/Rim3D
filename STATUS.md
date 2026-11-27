@@ -36,6 +36,8 @@ is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still w
 The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
 `PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
 
+14 more models, batch 9 (sneed, 2026-11-27 afternoon; data and art steps): **Codex** (medium) penoxycyline, psychoid leaves, smokeleaf leaves, cloth, a hay bale, plasteel and uranium, replacing their box shapes; **Neon** (high) rigged and animated thrumbo and boomalope (replacing the white horse and donkey stand-ins) and five new tropical animals: **panther, cobra, tortoise, cassowary** (rainforest and swamp) and **boomrat** (temperate and arid, bursts into flame on death), with RimWorld wiki numbers (`Animals.json`; meat, fertilized eggs for the three egg layers; biome commonality, lifestages and the cobra's plain bite instead of toxic buildup are ours). Smoke test `animals` shows them.
+
 14 new models (sneed, 2026-11-27; data and art steps): **Codex** (medium) steel stock, silver coins, gold ingots, a woven sack of rice, ears of corn, go-juice injectors and a neutroamine canister, replacing their box shapes; **Neon** (high) rigged and animated gazelle, ostrich, duck, hare, squirrel, sheep and yak, replacing their stand-ins (`assets/animal_art.json`; no animal def is drawn by a stand-in model now except polar bear, caribou and muskox). Briefs in `tools/codex_assets` and `tools/neon_assets`; previews on branch claude/shots-batch8-vmjf7f.
 
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):

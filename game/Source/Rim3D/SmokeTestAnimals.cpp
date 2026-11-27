@@ -30,9 +30,9 @@ namespace
 
 	// The 2026-11-22 batch that replaced the husky stand-in (phase animals_new): big ones in the back row, small ones in front.
 	const TCHAR* const AnimalSmokeNewBigDefs[] = {TEXT("GrizzlyBear"), TEXT("PolarBear"), TEXT("Caribou"), TEXT("Muskox"), TEXT("Yak"), TEXT("Dromedary"),
-		TEXT("Gazelle"), TEXT("Goat"), TEXT("Sheep"), TEXT("Megaspider"), TEXT("Spelopede")};
+		TEXT("Gazelle"), TEXT("Goat"), TEXT("Sheep"), TEXT("Megaspider"), TEXT("Spelopede"), TEXT("Boomalope"), TEXT("Panther"), TEXT("Cassowary")};
 	const TCHAR* const AnimalSmokeNewSmallDefs[] = {TEXT("Capybara"), TEXT("Iguana"), TEXT("Chicken"), TEXT("Duck"), TEXT("Goose"), TEXT("Turkey"),
-		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab")};
+		TEXT("ArcticFox"), TEXT("ArcticWolf"), TEXT("Ostrich"), TEXT("Megascarab"), TEXT("Cobra"), TEXT("Tortoise"), TEXT("Boomrat")};
 
 	// The remnant war machines on their own models (phase remnants, docs/design/codex-models.md): drawn by the animal
 	// subsystem, not as people.
