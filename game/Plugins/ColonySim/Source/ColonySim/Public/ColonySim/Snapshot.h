@@ -300,6 +300,15 @@ struct ThingView {
     // smash or hack); the pawn it is locked on to (it faces it; the player's lock-on camera follows it when focusPlayer);
     // stepping round or back from its enemy (a strafe or back step, facing the focus); what it does about enemies.
     bool meleeLow = false;
+    // Elden Ring style melee (souls-combat.md): stamina and poise as shares of their bars (1 full), the attack under way
+    // (SoulsAttack; 255 none) and its place in its combo, a heavy held at its charge point, and reeling (a poise break,
+    // a broken guard or a blocked hit's stun: no attacking).
+    float stamina = 1.0f;
+    float poise = 1.0f;
+    uint8_t meleeKind = 255;
+    uint8_t meleeCombo = 0;
+    bool meleeCharging = false;
+    bool meleeStunned = false;
     // A finisher under way (sneed 2026-11-20): 1 + its MeleeRules finishers index (0: none), how far through it is (0 to
     // 1, the blow at its hitSeconds share) and the body on the ground it is at. Unreal kneels or bends the body over it
     // and drives the weapon in along the finisher's own path.
@@ -839,6 +848,7 @@ struct Snapshot {
     // run (with a day longer than 48 minutes the calendar stands still on some steps).
     int64_t steps = 0;
     int dayMinutes = 48;  // real minutes a game day lasts at 1x (docs/design/day-length.md)
+    bool souls = false;   // Elden Ring style melee is on (SoulsRules enabled): Unreal shows the stamina bar
     int mapWidth = 0;
     int mapHeight = 0;
     std::vector<ThingView> things;  // sorted by id

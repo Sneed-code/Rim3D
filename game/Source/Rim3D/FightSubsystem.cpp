@@ -2476,7 +2476,16 @@ void UFightSubsystem::DrawHud()
 			else if (bMeleeWeapon)
 			{
 				FightText(UTF8_TO_TCHAR(Bridge->GetDefs()->get(View->weapon).label().c_str()));
-				ImGui::TextUnformatted("Left mouse swing   Right mouse block   C crouch   Z lie down");
+				if (Bridge->GetCurrentSnapshot().souls)
+				{
+					// Elden Ring style melee (souls-combat.md).
+					ImGui::TextUnformatted("Left mouse attack   Shift + left mouse heavy (hold to charge)   Right mouse guard   T roll");
+					ImGui::TextUnformatted("Sprint or jump, then attack: running or jump attack");
+				}
+				else
+				{
+					ImGui::TextUnformatted("Left mouse swing   Right mouse block   C crouch   Z lie down");
+				}
 			}
 			else if (EquipMessageSeconds > 0.0f)
 			{

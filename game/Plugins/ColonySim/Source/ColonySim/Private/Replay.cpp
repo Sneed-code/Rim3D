@@ -377,7 +377,19 @@ ReplayOrderedJson replayCommandJson(const LoggedCommand& logged) {
             } else if constexpr (std::is_same_v<Type, MeleeCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["target"] = entt::to_integral(c.target);
-                j["mode"] = c.mode == MeleeMode::Attack ? "Attack" : "Block";
+                j["mode"] = c.mode == MeleeMode::Attack ? "Attack" : c.mode == MeleeMode::Block ? "Block" : "Release";
+                if (c.heavy) {
+                    j["heavy"] = true;
+                }
+                if (c.running) {
+                    j["running"] = true;
+                }
+                if (c.jumping) {
+                    j["jumping"] = true;
+                }
+                if (c.hold) {
+                    j["hold"] = true;
+                }
             } else if constexpr (std::is_same_v<Type, DodgeRollCommand>) {
                 j["pawn"] = entt::to_integral(c.pawn);
                 j["dx"] = static_cast<double>(c.dx);
@@ -1794,8 +1806,14 @@ bool replayReadCommand(ReplayReader& r, const ReplayJson& j, const std::string& 
             c.mode = MeleeMode::Attack;
         } else if (mode == "Block") {
             c.mode = MeleeMode::Block;
+        } else if (mode == "Release") {
+            c.mode = MeleeMode::Release;
         } else {
-            return r.fail(where + ".mode must be Attack or Block");
+            return r.fail(where + ".mode must be Attack, Block or Release");
+        }
+        if (!r.flag(j, "heavy", c.heavy, where) || !r.flag(j, "running", c.running, where) || !r.flag(j, "jumping", c.jumping, where) ||
+            !r.flag(j, "hold", c.hold, where)) {
+            return false;
         }
         c.pawn = static_cast<Entity>(pawn);
         c.target = static_cast<Entity>(target);

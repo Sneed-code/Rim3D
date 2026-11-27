@@ -281,6 +281,38 @@
       "from": 0.2,
       "to": 1.5,
       "hitSeconds": 0.63
+    },
+    {
+      "defName": "Motion_SS_Attack4",
+      "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldAttack4",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 1.03,
+      "hitSeconds": 0.43
+    },
+    {
+      "defName": "Motion_SS_Attack3",
+      "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldAttack3",
+      "kind": "Attack",
+      "from": 0.1,
+      "to": 1.7,
+      "hitSeconds": 0.77
+    },
+    {
+      "defName": "Motion_SS_Jump",
+      "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldJump",
+      "kind": "Attack",
+      "from": 0.0,
+      "to": 0.87,
+      "hitSeconds": 0.7
+    },
+    {
+      "defName": "Motion_SS_JumpHeavy",
+      "anim": "Mixamo/GreatSword/A_GreatSwordGreatSwordJumpAttack",
+      "kind": "Attack",
+      "from": 0.4,
+      "to": 2.1,
+      "hitSeconds": 1.2
     }
   ]
 }

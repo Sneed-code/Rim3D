@@ -2,6 +2,16 @@
 
 Updated 2026-11-27.
 
+Elden Ring style melee, sword and shield first (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`):
+**stamina** for every pawn (light 10, heavy 20, half on a blocked hit, roll 30, refills over 2 s, not while the guard is
+up; out of stamina breaks the guard), shown green under a red health bar top left. **Attacks**: one press one attack,
+Shift + click heavy, hold to charge, running and jump attacks, roll attacks, guard counters, 3-hit combos with an input
+buffer; whole-body clips timed to land on the enemy's middle (the attacker turns with it and is carried in), no free
+walking mid-attack. **Poise**: staggers when it breaks, knockdowns from charged and jump heavies or a second break, no
+chained knockdowns, hyperarmour on heavies, big bodies never fall. **AI** fights the same way (guards, heavies against
+a guard, charges, combos by skill, leaps in). `SoulsRules.enabled false` puts melee back as it was; weapons without a
+moveset (everything but the gladius and plasma sword for now) keep the old swing. Debug > Sword and shield duel (play)
+and (watch). Four new clips measured by `-run=MotionClips` and committed. Next: the spear's flicking, more movesets.
 Decapitation, corpse jiggle, shotgun, hit reacts and getting up (sneed, 2026-11-27; sim, data, sounds and Unreal):
 **severed parts keep their look**: the copy of a cut-off head or limb never took the body's shape morphs, so MakeHuman's
 NoHorns/NoTusks/NoTail went and a human head grew horns and teeth; the copy now takes every morph weight
@@ -25,6 +35,8 @@ Lamp off or scattering off gave brown skin; radius, shadows, transmission, hair,
 is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still well lit; 0.5x clipped on the chest).
 The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
 `PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
+
+14 new models (sneed, 2026-11-27; data and art steps): **Codex** (medium) steel stock, silver coins, gold ingots, a woven sack of rice, ears of corn, go-juice injectors and a neutroamine canister, replacing their box shapes; **Neon** (high) rigged and animated gazelle, ostrich, duck, hare, squirrel, sheep and yak, replacing their stand-ins (`assets/animal_art.json`; no animal def is drawn by a stand-in model now except polar bear, caribou and muskox). Briefs in `tools/codex_assets` and `tools/neon_assets`; previews on branch claude/shots-batch8-vmjf7f.
 
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
 **skin**: colonists showed only clothes, hair, eyes and teeth. Everyone wears the 4K skin since 2026-11-25, but only the

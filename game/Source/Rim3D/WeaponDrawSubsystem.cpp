@@ -76,6 +76,10 @@ namespace
 	constexpr float WeaponForceHandSeconds = 0.6f;
 	// The colonist's view must be this close to the line to a pawn for a swing to pick it (cosine of 70 degrees).
 	constexpr float WeaponSwingCone = 0.34f;
+	// Faster than this (metres per step) with sprint on, a souls attack is a running attack.
+	constexpr float WeaponSoulsRunSpeed = 2.5f;
+	// A souls press kept this long (real seconds) without going (paused, busy) is dropped.
+	constexpr double WeaponSoulsPressSeconds = 0.6;
 	// Hit-stop, real seconds: a hit, armor that turned the blow, a blow a weapon took.
 	constexpr float WeaponHitStopBase = 0.05f;
 	constexpr float WeaponHitStopMax = 0.12f;
@@ -1958,6 +1962,60 @@ bool UWeaponDrawSubsystem::Swing()
 	return true;
 }
 
+bool UWeaponDrawSubsystem::SoulsSwing(bool bHeavy, bool bHold)
+{
+	USimSubsystem* Bridge = nullptr;
+	const colony::ThingView* Me = ControlledView(Bridge);
+	if (!Me || Bridge->GetGameSeconds() <= LastOrderStep || Me->switchSlot < colony::kWeaponSlotCount || Me->reloading || IsGun(Me->weapon))
+	{
+		return false;
+	}
+	// The locked-on enemy first (Elden Ring swings through the focus point), else the one the view points at; with
+	// nobody near the sim swings straight ahead at nothing.
+	colony::Entity Target = colony::kNoEntity;
+	if (Me->focusTarget != colony::kNoEntity)
+	{
+		const colony::ThingView* Focus = Bridge->GetCurrentSnapshot().find(Me->focusTarget);
+		Target = Focus && !Focus->dead ? Focus->id : colony::kNoEntity;
+	}
+	if (Target == colony::kNoEntity)
+	{
+		Target = FindSwingTarget();
+	}
+	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
+	const AProtagonistPawn* Body = Protagonist ? Protagonist->GetBody() : nullptr;
+	const float Speed = FMath::Sqrt(Me->vx * Me->vx + Me->vy * Me->vy);
+	colony::MeleeCommand Order{Me->id, Target, colony::MeleeMode::Attack};
+	Order.heavy = bHeavy;
+	Order.hold = bHeavy && bHold;
+	Order.running = Body && Body->IsSprinting() && Speed > WeaponSoulsRunSpeed;
+	// A jump attack: the jump's own arc gives way to the attack's clip, which carries the body from here.
+	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+	ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(Me->id) : nullptr;
+	if (Actor && Actor->IsJumping())
+	{
+		Order.jumping = true;
+		Actor->CancelJump();
+	}
+	Bridge->Submit(Order);
+	LastOrderStep = Bridge->GetGameSeconds();
+	++SwingOrders;
+	return true;
+}
+
+bool UWeaponDrawSubsystem::SoulsRelease()
+{
+	USimSubsystem* Bridge = nullptr;
+	const colony::ThingView* Me = ControlledView(Bridge);
+	if (!Me || Bridge->GetGameSeconds() <= LastOrderStep)
+	{
+		return false;
+	}
+	Bridge->Submit(colony::MeleeCommand{Me->id, colony::kNoEntity, colony::MeleeMode::Release});
+	LastOrderStep = Bridge->GetGameSeconds();
+	return true;
+}
+
 bool UWeaponDrawSubsystem::Block()
 {
 	USimSubsystem* Bridge = nullptr;
@@ -2094,13 +2152,49 @@ void UWeaponDrawSubsystem::UpdatePlayerInput()
 		return;
 	}
 	const double RealNow = FPlatformTime::Seconds();
-	if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
+	// Elden Ring style input for a weapon with a souls moveset (the gladius first); other weapons keep the old swing.
+	USimSubsystem* SoulsBridge = nullptr;
+	const colony::ThingView* SoulsMe = ControlledView(SoulsBridge);
+	const bool bSoulsInput = SoulsMe && SoulsBridge->GetCurrentSnapshot().souls && SoulsBridge->GetSim()->melee().hasMoveset(SoulsMe->id);
+	if (bSoulsInput)
+	{
+		// Elden Ring style (docs/design/souls-combat.md): each press is one attack; Shift held with it is a heavy, kept
+		// held it charges until let go. A press that can't go this step (one order a step) goes the next.
+		const bool bAttackDown = Rim3DKeys::IsDown(PC, ERim3DAction::Attack);
+		if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
+		{
+			bSoulsPending = true;
+			SoulsPendingAt = RealNow;
+			bSoulsPendingHeavy = Rim3DKeys::IsDown(PC, ERim3DAction::HeavyAttack);
+			bSoulsReleasePending = false;
+		}
+		if (bSoulsPending && RealNow - SoulsPendingAt > WeaponSoulsPressSeconds)
+		{
+			bSoulsPending = false;
+		}
+		if (bSoulsPending && SoulsSwing(bSoulsPendingHeavy, bAttackDown))
+		{
+			bSoulsPending = false;
+			bSoulsHolding = bSoulsPendingHeavy && bAttackDown;
+		}
+		if (bSoulsHolding && !bAttackDown)
+		{
+			bSoulsHolding = false;
+			bSoulsReleasePending = true;
+		}
+		if (bSoulsReleasePending && SoulsRelease())
+		{
+			bSoulsReleasePending = false;
+		}
+		SwingBufferedUntil = 0.0;
+	}
+	else if (Rim3DKeys::WasPressed(PC, ERim3DAction::Attack))
 	{
 		// A click during a swing is kept until that swing can be followed (its whole recovery), so no press is lost and the
 		// next blow comes the moment it may (sneed 2026-11-25: "a tiny delay before I can swing after finishing first").
 		SwingBufferedUntil = RealNow + 1.2;
 	}
-	if ((Rim3DKeys::IsDown(PC, ERim3DAction::Attack) || RealNow < SwingBufferedUntil) && Swing())
+	if (!bSoulsInput && (Rim3DKeys::IsDown(PC, ERim3DAction::Attack) || RealNow < SwingBufferedUntil) && Swing())
 	{
 		SwingBufferedUntil = 0.0;
 	}

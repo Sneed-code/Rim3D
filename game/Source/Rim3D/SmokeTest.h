@@ -127,6 +127,7 @@ private:
 	void BuildFacesPhases();        // SmokeTestFaces.cpp
 	void BuildBodiesPhases();       // SmokeTestBodies.cpp
 	void BuildComparePhases();      // SmokeTestCompare.cpp
+	void BuildDuelPhases();         // SmokeTestDuel.cpp (play; -DuelWatch: a check)
 	void BuildShowcasePhases();     // SmokeTestCompare.cpp (play, not a check)
 	void BuildCreatorPhases();      // SmokeTestCreator.cpp (the character creator to play with, not a check)
 	void BuildGunRangePhases();     // SmokeTestGunRange.cpp (the first-person gun range to play, docs/design/gun-range.md)

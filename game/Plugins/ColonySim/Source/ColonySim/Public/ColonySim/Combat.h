@@ -597,6 +597,14 @@ public:
     // A blow from `from` (when known) throws the body back along the blow: a stagger or a knockdown clip moves it
     // through the world (docs/design/body-motion.md).
     bool jolt(Entity pawn, int part, DefId damageType, float force, float dealt, const HitFrom& from = HitFrom{});
+    // Knocks the pawn off its feet for `steps` (below 0: the knockdown a blow of `force` would give), as a poise break
+    // does: it drops its shot, its path and its stance, and the body falls along the blow. False if it can't go down
+    // (downed, off the map, already down).
+    bool knockDown(Entity pawn, const HitFrom& from, float force, int steps = -1);
+    // Elden Ring style melee (souls-combat.md): MeleeSystem decides whether a roll or a raised guard may start now
+    // (stamina, the attack under way) and takes the roll's stamina. Unset: always.
+    void setRollGate(std::function<bool(Entity, std::string*)> gate) { rollGate_ = std::move(gate); }
+    void setGuardGate(std::function<bool(Entity, std::string*)> gate) { guardGate_ = std::move(gate); }
     // Clips that move bodies (docs/design/body-motion.md): rolls, sidesteps, staggers, knockdowns, blasts and
     // lunging swings all move pawns through this, and it is stepped with combat.
     BodyMotionSystem& motion() { return *motion_; }
@@ -630,6 +638,9 @@ public:
     bool hurtPawn(Entity pawn, DefId damageType, float amount, Rng& rng);
     // Takes the hit points off the pieces `result.wear` names; a piece at none is destroyed.
     void wearApparel(Entity pawn, const PawnHitResult& result);
+    // A raised shield took `amount` of a blow by its holder's guard (Elden Ring style melee, souls-combat.md): it wears
+    // as for a blow it caught (1 hit point per absorbDivisor points) and ShieldBlocked goes out ("stopped" when `all`).
+    void shieldTakes(Entity pawn, Entity shield, float amount, bool all, uint64_t seed);
     // The radius around a standing man's chest, seen from the front, in which a point picked evenly
     // lands on him with this chance (the table aimed shots use). Melee strikes use it too (F8).
     float spreadRadiusFor(float chance) const;
@@ -663,6 +674,8 @@ private:
     std::unique_ptr<ApparelStats> apparelStats_;
     std::unique_ptr<BodyMotionSystem> motion_;
     std::vector<Event>* events_ = nullptr;
+    std::function<bool(Entity, std::string*)> rollGate_;
+    std::function<bool(Entity, std::string*)> guardGate_;
     const Weather* weather_ = nullptr;
     Plants* plants_ = nullptr;
     const TraitBook* traits_ = nullptr;

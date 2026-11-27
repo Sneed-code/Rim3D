@@ -48,6 +48,7 @@ enum class ERim3DAction : uint8
 	Patch,           // patch a bleeding wound (body health part B)
 	Unstuck,         // F12: after 5 s standing still, moved to the nearest clear spot (docs/design/earthworks.md)
 	NextGrenade,     // R: the next kind of grenade on the belt (frag, molotov...) for G
+	HeavyAttack,     // held with Attack: a heavy attack (Elden Ring style melee, souls-combat.md); Left Shift like sprint
 	Count
 };
 

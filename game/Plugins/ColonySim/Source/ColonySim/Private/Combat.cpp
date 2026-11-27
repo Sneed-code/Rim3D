@@ -2754,49 +2754,61 @@ bool CombatSystem::jolt(Entity pawn, int part, DefId damageType, float force, fl
     Poise* poise = reg.try_get<Poise>(pawn);
     // Knock-down: the blow's force beats the pawn's poise, and it isn't still getting over the last one.
     if (push > model_->poiseBase && (poise == nullptr || poise->immuneLeft <= 0) && !reg.all_of<KnockedDown>(pawn)) {
-        Posture& posture = reg.get<Posture>(pawn);
-        const int steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * push));
-        reg.emplace<KnockedDown>(pawn, KnockedDown{steps, posture.stance, false, -1});
-        posture.stance = Stance::Prone;
-        if (Shooter* shooter = reg.try_get<Shooter>(pawn);
-            shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
-            shooter->phase = ShotPhase::Ready;
-            shooter->shotsLeft = 0;
-            shooter->stepsLeft = 0;
-        }
-        if (Mover* mover = reg.try_get<Mover>(pawn)) {
-            mover->path.clear();
-            mover->next = 0;
-            mover->vx = 0.0f;
-            mover->vy = 0.0f;
-        }
+        knockDown(pawn, from, push);
         poise = &reg.get_or_emplace<Poise>(pawn);
         poise->immuneLeft = model_->poiseImmuneSteps;
-        // Knocked off its feet: the body goes down along the blow, through the world (docs/design/body-motion.md).
-        if (const Position& here = reg.get<Position>(pawn); from.known) {
-            motion_->throwBody(pawn, here.x - from.x, here.y - from.y, true);
-        }
-        if (events_ != nullptr) {
-            const Position& at = reg.get<Position>(pawn);
-            Event e;
-            e.type = EventType::PawnKnockedDown;
-            e.thing = pawn;
-            e.target = kNoEntity;
-            e.def = reg.get<Thing>(pawn).def;
-            e.amount = static_cast<float>(steps);
-            e.x = at.x;
-            e.y = at.y;
-            e.z = map_.heightAt(at.x, at.y);
-            e.cell = cellOf(at);
-            e.message = "poise";
-            events_->push_back(std::move(e));
-        }
         return true;
     }
     // Stagger: only a hit that took over a tenth of the zone's hit points, and once per 5 s.
     if (dealt > model_->staggerPartShare * zoneHp && (poise == nullptr || poise->staggerWait <= 0) && !reg.all_of<KnockedDown>(pawn)) {
         stagger(pawn, from);
         reg.get_or_emplace<Poise>(pawn).staggerWait = model_->staggerEverySteps;
+    }
+    return true;
+}
+
+bool CombatSystem::knockDown(Entity pawn, const HitFrom& from, float push, int steps) {
+    entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || health_.incapacitated(pawn) || !things_.spawned(pawn) || !reg.all_of<Posture, Position>(pawn) ||
+        reg.all_of<KnockedDown>(pawn)) {
+        return false;
+    }
+    Posture& posture = reg.get<Posture>(pawn);
+    if (steps < 0) {
+        steps = static_cast<int>(std::min(model_->knockMaxSteps, model_->knockBaseSteps + model_->knockStepsPerDamage * push));
+    }
+    reg.emplace<KnockedDown>(pawn, KnockedDown{steps, posture.stance, false, -1});
+    posture.stance = Stance::Prone;
+    if (Shooter* shooter = reg.try_get<Shooter>(pawn);
+        shooter != nullptr && (shooter->phase == ShotPhase::Aiming || shooter->phase == ShotPhase::Firing)) {
+        shooter->phase = ShotPhase::Ready;
+        shooter->shotsLeft = 0;
+        shooter->stepsLeft = 0;
+    }
+    if (Mover* mover = reg.try_get<Mover>(pawn)) {
+        mover->path.clear();
+        mover->next = 0;
+        mover->vx = 0.0f;
+        mover->vy = 0.0f;
+    }
+    // Knocked off its feet: the body goes down along the blow, through the world (docs/design/body-motion.md).
+    if (const Position& here = reg.get<Position>(pawn); from.known) {
+        motion_->throwBody(pawn, here.x - from.x, here.y - from.y, true);
+    }
+    if (events_ != nullptr) {
+        const Position& at = reg.get<Position>(pawn);
+        Event e;
+        e.type = EventType::PawnKnockedDown;
+        e.thing = pawn;
+        e.target = kNoEntity;
+        e.def = reg.get<Thing>(pawn).def;
+        e.amount = static_cast<float>(steps);
+        e.x = at.x;
+        e.y = at.y;
+        e.z = map_.heightAt(at.x, at.y);
+        e.cell = cellOf(at);
+        e.message = "poise";
+        events_->push_back(std::move(e));
     }
     return true;
 }
@@ -3360,6 +3372,27 @@ void CombatSystem::wearApparel(Entity pawn, const PawnHitResult& result) {
     }
 }
 
+void CombatSystem::shieldTakes(Entity pawn, Entity shield, float amount, bool all, uint64_t seed) {
+    if (shield == kNoEntity || !things_.registry().valid(shield)) {
+        return;
+    }
+    PawnHitResult result;
+    result.shieldBlocked = true;
+    result.shield = shield;
+    result.shieldTook = std::max(0.0f, amount);
+    result.deflected = all;
+    const float lost = result.shieldTook / model_->absorbDivisor;
+    int points = static_cast<int>(lost);
+    Rng rng(seed);
+    if (rng.unit() < lost - static_cast<float>(points)) {
+        ++points;
+    }
+    if (points > 0) {
+        result.wear.emplace_back(shield, points);
+    }
+    wearApparel(pawn, result);
+}
+
 bool CombatSystem::setBlocking(Entity pawn, bool up, std::string* why, bool ai, Entity threat, bool hasDir, float dirX,
                                float dirY) {
     entt::registry& reg = things_.registry();
@@ -3390,6 +3423,10 @@ bool CombatSystem::setBlocking(Entity pawn, bool up, std::string* why, bool ai, 
     }
     if (const Shooter* s = reg.try_get<Shooter>(pawn); s != nullptr && (s->phase == ShotPhase::Aiming || s->phase == ShotPhase::Firing)) {
         return fail("busy shooting");
+    }
+    // Elden Ring style melee: no guard in the middle of an attack or a stagger (MeleeSystem). A guard already up stays.
+    if (!reg.all_of<Blocking>(pawn) && guardGate_ && !guardGate_(pawn, why)) {
+        return false;
     }
     Blocking b;
     b.ai = ai;
@@ -3997,6 +4034,10 @@ bool CombatSystem::dodgeRoll(Entity pawn, float dx, float dy, std::string* why, 
         dx = -posture.facingX;  // no direction: a backstep
         dy = -posture.facingY;
         length = std::sqrt(dx * dx + dy * dy);
+    }
+    // Elden Ring style melee: stamina, and not in the middle of an attack (MeleeSystem; it takes the roll's stamina).
+    if (rollGate_ && !rollGate_(pawn, why)) {
+        return false;
     }
     roll.dirX = length > 1e-6f ? dx / length : 1.0f;
     roll.dirY = length > 1e-6f ? dy / length : 0.0f;
