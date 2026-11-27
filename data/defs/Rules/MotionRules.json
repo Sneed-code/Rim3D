@@ -11,7 +11,7 @@
     "flinchClip": {"back": "Motion_FlinchBack", "forward": "Motion_FlinchForward", "left": "Motion_FlinchLeft", "right": "Motion_FlinchRight"},
     "knockdownClip": {"back": "Motion_KnockdownBack", "forward": "Motion_KnockdownForward", "left": "Motion_KnockdownLeft", "right": "Motion_KnockdownRight"},
     "getUpClip": "Motion_GetUp", "getUpSeconds": 4.2,
-    "getUpTurn": {"back": 0, "forward": 0, "left": 0, "right": 0},
+    "getUpTurn": {"back": 180, "forward": 0, "left": -90, "right": 90},
     "staggerMetres": 0.5, "staggerSteps": 12,
     "knockdownMetres": 1.0, "knockdownSteps": 20,
     "sidestepMetres": 0.7, "sidestepSteps": 9,
