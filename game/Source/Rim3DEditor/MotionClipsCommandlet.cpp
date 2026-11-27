@@ -201,6 +201,54 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 		}
 	}
 
+	// -Pose=A_Name1+A_Name2: where the head, hips, hands and feet are (mesh space, cm; the mannequin faces +Y, its right is
+	// -X) at the start, every 0.5 s and the end: how a fall ends and a get-up begins, and what the arms do in a react.
+	FString PoseList;
+	if (FParse::Value(*Params, TEXT("-Pose="), PoseList, false))
+	{
+		TArray<FString> Names;
+		PoseList.ParseIntoArray(Names, TEXT("+"));
+		FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		Registry.Get().SearchAllAssets(true);
+		TArray<FAssetData> Assets;
+		Registry.Get().GetAssetsByPath(FName(MotionClipsFolder), Assets, true);
+		for (const FAssetData& Asset : Assets)
+		{
+			const UAnimSequence* Clip = Names.Contains(Asset.AssetName.ToString()) ? Cast<UAnimSequence>(Asset.GetAsset()) : nullptr;
+			const USkeleton* Skeleton = Clip ? Clip->GetSkeleton() : nullptr;
+			if (!Skeleton)
+			{
+				continue;
+			}
+			const FReferenceSkeleton& Ref = Skeleton->GetReferenceSkeleton();
+			const TCHAR* const Parts[] = {TEXT("head"), TEXT("pelvis"), TEXT("hand_r"), TEXT("hand_l"), TEXT("foot_r"), TEXT("foot_l"), TEXT("spine_05"), TEXT("spine_03")};
+			const double Length = Clip->GetPlayLength();
+			for (double Time = 0.0;; Time += 0.25)
+			{
+				const double T = FMath::Min(Time, Length);
+				FString Line = FString::Printf(TEXT("POSE %s t=%.2f"), *Asset.AssetName.ToString(), T);
+				for (const TCHAR* Part : Parts)
+				{
+					const int32 Bone = Ref.FindBoneIndex(FName(Part));
+					if (Bone != INDEX_NONE)
+					{
+						const FVector P = MotionClipsBoneAt(Clip, Ref, Bone, T).GetLocation();
+						Line += FString::Printf(TEXT(" %s=%.0f,%.0f,%.0f"), Part, P.X, P.Y, P.Z);
+					}
+				}
+				UE_LOG(LogMotionClips, Display, TEXT("%s"), *Line);
+				if (T >= Length)
+				{
+					break;
+				}
+			}
+		}
+		if (FParse::Param(*Params, TEXT("PoseOnly")))
+		{
+			return 0;
+		}
+	}
+
 	FString Text;
 	TSharedPtr<FJsonObject> Json;
 	const FString ListFile = RepoRoot / TEXT("assets/motion_clips.json");

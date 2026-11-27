@@ -9,6 +9,10 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> GGoreSkinOutline(TEXT("Gore.SkinOutline"), 1,
+		TEXT("1: a stump's face is fitted to the skin's own measured edge round the cut, flush with it (a seamless cover over the hole). ")
+		TEXT("0: the old round disc sized from the thickness table."), ECVF_Default);
+
 	TAutoConsoleVariable<float> GGoreClothLift(TEXT("Gore.ClothLift"), 0.25f,
 		TEXT("On a clothed limb, how far (limb radii) the stump's face stands out past the cut, in front of the sleeve or trouser leg's own end, ")
 		TEXT("with the soaked cloth hanging back over the gap. Only where the meshes' bulge past the cut could not be measured."), ECVF_Default);
@@ -172,15 +176,28 @@ namespace
 }
 
 UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, FName Socket, const FVector& At, const FVector& Outward,
-	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter, float DomeCm)
+	const FVector& Front, float RadiusCm, EGoreStumpKind Kind, const FLinearColor& Skin, int32 Seed, float ClothOuter, float DomeCm,
+	const FGoreOutline* Outline)
 {
 	const bool bClothed = ClothOuter > 1.01f;
 	if (!Owner || !Parent || RadiusCm <= 0.0f)
 	{
 		return nullptr;
 	}
+	// Fitted to the skin's own edge (FGoreOutline): flush with it, no lift, no lip, nothing reaching out past the skin.
+	const bool bOutline = Outline && Outline->bValid && GGoreSkinOutline.GetValueOnGameThread() != 0;
+	float OutlineMeanRadius = 0.0f;
+	float OutlineMeanHeight = 0.0f;
+	if (bOutline)
+	{
+		for (int32 b = 0; b < FGoreOutline::Bins; ++b)
+		{
+			OutlineMeanRadius += Outline->Radius[b] / FGoreOutline::Bins;
+			OutlineMeanHeight += Outline->Height[b] / FGoreOutline::Bins;
+		}
+	}
 	FRandomStream Random(Seed);
-	const float R = RadiusCm;
+	const float R = bOutline && OutlineMeanRadius > 0.5f ? OutlineMeanRadius : RadiusCm;
 	const FGoreWave Bulge(Random);
 	const FGoreWave Edge(Random);
 	const FGoreWave Fibres(Random);
@@ -194,11 +211,35 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 	// Clothed: a sleeve or trouser leg is thicker than the skin and ends a little past the cut in a closed, rounded end of
 	// its own, which hid the meat. The face stands in front of it (and is as wide as the cloth), the soaked cloth hanging
 	// back over the gap.
-	const float Lift = DomeCm >= 0.0f ? FMath::Min(DomeCm, R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f);
+	const float Lift = bOutline ? 0.0f : (DomeCm >= 0.0f ? FMath::Min(DomeCm, R) : (bClothed ? FMath::Max(GGoreClothLift.GetValueOnGameThread(), 0.0f) * R : 0.0f));
 	// Height of the face (cm) at a fraction of the radius: the muscle bulges out unevenly, the fat lies lower, the skin
 	// curls up in a lip at the edge and then hangs back over the limb.
 	const auto FaceZ = [&](float F, float Theta) -> float
 	{
+		if (bOutline)
+		{
+			// From the middle (the edge's mean height) out to the skin's edge at its own height, gently domed: the muscle
+			// a little proud in the middle, the fat and the skin flush with the edge, then curling back just under it.
+			float EdgeR = 0.0f;
+			float EdgeZ = 0.0f;
+			Outline->At(Theta, EdgeR, EdgeZ);
+			const float Fc = FMath::Min(F, 1.0f);
+			// (Just over the skin's own flattened face, so the two never flicker through each other.)
+			const float Base = FMath::Lerp(OutlineMeanHeight, EdgeZ, Fc * Fc) + 0.3f;
+			if (F < 0.70f)
+			{
+				return Base + 0.05f * R * (1.0f - F * F) * (0.65f + 0.35f * Bulge.At(Theta * 1.3f + F * 2.0f)) + 0.02f * R * Fibres.At(Theta * 2.0f + F * 7.0f) * F;
+			}
+			if (F < 0.89f)
+			{
+				return Base + 0.015f * R;
+			}
+			if (F <= 1.0f)
+			{
+				return Base + 0.004f * R;
+			}
+			return Base - (bClothed ? 0.0f : FMath::Min((F - 1.0f) / 0.05f, 1.0f) * 0.25f);
+		}
 		if (F < 0.70f)
 		{
 			return 0.13f * R * (1.0f - F * F) * (0.65f + 0.35f * Bulge.At(Theta * 1.3f + F * 2.0f)) + 0.06f * R * Fibres.At(Theta * 2.0f + F * 7.0f) * F;
@@ -231,6 +272,19 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			// Tucked in a little and short, so it reads as an edge curling back onto the limb, never a hoop standing off a
 			// thinner sleeve.
 			const float SkirtSpread = bClothed ? ClothOuter * 0.97f : 0.88f;
+			if (bOutline)
+			{
+				// The skin's own edge, a hair outside it so no seam shows; the skirt tucks back just inside the skin.
+				float EdgeR = 0.0f;
+				float EdgeZ = 0.0f;
+				Outline->At(Theta, EdgeR, EdgeZ);
+				EdgeR *= 1.015f;
+				const float SpreadO = bClothed ? Spread : FMath::Min(Spread, 1.02f);
+				const float TornO = 1.0f + (Torn - 1.0f) * 0.3f;
+				const float RadiusO = EdgeR * (bSkirt ? (bClothed ? SkirtSpread : 0.95f) : SpreadO) * TornO;
+				const float ZO = bSkirt ? EdgeZ - Skirt * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.015f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
+				return FVector(RadiusO * FMath::Cos(Theta), RadiusO * FMath::Sin(Theta), ZO);
+			}
 			const float Radius = R * (bSkirt ? SkirtSpread : Spread) * Torn;
 			const float Z = bSkirt ? -(Skirt + Lift) * (0.75f + 0.25f * Edge.At(Theta * 1.7f + 1.0f)) : FaceZ(F, Theta) + (F < 0.7f ? 0.04f * R * Random.FRandRange(-0.5f, 0.5f) : 0.0f);
 			return FVector(Radius * FMath::Cos(Theta), Radius * FMath::Sin(Theta), Z);
@@ -290,8 +344,14 @@ UProceduralMeshComponent* GoreMakeStump(AActor* Owner, USceneComponent* Parent, 
 			[&](int32 Row, int32 C)
 			{
 				const float Theta = 2.0f * PI * C / Cols;
-				const float Rr = R * ClothOuter * (0.99f + 0.02f * Edge.At(Theta));
-				const float Z = Row == 0 ? FaceZ(1.0f, Theta) - 0.02f * R : Lining * (0.55f + 0.45f * (0.5f + 0.5f * Fibres.At(Theta * 2.3f + 0.7f)));
+				float EdgeR = R;
+				float EdgeZ = 0.0f;
+				if (bOutline)
+				{
+					Outline->At(Theta, EdgeR, EdgeZ);
+				}
+				const float Rr = EdgeR * ClothOuter * (0.99f + 0.02f * Edge.At(Theta));
+				const float Z = Row == 0 ? FaceZ(1.0f, Theta) - 0.02f * R : EdgeZ + Lining * (0.55f + 0.45f * (0.5f + 0.5f * Fibres.At(Theta * 2.3f + 0.7f)));
 				return FVector(Rr * FMath::Cos(Theta), Rr * FMath::Sin(Theta), Z);
 			},
 			[&](int32 Row, int32 C) { return GoreWet(FMath::Lerp(GoreCloth, GoreBlood, Row == 0 ? 0.6f : 0.25f + 0.3f * Random.FRand()), 0.4f); });

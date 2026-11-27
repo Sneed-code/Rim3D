@@ -51,8 +51,9 @@ sim was stopped by a wall the body stops there and the clip plays on against it.
 | Dodge roll (`CombatSystem::dodgeRoll`) | `rollClip`, stretched over start-up + roll + recovery | a push of `dodgeRoll.distance` over the rolling steps |
 | Sidestep (`MeleeSystem::sidestep`) | `sidestepClip.left/right` | a push of `sidestepMetres` (0.7) over `sidestepSteps` (9) |
 | Stagger by a blow by hand (`CombatSystem::stagger`, `HitFrom::blow`) | `staggerClip.back/forward/left/right`, by the way the blow throws the body seen from the body (the measured ones stumble about 0.9 to 1.2 m) | a push of `staggerMetres` (0.5) away from it |
-| Stagger by a bullet | `flinchClip.*` (none measured yet: a bullet flinches on the spot, it doesn't send a body stumbling a metre) | nothing |
+| Stagger by a bullet | `flinchClip.*`: the stagger animations cut to their first 0.3 s, about 0.35 to 0.45 m (sneed 2026-11-27: shot people, head shots most of all, reel; the stance arms stay on the gun, `UpperArmsKept`) | nothing |
 | Knockdown by poise (`CombatSystem::jolt`) | `knockdownClip.*` | a push of `knockdownMetres` (1.0) |
+| Getting up after a knockdown or a blast (`CombatSystem::step`) | `getUpClip` over `getUpSeconds` (4.2), starting when the time down **and** the fall's clip are both over, the body turned by `getUpTurn.<side>` (the way it fell); still `KnockedDown` (`gettingUp`) until the clip ends, so it can't act, but no longer drawn lying (sneed 2026-11-27: they snapped back up) | stands at once |
 | Blast (`CombatSystem::explode`) | a person: the knockdown clip for the way it is thrown, its path stretched (up to 4x) to land `knockbackMetres` (3) x share away (sneed 2026-11-22, `blastThrow`) | a push of the blast's knockback over `blastSteps` (12) |
 | Melee swing (`MeleeSystem::attack`) | one of the weapon style's attack clips (the player's: upper body, free feet) | no body movement |
 
@@ -178,6 +179,6 @@ post, not the clip.
 ## Next
 
 - **PC:** weapons in the hand follow `hand_r` during a clip (now they stay in the ready pose while the arms swing)
-  and holstered guns follow the spine; flinch clips for bullets; separate get-ups for face-up and
-  face-down; the creator's fight demo moving its people the same way.
+  and holstered guns follow the spine; separate get-ups for face-up and
+  face-down (`getUpTurn` per side until then); the creator's fight demo moving its people the same way.
 - **World:** tree trunks as solid posts, plant and swamp slow-down, loose props shoved by weight, foliage bending.

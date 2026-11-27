@@ -12,6 +12,21 @@ chained knockdowns, hyperarmour on heavies, big bodies never fall. **AI** fights
 a guard, charges, combos by skill, leaps in). `SoulsRules.enabled false` puts melee back as it was; weapons without a
 moveset (everything but the gladius and plasma sword for now) keep the old swing. Debug > Sword and shield duel (play)
 and (watch). Four new clips measured by `-run=MotionClips` and committed. Next: the spear's flicking, more movesets.
+Decapitation, corpse jiggle, shotgun, hit reacts and getting up (sneed, 2026-11-27; sim, data, sounds and Unreal):
+**severed parts keep their look**: the copy of a cut-off head or limb never took the body's shape morphs, so MakeHuman's
+NoHorns/NoTusks/NoTail went and a human head grew horns and teeth; the copy now takes every morph weight
+(`SeveredCopyMorphs`, logs "takes N shape morphs"). **Stumps**: the cap was a round disc sized from a table, which sat
+under the skin on the head's neck like a slab of steak; it is now built from the skin's real cut edge (32 bins of radius
+and height, measured by skinning the mesh with the cut's bone matrices, `FGoreOutline`), flush with it and curled under
+it (`Gore.SkinOutline` 0 for the old disc, `Gore.OutlineLog` logs it). **Corpses jiggle**: soft tissue stays on in the
+ragdoll and every bullet or blast on a body, living, downed or dead, kicks the breasts, belly and buttocks
+(`ASimPawnActor::KickFlesh`/`BlastFlesh`). **Pump shotgun**: a deep boom (a 50 Hz thump under the shot, bass, compressed,
+with an echo tail), about 10 dB louder in its first 0.4 s and 20 dB more below 100 Hz; the far shotgun has more bass
+(applies with the next update's sound step). **Hit reacts**: the stance's arms stay as they were under an upper-body hit
+react or stagger (the right arm no longer rises and falls), head shots always stagger at full strength, and bullets
+play short flinch clips (`Motion_Flinch*`). **Get-up**: a knocked down pawn lies until its fall's clip is over, then
+plays the 4.2 s get-up clip (`MotionRules.getUpSeconds`), still unable to act, instead of snapping up; saved in the
+explosives section (version 3). The MotionClips commandlet's `-Pose=` logs bone positions for tuning `getUpTurn`.
 
 White skin on the "You" screen fixed (sneed, 2026-11-27; Unreal only, no art step): sneed's update had applied. The
 screen's key lamp at the camera (60000 cd) lit dark skin so far over the exposure that the subsurface scattering lost the

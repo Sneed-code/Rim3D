@@ -98,6 +98,10 @@ BodyMotionSystem::BodyMotionSystem(Things& things, Map& map) : things_(things), 
             rules_.knockdownClip[i] = r->text((std::string("knockdownClip.") + sides[i]).c_str(), rules_.knockdownClip[i]);
         }
         rules_.getUpClip = r->text("getUpClip", rules_.getUpClip);
+        rules_.getUpSeconds = std::max(0.1f, static_cast<float>(r->number("getUpSeconds", rules_.getUpSeconds)));
+        for (int i = 0; i < 4; ++i) {
+            rules_.getUpTurn[i] = static_cast<float>(r->number((std::string("getUpTurn.") + sides[i]).c_str(), rules_.getUpTurn[i]));
+        }
         rules_.staggerMetres = std::max(0.0f, static_cast<float>(r->number("staggerMetres", rules_.staggerMetres)));
         rules_.staggerSteps = std::max(1, static_cast<int>(r->integer("staggerSteps", rules_.staggerSteps)));
         rules_.knockdownMetres = std::max(0.0f, static_cast<float>(r->number("knockdownMetres", rules_.knockdownMetres)));
@@ -291,6 +295,52 @@ bool BodyMotionSystem::blastThrow(Entity pawn, float pushX, float pushY, float m
         }
     }
     return push(pawn, pushX, pushY, metres, steps);
+}
+
+int BodyMotionSystem::knockdownSide(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr;
+    const MotionClip* c = m != nullptr ? clip(m->clip) : nullptr;
+    if (c == nullptr) {
+        return -1;
+    }
+    for (int i = 0; i < 4; ++i) {
+        if (c->name == rules_.knockdownClip[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int BodyMotionSystem::getUp(Entity pawn, int side) {
+    entt::registry& reg = things_.registry();
+    const DefId id = clipId(rules_.getUpClip);
+    if (!id.valid() || !hasClips(pawn) || !reg.valid(pawn) || !reg.all_of<Position, Posture>(pawn)) {
+        return 0;
+    }
+    const Posture& posture = reg.get<Posture>(pawn);
+    float fx = posture.facingX;
+    float fy = posture.facingY;
+    if (side >= 0 && side < 4 && rules_.getUpTurn[side] != 0.0f) {
+        // Turned right by the angle: cos * forward + sin * right, right of (x, y) being (-y, x) (as in step()).
+        float s = 0.0f;
+        float co = 1.0f;
+        motionSinCos(rules_.getUpTurn[side], s, co);
+        const float tx = co * fx - s * fy;
+        const float ty = co * fy + s * fx;
+        fx = tx;
+        fy = ty;
+    }
+    const int steps = std::max(1, static_cast<int>(std::lround(rules_.getUpSeconds / kMotionStepSeconds)));
+    if (!play(pawn, id, fx, fy, steps, true)) {
+        return 0;
+    }
+    if (Posture* p = reg.try_get<Posture>(pawn)) {
+        p->facingX = fx;
+        p->facingY = fy;
+    }
+    setLayers(pawn, false, false);
+    return steps;
 }
 
 bool BodyMotionSystem::sidestep(Entity pawn, float dx, float dy) {
