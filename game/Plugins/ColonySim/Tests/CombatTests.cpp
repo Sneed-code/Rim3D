@@ -1,5 +1,6 @@
 #include "ColonySim/Apparel.h"
 #include "ColonySim/Colonist.h"
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
 #include "ColonySim/Defs.h"
@@ -166,6 +167,7 @@ TEST_CASE("Combat: an aimed shot hits a standing man as often as RimWorld's hit 
         const Entity target = combatTestPawn(*sim, 20 + distance, 40);
         sim->things().registry().get<Posture>(target).facingX = -1.0f;  // facing the shooter
         sim->things().registry().get<Posture>(target).facingY = 0.0f;
+        const Position home = sim->things().registry().get<Position>(target);
         const float spreadSlope = sim->combat().spread(rifle, skill, static_cast<float>(distance), false);
         int hits = 0;
         const int shots = 500;
@@ -174,6 +176,13 @@ TEST_CASE("Combat: an aimed shot hits a standing man as often as RimWorld's hit 
             if (hit.hit == ProjectileHitKind::Pawn || hit.hit == ProjectileHitKind::Armor) {
                 ++hits;
                 combatTestHeal(*sim, target);
+                // A standing man: let a hit's flinch (MotionRules.flinchClip) play out and face the shooter again.
+                for (int wait = 0; wait < 60 && sim->combat().motion().moving(target); ++wait) {
+                    sim->step();
+                }
+                sim->things().registry().replace<Position>(target, home);
+                sim->things().registry().get<Posture>(target).facingX = -1.0f;
+                sim->things().registry().get<Posture>(target).facingY = 0.0f;
             }
         }
         // RimWorld: shooter accuracy 94% per metre at skill 4, the rifle's accuracy at that range.
