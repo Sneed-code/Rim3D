@@ -393,6 +393,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 	{
 		FPhase Watch;
 		Watch.Name = FString::Printf(TEXT("duel_watch_%d"), Look);
+		Watch.Setup = []() {};  // the fight goes on from the first phase
 		Watch.WarmupSeconds = 0.5f;
 		Watch.MeasureSeconds = 3.0f;
 		Watch.ScreenshotAt = 0.4f * static_cast<float>(Look % 3) + 0.6f;
@@ -405,6 +406,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 	}
 	FPhase Hud;
 	Hud.Name = TEXT("duel_hud");
+	Hud.Setup = []() {};
 	Hud.WarmupSeconds = 1.5f;
 	Hud.MeasureSeconds = 3.0f;
 	Hud.OnFrame = [=, this]()
