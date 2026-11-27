@@ -37,6 +37,8 @@ namespace
 	// The player is healed when its worst body part falls under this share (a practice fight: no YOU DIED); in the watch the
 	// opponent too.
 	constexpr float DuelSmokePracticeHealth = 0.9f;  // a charged blow to the head takes most of it at once
+	// In play you see your health go down to half before the practice heal.
+	constexpr float DuelSmokePlayHealth = 0.5f;
 	// Many small cuts bleed to death while no one part looks hurt: healed past this much blood lost too.
 	constexpr float DuelSmokePracticeBlood = 0.1f;
 	// Seconds after the opponent falls before the next one comes.
@@ -112,6 +114,10 @@ namespace
 			return FString::Printf(TEXT("could not put a steel medium shield on: %s"), UTF8_TO_TCHAR(Why.c_str()));
 		}
 		colony::Colonist& Record = Sim.things().registry().get_or_emplace<colony::Colonist>(Pawn);
+		// An even fight, and one the practice heal can keep up with: the protagonist's double hit points and death in place
+		// of going down (protagonist.md "Death") are off for the duel.
+		Record.protagonist = false;
+		DuelSmokeHeal(Sim, Pawn);
 		Record.skills.clear();
 		Record.skills.push_back(colony::SkillRecord{"Melee", DuelSmokeSkill});
 		return FString();
@@ -203,7 +209,7 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		Arm(State->Me, State->bMeArmed);
 		Arm(State->Foe, State->bFoeArmed);
 		const colony::ThingView* Me = DuelSmokeFind(*B, State->Me);
-		if (Me && !Me->dead && (Me->downed || Me->lowestPart < DuelSmokePracticeHealth || Me->bloodLoss > DuelSmokePracticeBlood))
+		if (Me && !Me->dead && (Me->downed || Me->lowestPart < (bWatch ? DuelSmokePracticeHealth : DuelSmokePlayHealth) || Me->bloodLoss > DuelSmokePracticeBlood))
 		{
 			DuelSmokeHeal(Sim, State->Me);
 		}
@@ -219,7 +225,8 @@ void USmokeTestSubsystem::BuildDuelPhases()
 		if (Me && Me->dead && !State->bMeDeadNoted)
 		{
 			State->bMeDeadNoted = true;
-			Notes.Add(TEXT("duel: you were killed outright (a blow from over the practice heal)"));
+			const colony::Health* Dead = Sim.things().registry().try_get<colony::Health>(State->Me);
+			Notes.Add(FString::Printf(TEXT("duel: you died of %s at %.1f s"), Dead ? UTF8_TO_TCHAR(colony::deathCauseName(Dead->cause)) : TEXT("?"), State->Clock));
 		}
 		const colony::ThingView* Foe = DuelSmokeFind(*B, State->Foe);
 		if (!Foe || Foe->dead || Foe->downed)
