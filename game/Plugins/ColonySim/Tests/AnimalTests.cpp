@@ -445,7 +445,7 @@ TEST_CASE("Animals: hostile fighters take no animal for an enemy") {
 
 TEST_CASE("Animals: saving and loading keeps the herds, their state and the game going the same") {
     const auto defs = animalTestDefs();
-    Sim original(animalTestSettings(128, 100, 21), defs);
+    Sim original(animalTestSettings(128, 100, 22), defs);  // seed 21 drew a single herd of 5 once the 2026-11-27 animals joined the biome lists
     original.stepMany(5 * kSecondsPerHour + 1800);  // the sleepers are waking and walking
     const std::vector<Entity> animals = animalsOf(original);
     ANIMAL_REQUIRE(animals.size() > 5);
