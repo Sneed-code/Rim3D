@@ -1,6 +1,14 @@
 # Status
 
-Updated 2026-11-26.
+Updated 2026-11-27.
+
+White skin on the "You" screen fixed (sneed, 2026-11-27; Unreal only, no art step): sneed's update had applied. The
+screen's key lamp at the camera (60000 cd) lit dark skin so far over the exposure that the subsurface scattering lost the
+skin colour and the lit side came out white (crown, neck, shoulder in his braid picture; face, chest, arms head on).
+Lamp off or scattering off gave brown skin; radius, shadows, transmission, hair, exposure and hour didn't matter. The lamp
+is now 24000 cd (0.4x: no white on the Melanesian preset, the fair woman still well lit; 0.5x clipped on the chest).
+The newgame smoke test adds `newgame_you_dark` (You as Melanesian, `-NewGameEthnicity=`), and `NewGame.PreviewLamp`,
+`PreviewLampRadius`, `PreviewLampShadows`, `PreviewLampTransmission`, `PreviewMaxEV` tune the screen's light.
 
 Skin back in game, skull limit, pubic hair off, close-up mugshots (sneed, 2026-11-26 evening; Unreal and an art step):
 **skin**: colonists showed only clothes, hair, eyes and teeth. Everyone wears the 4K skin since 2026-11-25, but only the
