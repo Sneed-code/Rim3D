@@ -1,0 +1,4 @@
+# ChunkGranite (budget 3k tris, 2048 textures)
+Game use: a granite rock chunk, a heavy loose boulder left by mining or a collapse, lying on the ground; colonists haul it or cut it into blocks. ~0.60 x 0.50 x 0.32 m, flat-ish bottom so it sits firmly. Angular fractured granite: big broken planar faces meeting at chipped edges, a few smaller fractures and conchoidal chips, one weathered rounded side with lichen-free grime. Coarse speckled granite: pinkish-grey feldspar, white quartz and black mica flecks clearly visible up close, fresh broken faces brighter than the weathered side, red-brown tropical soil dirt caked in the bottom crevices. Real modelled fracture geometry (not a deformed sphere); the speckle in BaseColor, the grain and pits in the normal map, rough (G ~0.8), not metallic.
+Separate parts: `Body`.
+Axis: small-item convention (origin at bottom centre).
