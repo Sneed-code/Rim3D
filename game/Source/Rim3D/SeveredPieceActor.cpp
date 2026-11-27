@@ -1,6 +1,7 @@
 #include "SeveredPieceActor.h"
 
 #include "AnimationRuntime.h"
+#include "Animation/MorphTarget.h"
 #include "Components/PoseableMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -449,6 +450,310 @@ namespace
 		return false;
 	}
 
+	/** The stump frame GoreMakeStump builds (Z out of the cut, X towards the front): the front, made square to Out. */
+	FVector SeveredStumpAhead(const FVector& Out, const FVector& Front)
+	{
+		FVector Ahead = Front - Out * FVector::DotProduct(Front, Out);
+		if (Ahead.SizeSquared() < 1e-4)
+		{
+			Ahead = FVector::CrossProduct(Out, FMath::Abs(Out.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector);
+		}
+		return Ahead.GetSafeNormal();
+	}
+
+	TAutoConsoleVariable<int32> GSeveredOutlineLog(TEXT("Gore.OutlineLog"), 1,
+		TEXT("1: log each stump's measured skin edge (the radius and height round it)."), ECVF_Default);
+
+	/**
+	 * The skin's open edge round a cut (FGoreOutline), as `Mesh` will be drawn once cut: its LOD0 vertices (with the
+	 * shape sliders) skinned by `Skin` (per bone, the reference-to-world matrix the cut leaves: kept bones as they are,
+	 * the flattened one flat, the rest folded into the joint). Only skin mostly on the piece's bones (`InPiece`) counts:
+	 * on the body that is the flattened face, on the piece the end of its skin. In each direction round `Out` (from
+	 * `At`, X towards `Front`) the edge is as far out as that skin reaches, at the height where it is still nearly that
+	 * wide and furthest along Out (where the skin turns in to close). Hair and hidden sections are left out. False if
+	 * the vertices can't be read or too few directions found any skin.
+	 */
+	bool SeveredMeasureOutline(const USkinnedMeshComponent& Mesh, const TArray<FMatrix44f>& Skin, const TArray<bool>& InPiece, const FVector& At,
+		const FVector& Out, const FVector& Front, float MinRadius, float MaxRadius, FGoreOutline& Outline, const TCHAR* Label)
+	{
+		Outline = FGoreOutline();
+		const USkeletalMesh* Asset = Cast<USkeletalMesh>(Mesh.GetSkinnedAsset());
+		FSkeletalMeshRenderData* Data = Asset ? Asset->GetResourceForRendering() : nullptr;
+		if (!Data || Data->LODRenderData.Num() == 0 || FPlatformProperties::RequiresCookedData())
+		{
+			return false;
+		}
+		const FSkeletalMeshLODRenderData& Lod = Data->LODRenderData[0];
+		const FPositionVertexBuffer& Positions = Lod.StaticVertexBuffers.PositionVertexBuffer;
+		const FSkinWeightVertexBuffer& Weights = Lod.SkinWeightVertexBuffer;
+		const uint32 Count = Positions.GetNumVertices();
+		if (Count == 0 || !Positions.GetVertexData() || Weights.GetNumVertices() != Count || Skin.Num() != Asset->GetRefSkeleton().GetNum() ||
+			InPiece.Num() != Skin.Num())
+		{
+			return false;
+		}
+		// The shape sliders move the vertices before they are skinned (the weights the mesh is drawn with now).
+		TArray<FVector3f> Shaped;
+		Shaped.SetNumUninitialized(Count);
+		for (uint32 V = 0; V < Count; ++V)
+		{
+			Shaped[V] = Positions.VertexPosition(V);
+		}
+		for (const TPair<const UMorphTarget*, int32>& Active : Mesh.ActiveMorphTargets)
+		{
+			const float W = Mesh.MorphTargetWeights.IsValidIndex(Active.Value) ? Mesh.MorphTargetWeights[Active.Value] : 0.0f;
+			if (!Active.Key || FMath::Abs(W) < 0.01f || Active.Key->GetMorphLODModels().Num() == 0)
+			{
+				continue;
+			}
+			for (const FMorphTargetDelta& Delta : Active.Key->GetMorphLODModels()[0].Vertices)
+			{
+				if (Delta.SourceIdx < Count)
+				{
+					Shaped[Delta.SourceIdx] += Delta.PositionDelta * W;
+				}
+			}
+		}
+		const FVector X = SeveredStumpAhead(Out, Front);
+		const FVector Y = FVector::CrossProduct(Out, X);
+		constexpr int32 Bins = FGoreOutline::Bins;
+		TArray<FVector2f> Found;  // (radius, height) per candidate, with its bin
+		TArray<int32> FoundBin;
+		float Widest[Bins];
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			Widest[b] = -1.0f;
+		}
+		const uint32 Influences = Weights.GetMaxBoneInfluences();
+		const TArray<FSkeletalMaterial>& Slots = Asset->GetMaterials();
+		for (const FSkelMeshRenderSection& Section : Lod.RenderSections)
+		{
+			const FString Slot = Slots.IsValidIndex(Section.MaterialIndex) ? Slots[Section.MaterialIndex].MaterialSlotName.ToString().ToLower() : FString();
+			if (!const_cast<USkinnedMeshComponent&>(Mesh).IsMaterialSectionShown(Section.MaterialIndex, 0) ||
+				(Slots.IsValidIndex(Section.MaterialIndex) && SeveredIsHairSlot(Slots[Section.MaterialIndex].MaterialSlotName)) ||
+				Slot.Contains(TEXT("pubic")) || Slot.Contains(TEXT("brow")) || Slot.Contains(TEXT("lash")) || Slot.Contains(TEXT("eye")) ||
+				Slot.Contains(TEXT("teeth")) || Slot.Contains(TEXT("tongue")))
+			{
+				continue;
+			}
+			for (uint32 V = Section.BaseVertexIndex; V < Section.BaseVertexIndex + Section.NumVertices && V < Count; ++V)
+			{
+				FVector3f P = FVector3f::ZeroVector;
+				float Total = 0.0f;
+				float OnPiece = 0.0f;
+				for (uint32 K = 0; K < Influences; ++K)
+				{
+					const float W = static_cast<float>(Weights.GetBoneWeight(V, K));
+					const uint32 Local = Weights.GetBoneIndex(V, K);
+					if (W <= 0.0f || static_cast<int32>(Local) >= Section.BoneMap.Num())
+					{
+						continue;
+					}
+					const int32 Bone = Section.BoneMap[Local];
+					if (!Skin.IsValidIndex(Bone))
+					{
+						continue;
+					}
+					P += FVector3f(Skin[Bone].TransformPosition(Shaped[V])) * W;
+					Total += W;
+					OnPiece += InPiece[Bone] ? W : 0.0f;
+				}
+				if (Total <= 0.0f || OnPiece < 0.5f * Total)
+				{
+					continue;
+				}
+				const FVector Rel = FVector(P / Total) - At;
+				const double Along = FVector::DotProduct(Rel, Out);
+				const double Fx = FVector::DotProduct(Rel, X);
+				const double Fy = FVector::DotProduct(Rel, Y);
+				const double Radial = FMath::Sqrt(Fx * Fx + Fy * Fy);
+				if (Radial < MinRadius || Radial > MaxRadius || Along > MaxRadius || Along < -MaxRadius)
+				{
+					continue;
+				}
+				double Theta = FMath::Atan2(Fy, Fx);
+				if (Theta < 0.0)
+				{
+					Theta += 2.0 * PI;
+				}
+				const int32 Bin = FMath::Clamp(FMath::FloorToInt32(Theta / (2.0 * PI) * Bins), 0, Bins - 1);
+				Widest[Bin] = FMath::Max(Widest[Bin], static_cast<float>(Radial));
+				Found.Add(FVector2f(static_cast<float>(Radial), static_cast<float>(Along)));
+				FoundBin.Add(Bin);
+			}
+		}
+		float Height[Bins];
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			Height[b] = -1e9f;
+		}
+		for (int32 i = 0; i < Found.Num(); ++i)
+		{
+			const int32 Bin = FoundBin[i];
+			if (Found[i].X >= 0.85f * Widest[Bin])
+			{
+				Height[Bin] = FMath::Max(Height[Bin], Found[i].Y);
+			}
+		}
+		int32 Filled = 0;
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			Filled += Widest[b] > 0.0f ? 1 : 0;
+		}
+		if (Filled < Bins * 3 / 4)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Stump outline %s: skin found round only %d of %d directions, a round face instead"), Label, Filled, Bins);
+			return false;
+		}
+		// The gaps from the nearest directions either side, then smoothed round (a median of three, then a soft blur):
+		// one stray vertex makes no notch or spike.
+		float Rad[Bins];
+		float Hgt[Bins];
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			if (Widest[b] > 0.0f)
+			{
+				Rad[b] = Widest[b];
+				Hgt[b] = Height[b];
+				continue;
+			}
+			int32 Lo = 1;
+			while (Widest[(b - Lo + Bins) % Bins] <= 0.0f)
+			{
+				++Lo;
+			}
+			int32 Hi = 1;
+			while (Widest[(b + Hi) % Bins] <= 0.0f)
+			{
+				++Hi;
+			}
+			const float T = static_cast<float>(Lo) / static_cast<float>(Lo + Hi);
+			Rad[b] = FMath::Lerp(Widest[(b - Lo + Bins) % Bins], Widest[(b + Hi) % Bins], T);
+			Hgt[b] = FMath::Lerp(Height[(b - Lo + Bins) % Bins], Height[(b + Hi) % Bins], T);
+		}
+		const auto Median3 = [](float A, float B, float C) { return FMath::Max(FMath::Min(A, B), FMath::Min(FMath::Max(A, B), C)); };
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			const int32 L = (b + Bins - 1) % Bins;
+			const int32 R = (b + 1) % Bins;
+			Outline.Radius[b] = Median3(Rad[L], Rad[b], Rad[R]);
+			Outline.Height[b] = Median3(Hgt[L], Hgt[b], Hgt[R]);
+		}
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			float R2[Bins];
+			float H2[Bins];
+			for (int32 b = 0; b < Bins; ++b)
+			{
+				const int32 L = (b + Bins - 1) % Bins;
+				const int32 R = (b + 1) % Bins;
+				R2[b] = 0.25f * Outline.Radius[L] + 0.5f * Outline.Radius[b] + 0.25f * Outline.Radius[R];
+				H2[b] = 0.25f * Outline.Height[L] + 0.5f * Outline.Height[b] + 0.25f * Outline.Height[R];
+			}
+			FMemory::Memcpy(Outline.Radius, R2, sizeof(R2));
+			FMemory::Memcpy(Outline.Height, H2, sizeof(H2));
+		}
+		float Least = 1e9f;
+		float Most = 0.0f;
+		float Mean = 0.0f;
+		float Low = 1e9f;
+		float High = -1e9f;
+		for (int32 b = 0; b < Bins; ++b)
+		{
+			Least = FMath::Min(Least, Outline.Radius[b]);
+			Most = FMath::Max(Most, Outline.Radius[b]);
+			Mean += Outline.Radius[b] / Bins;
+			Low = FMath::Min(Low, Outline.Height[b]);
+			High = FMath::Max(High, Outline.Height[b]);
+		}
+		Outline.bValid = Mean > MinRadius && Mean < MaxRadius;
+		if (GSeveredOutlineLog.GetValueOnGameThread() != 0)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Stump outline %s: %s, radius %.1f to %.1f cm (mean %.1f), edge %.1f to %.1f cm along the cut, %d of %d directions, %d skin points"),
+				Label, Outline.bValid ? TEXT("fitted") : TEXT("rejected"), Least, Most, Mean, Low, High, Filled, Bins, Found.Num());
+		}
+		return Outline.bValid;
+	}
+
+	/** The body's side of a cut at `Bone` as the sever node will draw it (GoreCut::FlattenCut): per bone, the
+	 *  reference-to-world skinning matrix, and which bones are the piece's (the cut bone and all under it). */
+	bool SeveredBodySkinning(const USkinnedMeshComponent& Mesh, FName Bone, TArray<FMatrix44f>& OutSkin, TArray<bool>& OutInPiece)
+	{
+		const USkinnedAsset* Asset = Mesh.GetSkinnedAsset();
+		if (!Asset)
+		{
+			return false;
+		}
+		const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+		const TArray<FMatrix44f>& InvRef = Asset->GetRefBasesInvMatrix();
+		const int32 Cut = Ref.FindBoneIndex(Bone);
+		const int32 Parent = Cut == INDEX_NONE ? INDEX_NONE : Ref.GetParentIndex(Cut);
+		if (Cut == INDEX_NONE || Parent == INDEX_NONE || InvRef.Num() != Ref.GetNum() || Mesh.GetBoneIndex(Ref.GetBoneName(Parent)) == INDEX_NONE)
+		{
+			return false;
+		}
+		const FTransform ToWorld = Mesh.GetComponentTransform();
+		const FTransform ParentCS = Mesh.GetBoneTransform(Mesh.GetBoneIndex(Ref.GetBoneName(Parent)), FTransform::Identity);
+		FTransform Flat;
+		const bool bFlat = GoreCut::FlattenCut(ParentCS, Ref.GetRefBonePose()[Cut], GoreCut::AxisLocal(Ref, Cut), Flat);
+		const FTransform Fold(FQuat::Identity, Flat.GetLocation(), FVector(GoreCut::Flat));
+		OutSkin.SetNum(Ref.GetNum());
+		OutInPiece.SetNum(Ref.GetNum());
+		for (int32 b = 0; b < Ref.GetNum(); ++b)
+		{
+			OutInPiece[b] = b == Cut || Ref.BoneIsChildOf(b, Cut);
+			FTransform World;
+			if (b == Cut && bFlat)
+			{
+				World = Flat * ToWorld;
+			}
+			else if (OutInPiece[b])
+			{
+				World = Fold * ToWorld;
+			}
+			else
+			{
+				World = Mesh.GetBoneTransform(b);
+			}
+			OutSkin[b] = InvRef[b] * FMatrix44f(World.ToMatrixWithScale());
+		}
+		return true;
+	}
+
+	/** Gives a severed piece's copy the morph target weights its source is drawn with now (the same skeletal mesh).
+	 *  A poseable mesh runs no animation, so nothing resets them: they stay as set. */
+	void SeveredCopyMorphs(const USkinnedMeshComponent& Source, USkinnedMeshComponent& Copy)
+	{
+		if (Source.GetSkinnedAsset() != Copy.GetSkinnedAsset())
+		{
+			return;
+		}
+		Copy.ActiveMorphTargets = Source.ActiveMorphTargets;
+		Copy.MorphTargetWeights = Source.MorphTargetWeights;
+		if (const USkeletalMeshComponent* Skeletal = Cast<USkeletalMeshComponent>(&Source); Skeletal && Copy.ActiveMorphTargets.IsEmpty())
+		{
+			// Not evaluated yet this frame (or a leader-driven mesh): from the weights set on the component itself.
+			const USkeletalMesh* Asset = Cast<USkeletalMesh>(Source.GetSkinnedAsset());
+			if (Asset)
+			{
+				const TArray<TObjectPtr<UMorphTarget>>& Morphs = Asset->GetMorphTargets();
+				Copy.MorphTargetWeights.SetNumZeroed(Morphs.Num());
+				for (int32 i = 0; i < Morphs.Num(); ++i)
+				{
+					const float W = Morphs[i] ? Skeletal->GetMorphTarget(Morphs[i]->GetFName()) : 0.0f;
+					if (FMath::Abs(W) > 0.0001f)
+					{
+						Copy.ActiveMorphTargets.Add(Morphs[i], i);
+						Copy.MorphTargetWeights[i] = W;
+					}
+				}
+			}
+		}
+		Copy.MarkRenderDynamicDataDirty();
+		UE_LOG(LogTemp, Log, TEXT("Severed piece: %s takes %d shape morphs from %s"), *Copy.GetName(), Copy.ActiveMorphTargets.Num(), *Source.GetName());
+	}
+
+
 	/** The component whose pose a mesh shows: itself, or the top of its leader chain. */
 	const USkinnedMeshComponent* SeveredPoseOf(const USkinnedMeshComponent* Mesh)
 	{
@@ -716,9 +1021,23 @@ void ASimPawnActor::ApplySevered(uint16 Bits)
 		const float BodyDome = SeveredDome(Skinned, Bone, false, SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), BodyOpening, BodySkin);
 		const float CapRadius = SeveredFitFace(SeveredCapRadius(Bit) * GetBodyScale() * GSeveredStumpScale.GetValueOnGameThread(), BodySkin);
 		UE_LOG(LogTemp, Log, TEXT("Severed 0x%x: body side bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, BodyDome, CapRadius);
-		if (Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front) &&
+		// The skin's own edge where it is cut, which the face fits flush (sneed 2026-11-27: a seamless cover, not a slab).
+		FGoreOutline BodyOutline;
+		const bool bFrame = Skin && Skin->GetBoneIndex(Bone) != INDEX_NONE && SeveredCutFrame(*Skin, Bone, At, Along, Front);
+		if (bFrame)
+		{
+			TArray<FMatrix44f> Skinning;
+			TArray<bool> InPiece;
+			const float Table = SeveredCapRadius(Bit) * GetBodyScale();
+			if (SeveredBodySkinning(*Skin, Bone, Skinning, InPiece))
+			{
+				SeveredMeasureOutline(*Skin, Skinning, InPiece, At, Along, Front, 0.3f * Table, 1.6f * Table, BodyOutline, TEXT("body"));
+			}
+		}
+		if (bFrame &&
 			GoreMakeStump(this, Skin, Skin->GetParentBone(Bone), At, Along, Front, CapRadius, SeveredStumpKind(Bit),
-				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredFitCloth(SeveredClothOuter(Skinned, Skin, Bone, Bit), BodyOpening, CapRadius), BodyDome))
+				SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 31u + Bit), SeveredFitCloth(SeveredClothOuter(Skinned, Skin, Bone, Bit), BodyOpening, CapRadius), BodyDome,
+				&BodyOutline))
 		{
 			++SeveredCaps;
 			SeveredDrip(GetWorld(), At, Along, Skin, GSeveredDripSeconds.GetValueOnGameThread());
@@ -879,6 +1198,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Joint = Drawn->GetBoneLocation(Bone, EBoneSpaces::WorldSpace);
 	}
 	const float StaleCm = 30.0f * GetBodyScale();
+	FGoreOutline PieceOutline;
 	TArray<USkinnedMeshComponent*> Skinned;
 	SeveredSkinned(*this, Skinned);
 	for (USkinnedMeshComponent* Source : Skinned)
@@ -953,6 +1273,11 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		Copy->SetupAttachment(Piece->GetRootComponent());
 		Copy->RegisterComponent();
 		Copy->SetWorldTransform(ToCopy);
+		// The same shape as on the body: every shape slider (face, build, ethnicity) and what they hide (sneed 2026-11-27:
+		// "this was a human but when it came off it grew horns and teeth"). The MakeHuman body carries the horns, tusks
+		// and tail of every lineage, put away by its NoHorns/NoTusks/NoTail morphs: a copy without the body's morph
+		// weights showed them all, and lost the face's own shape too. Same asset, so the weights carry over one for one.
+		SeveredCopyMorphs(*Source, *Copy);
 		// The same sections drawn as on the body: one hair style of the several the MakeHuman body carries, no skin cut
 		// away under clothes (a copy shows them all). A head whose wig the strands replaced shows the wig: strands can't
 		// go with the piece.
@@ -1025,6 +1350,49 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 			if (bCutNow)
 			{
 				Copy->SetBoneTransformByName(Name, CutNow, EBoneSpaces::ComponentSpace);
+			}
+		}
+		// The skin's own end on the piece as it is posed here (the parent flattened, the body's other bones folded, the
+		// piece straight below its cut bone), for the stump to fit flush.
+		if (bCutNow && Source == GetDecalMesh() && !PieceOutline.bValid)
+		{
+			const TArray<FMatrix44f>& InvRef = Asset->GetRefBasesInvMatrix();
+			if (InvRef.Num() == Skeleton.GetNum())
+			{
+				TArray<FTransform> PieceCS;
+				TArray<FMatrix44f> Skinning;
+				TArray<bool> InPiece;
+				PieceCS.SetNum(Skeleton.GetNum());
+				Skinning.SetNum(Skeleton.GetNum());
+				InPiece.SetNum(Skeleton.GetNum());
+				for (int32 i = 0; i < Skeleton.GetNum(); ++i)
+				{
+					InPiece[i] = i == CutIndex || Skeleton.BoneIsChildOf(i, CutIndex);
+					FTransform Flat;
+					if (i == CutIndex)
+					{
+						PieceCS[i] = CutNow;
+					}
+					else if (InPiece[i])
+					{
+						PieceCS[i] = Skeleton.GetRefBonePose()[i] * PieceCS[Skeleton.GetParentIndex(i)];
+					}
+					else if (i == ParentIndex && GoreCut::FlattenParent(CutNow, Skeleton.GetRefBonePose()[CutIndex], GoreCut::AxisLocal(Skeleton, CutIndex), Flat))
+					{
+						PieceCS[i] = Flat;
+					}
+					else
+					{
+						PieceCS[i] = Folded;
+					}
+					Skinning[i] = InvRef[i] * FMatrix44f((PieceCS[i] * ToCopy).ToMatrixWithScale());
+				}
+				FVector OutAt = ToCopy.TransformPosition(CutNow.GetLocation());
+				FVector OutAlong = Middle - Cut;
+				FVector OutFront = GetActorForwardVector();
+				SeveredPieceCutFrame(*Source, Bone, OutAt, OutAlong, OutFront);
+				const float Table = SeveredCapRadius(Bit) * GetBodyScale();
+				SeveredMeasureOutline(*Source, Skinning, InPiece, OutAt, -OutAlong.GetSafeNormal(), OutFront, 0.3f * Table, 1.6f * Table, PieceOutline, TEXT("piece"));
 			}
 		}
 		Piece->AddMesh(Copy);
@@ -1153,7 +1521,7 @@ ASeveredPieceActor* ASimPawnActor::SpawnSeveredPiece(uint16 Bit)
 		UE_LOG(LogTemp, Log, TEXT("Severed piece 0x%x: bulges %.1f cm past the cut (cap radius %.1f cm)"), Bit, PieceDome, PieceRadius);
 		if (USceneComponent* Stump = GoreMakeStump(Piece, Piece->GetRootComponent(), NAME_None, At, -Along, Front, PieceRadius,
 				SeveredStumpKind(Bit), SeveredSkinColour(*this), static_cast<int32>(static_cast<uint32>(entt::to_integral(Thing)) * 17u + Bit * 7u),
-				SeveredFitCloth(SeveredClothOuter(Skinned, Skin, Bone, Bit), PieceOpening, PieceRadius), PieceDome))
+				SeveredFitCloth(SeveredClothOuter(Skinned, Skin, Bone, Bit), PieceOpening, PieceRadius), PieceDome, &PieceOutline))
 		{
 			Piece->SetCutEnd(Stump);
 		}

@@ -2616,6 +2616,11 @@ void saveKnockedPart(Ar& ar, KnockedDown& k) {
     ar.value("stepsLeft", k.stepsLeft);
     ar.value("before", k.before);
     ar.require(static_cast<int>(k.before) <= static_cast<int>(Stance::Prone), "the save file has a bad stance");
+    if (ar.sectionVersion() >= 3) {  // getting up after a knockdown (sneed 2026-11-27)
+        ar.value("gettingUp", k.gettingUp);
+        ar.value("side", k.side);
+        ar.require(k.side >= -1 && k.side < 4, "the save file has a bad knockdown side");
+    }
 }
 
 template <typename Ar>
@@ -3863,7 +3868,7 @@ void saveSections(Ar& ar, SaveData& d) {
         d.hasWeather = true;
         saveWeather(ar, d.weather);
     });
-    ar.section("explosives", 2, [&] {
+    ar.section("explosives", 3, [&] {
         saveParts(ar, "belt", e, &SaveEntity::belt, [&](SaveBelt& b) { saveBeltPart(ar, b); });
         saveParts(ar, "thrower", e, &SaveEntity::thrower, [&](SaveThrower& t) { saveThrowerPart(ar, t); });
         saveParts(ar, "grenade", e, &SaveEntity::grenade, [&](SaveGrenade& g) { saveGrenadePart(ar, g); });

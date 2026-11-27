@@ -198,6 +198,13 @@ public:
 	/** A bullet or blow on a ragdoll (a corpse, the knocked out): a velocity change `Impulse` (cm/s) on the bone
 	 *  nearest `At`, and a little of it on the whole body, waking it if it slept. */
 	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** The soft flesh (breasts, belly, buttocks, thighs) knocked by a hit at `At`, living or dead: a velocity kick of
+	 *  `Velocity` (cm/s) to the soft parts within `RadiusCm`, a tenth of it to the whole body (sneed 2026-11-27:
+	 *  "corpses should retain their jiggle physics, so if breasts are shot they jiggle or the torso moves"). Cosmetic. */
+	void KickFlesh(const FVector& At, const FVector& Velocity, float RadiusCm);
+	/** The same from a blast: out from `Centre`, `Speed` (cm/s) at the centre falling off to `RadiusCm`. */
+	void BlastFlesh(const FVector& Centre, float Speed, float RadiusCm);
+	int32 GetFleshKicks() const { return FleshKicks; }
 	/** For the tests: shots and blows that jolted this ragdoll. */
 	int32 GetRagdollHitPushes() const { return RagdollHitPushes; }
 	/** For the tests: ragdolls put to sleep once settled, and blasts that threw one. */
@@ -508,6 +515,7 @@ private:
 	FQuat LeanShown = FQuat::Identity;
 	FQuat LeanCarry = FQuat::Identity;
 	int32 HitReactions = 0;
+	int32 FleshKicks = 0;
 
 	FMeleeSwingTrack Swing;
 	float BlockBlend = 0.0f;
@@ -541,6 +549,10 @@ private:
 	int32 MotionClipsPlayed = 0;
 	/** The clip playing is drawn on the upper body only (the hips are the walk's: no set-back). */
 	bool bMotionUpper = false;
+	/** The sim's clip now is a stagger or flinch (it leaves the arms be, like a hit react). */
+	bool bMotionReaction = false;
+	/** How much the upper-body slot leaves the arms as they are (FSimPawnAnimInputs::UpperArmsKept). */
+	float UpperArmsKept = 0.0f;
 	// The whole-body clip the one now playing took over from, while it fades out: its share of the set-back.
 	TWeakObjectPtr<class UAnimMontage> MotionOutMontage;
 	TWeakObjectPtr<class UAnimSequence> MotionOutAsset;

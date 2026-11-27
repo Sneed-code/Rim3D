@@ -570,6 +570,7 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
+		In.UpperArmsKept = UpperArmsKept;
 		In.Patch = bPatchPosed ? 1.0f : 0.0f;
 		In.PatchZone = PatchZone;
 		In.Route.Reset();
@@ -2352,6 +2353,7 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 				Anim->Montage_Stop(PawnMotionFollowBlendIn, MotionMontage.Get());
 			}
 			bMotionUpper = Now.motionUpper;
+			bMotionReaction = Clip->name.rfind("Motion_Stagger", 0) == 0 || Clip->name.rfind("Motion_Flinch", 0) == 0;
 			MotionMontage = Anim->PlaySlotAnimationAsDynamicMontage(Asset, bMotionUpper ? USimPawnAnimInstance::UpperBodySlot : FAnimSlotGroup::DefaultSlotName,
 				bFollows ? PawnMotionFollowBlendIn : PawnMotionBlendIn, PawnMotionBlendOut, Rate, 1, -1.0f, Want);
 			MotionClipDef = Now.motionClip.value;
@@ -2395,6 +2397,13 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	{
 		MotionMontage.Reset();
 		MotionAsset.Reset();
+	}
+	// The arms under a hit react or a stagger stay as they were (sneed 2026-11-27: the right arm went up and down);
+	// any other upper-body clip (the player's own swing) takes them.
+	{
+		const bool bReactShown = PawnMontageShown(Anim, HitMontage) != nullptr;
+		const bool bOtherUpper = Shown && bMotionUpper && !bMotionReaction;
+		UpperArmsKept = (bReactShown || (Shown && bMotionUpper && bMotionReaction)) && !bOtherUpper ? 1.0f : 0.0f;
 	}
 	const FAnimMontageInstance* Out = MotionOutMontage != MotionMontage ? PawnMontageShown(Anim, MotionOutMontage) : nullptr;
 	if (Out && MotionOutAsset.IsValid() && MotionOutPelvisBone != INDEX_NONE)
@@ -3062,10 +3071,12 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
 	RagdollCreepSeconds = 0.0f;
+	// The soft flesh stays on (sneed 2026-11-27: "corpses should retain their jiggle physics"): it settles as the body
+	// does and jiggles again with every hit, blast or fall (KickFlesh, BlastFlesh). A body at rest gives its springs
+	// nothing to do, so it lies still.
 	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
 	{
 		bSoftTissueBeforeRagdoll = Soft->IsSoftTissueEnabled();
-		Soft->SetSoftTissueEnabled(false);  // no flesh jiggling on a still body
 	}
 	Body->WakeAllRigidBodies();
 	if (!Impulse.IsNearlyZero())
@@ -3237,10 +3248,29 @@ void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float Spe
 	Body->WakeAllRigidBodies();
 	// A velocity change, so a light and a heavy body fly alike; falling off linearly to the edge, lifted a little.
 	Body->AddRadialImpulse(Centre - FVector(0.0, 0.0, 40.0), RadiusCm, SpeedCmPerSecond, ERadialImpulseFalloff::RIF_Linear, true);
+	BlastFlesh(Centre, SpeedCmPerSecond * 0.5f, RadiusCm);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;
 	RagdollCreepSeconds = 0.0f;
 	++RagdollPushes;
+}
+
+void ASimPawnActor::KickFlesh(const FVector& At, const FVector& Velocity, float RadiusCm)
+{
+	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
+	{
+		Soft->AddHitKick(At, Velocity, RadiusCm);
+		++FleshKicks;
+	}
+}
+
+void ASimPawnActor::BlastFlesh(const FVector& Centre, float Speed, float RadiusCm)
+{
+	if (UMakeHumanAnimInstance* Soft = MakeHumanMesh ? Cast<UMakeHumanAnimInstance>(MakeHumanMesh->GetAnimInstance()) : nullptr)
+	{
+		Soft->AddBlastKick(Centre, Speed, RadiusCm);
+		++FleshKicks;
+	}
 }
 
 void ASimPawnActor::PushRagdollAt(const FVector& At, const FVector& Impulse)

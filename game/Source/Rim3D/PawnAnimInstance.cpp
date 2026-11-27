@@ -531,6 +531,7 @@ private:
 	float SourceWeight = 1.0f;
 	float TotalNodeWeight = 0.0f;
 	TArray<float> BoneWeights;  // by compact pose index: 0 the legs and hips, 1 under spine_01
+	TArray<uint8> ArmBones;     // by compact pose index: 1 for a clavicle and everything under it
 	FCompactPoseBoneIndex Pelvis = FCompactPoseBoneIndex(INDEX_NONE);
 	FCompactPoseBoneIndex Spine = FCompactPoseBoneIndex(INDEX_NONE);
 };
@@ -1010,6 +1011,9 @@ void FSimPawnUpperSlotNode::CacheBones_AnyThread(const FAnimationCacheBonesConte
 	{
 		return;
 	}
+	const int32 ClavicleL = Ref.FindBoneIndex(TEXT("clavicle_l"));
+	const int32 ClavicleR = Ref.FindBoneIndex(TEXT("clavicle_r"));
+	ArmBones.SetNumZeroed(Count);
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		const int32 RefIndex = Bones.MakeMeshPoseIndex(FCompactPoseBoneIndex(Index)).GetInt();
@@ -1018,6 +1022,14 @@ void FSimPawnUpperSlotNode::CacheBones_AnyThread(const FAnimationCacheBonesConte
 			if (At == SpineRef)
 			{
 				BoneWeights[Index] = 1.0f;
+				break;
+			}
+		}
+		for (int32 At = RefIndex; At != INDEX_NONE; At = Ref.GetParentIndex(At))
+		{
+			if (At == ClavicleL || At == ClavicleR)
+			{
+				ArmBones[Index] = 1;
 				break;
 			}
 		}
@@ -1084,10 +1096,22 @@ void FSimPawnUpperSlotNode::EvaluateSlotted(FPoseContext& Output)
 		}
 	}
 	Output.Pose[Spine].SetRotation((LocoPelvis.Inverse() * SlottedSpine).GetNormalized());
+	// A hit react or stagger leaves the arms as they were beneath it (in their own frames, so they ride the reeling chest).
+	const float ArmsKept = Proxy ? FMath::Clamp(Proxy->Inputs.UpperArmsKept, 0.0f, 1.0f) : 0.0f;
 	for (FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
 	{
 		if (BoneWeights[Bone.GetInt()] > 0.0f)
 		{
+			if (ArmsKept > 0.0f && ArmBones.IsValidIndex(Bone.GetInt()) && ArmBones[Bone.GetInt()])
+			{
+				if (ArmsKept < 1.0f)
+				{
+					FTransform Mixed = Slotted.Pose[Bone];
+					Mixed.BlendWith(Output.Pose[Bone], ArmsKept);
+					Output.Pose[Bone] = Mixed;
+				}
+				continue;
+			}
 			Output.Pose[Bone] = Slotted.Pose[Bone];
 		}
 	}

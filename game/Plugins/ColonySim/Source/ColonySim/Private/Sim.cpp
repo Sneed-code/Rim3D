@@ -3230,7 +3230,7 @@ void Sim::writeSnapshot(Snapshot& out) const {
             }
             view.grenades = explosives_->count(entity);
             view.throwReadyIn = explosives_->throwReadyIn(entity);
-            view.knockedDown = combat_->knockedDownFor(entity) > 0;
+            view.knockedDown = combat_->knockedDownFor(entity) > 0 && !combat_->gettingUp(entity);
             view.staggeredFor = combat_->staggeredFor(entity);
             if (const Stunned* stunned = reg.try_get<Stunned>(entity)) {
                 view.stunnedFor = stunned->stepsLeft;

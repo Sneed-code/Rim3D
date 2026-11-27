@@ -175,6 +175,11 @@ struct DodgeRoll {
 struct KnockedDown {
     int stepsLeft = 0;
     Stance before = Stance::Standing;
+    // Down until stepsLeft and the fall's clip are over, then getting up (MotionRules getUpClip) for stepsLeft more
+    // steps, still unable to act: up on its feet, never snapped up (sneed 2026-11-27).
+    bool gettingUp = false;
+    // Which way the fall threw it (BodyMotionSystem::knockdownSide), -1 unknown: the get-up starts lying that way.
+    int side = -1;
 };
 
 // On a pawn staggered by a bullet whose stopping power is at least its body size (RimWorld's rule,
@@ -578,6 +583,8 @@ public:
     bool breakWindow(Entity wall, float x, float y, float z, Entity by = kNoEntity);
     // Steps left of a pawn's knock-down (0: not knocked down).
     int knockedDownFor(Entity pawn) const;
+    // Knocked down and on the way up now (the get-up clip has the body; no longer lying).
+    bool gettingUp(Entity pawn) const;
     // Steps left of a bullet's stagger (0: not staggered), and the share of its walking speed it keeps now.
     int staggeredFor(Entity pawn) const;
     float staggerSpeedFactor(Entity pawn) const;
