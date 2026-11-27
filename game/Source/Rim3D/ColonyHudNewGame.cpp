@@ -51,7 +51,9 @@ namespace
 	// The character screen's stage (cosmetic): the hour the sky is held at, the key light (candelas, real units like the
 	// sun's lux in data/look.json), and how far out from the body the camera's line must be clear of trees.
 	constexpr float NgPreviewHour = 10.5f;
-	constexpr float NgPreviewLampIntensity = 60000.0f;
+	// 24000 cd: brighter (60000 until 2026-11-27) pushed lit dark skin past what the subsurface scattering keeps and it came
+	// out white (the brightest of 0.3x/0.4x/0.5x with no white on the Melanesian preset; 0.5x clipped on the chest).
+	constexpr float NgPreviewLampIntensity = 24000.0f;
 	constexpr float NgPreviewClearMetres = 5.5f;
 	// Plants within this many metres of a person on show are not drawn while the screen is open (a cosmetic clearing).
 	constexpr float NgPreviewClearingMetres = 3.5f;
