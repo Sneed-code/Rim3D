@@ -34,7 +34,7 @@ and you stand stunned for `guardBreakSteps`. Only the player's bar is shown, gre
 ## Attacks
 
 Each press is one attack (no auto repeat). Kinds: Light (a click), Heavy (hold the attack button past
-`Melee.HeavyHoldSeconds`, 0.22 s; sneed 2026-11-27, Shift + click is gone; its own clips, an overhead blow then a slash),
+`Melee.HeavyHoldSeconds`, 0.22 s; sneed 2026-11-27, Shift + click is gone; its own clips, a big slash then an overhead blow),
 Charged (keep holding the heavy:
 the windup pauses at `chargeShare` until let go or `maxChargeSteps`; held `minChargeSteps` or more it is Charged),
 Running (attack while sprinting), RunningHeavy, Jump and JumpHeavy (attack in the air: the jump gives way to the

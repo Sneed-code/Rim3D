@@ -128,6 +128,21 @@ namespace
 	FString DuelSmokeOutfit(colony::Sim& Sim, colony::Entity Pawn, const colony::CellPos& Cell)
 	{
 		std::string Why;
+		// The same plain clothes for both (a spawned opponent came with none and fought naked, PC 2026-11-27).
+		const std::vector<colony::Entity> Worn = Sim.apparel().worn(Pawn);
+		for (const colony::Entity Item : Worn)
+		{
+			std::string Ignored;
+			Sim.apparel().takeOff(Pawn, Item, Ignored);
+		}
+		for (const char* Garment : {"Apparel_TShirt", "Apparel_Pants"})
+		{
+			const colony::Entity Piece = Sim.apparel().make(Sim.defs().idOf("Things", Garment), Sim.defs().idOf("Things", "Cloth"), 2, Cell, &Why);
+			if (Piece == colony::kNoEntity || !Sim.apparel().putOn(Pawn, Piece, Why))
+			{
+				return FString::Printf(TEXT("could not put on %s: %s"), UTF8_TO_TCHAR(Garment), UTF8_TO_TCHAR(Why.c_str()));
+			}
+		}
 		const colony::Entity Shield = Sim.apparel().make(Sim.defs().idOf("Things", "Apparel_ShieldMedium"), Sim.defs().idOf("Things", "Steel"), -1, Cell, &Why);
 		if (Shield == colony::kNoEntity || !Sim.apparel().putOn(Pawn, Shield, Why))
 		{

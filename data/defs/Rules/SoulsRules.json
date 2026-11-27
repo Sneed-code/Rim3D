@@ -72,7 +72,7 @@
         "weaponPoise": 12,
         "clips": {
           "Light": ["Motion_OneHand_Slash1", "Motion_SS_Attack4", "Motion_OneHand_Slash3"],
-          "Heavy": ["Motion_SS_Overhead", "Motion_SS_Slash4"],
+          "Heavy": ["Motion_SS_Slash4", "Motion_SS_Overhead"],
           "Running": ["Motion_SS_Attack3"],
           "RunningHeavy": ["Motion_OneHand_Attack2"],
           "Jump": ["Motion_SS_Jump"],

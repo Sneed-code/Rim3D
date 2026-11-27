@@ -4,7 +4,7 @@ Updated 2026-11-27.
 
 Sword and shield follow-up (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`): **heavy attack**
 is holding left click (0.22 s, `Melee.HeavyHoldSeconds`; kept held it charges), Shift + click is gone, and the heavy has
-its own clips (the sword and shield overhead blow, then slash 4). **Critical attacks** as Elden Ring has them: a click at
+its own clips (the sword and shield slash 4, then the overhead blow). **Critical attacks** as Elden Ring has them: a click at
 a foe reeling from a poise or guard break is a riposte (the sword lunge through the chest, 3.2x), one from behind a
 backstab (2.6x); both catch the victim, can't be blocked, always land and throw it to the ground; any press at a foe
 knocked down is a stab on the ground (1.8x); downed bodies keep the old finishers. **Auto lock-on** to an enemy who swings

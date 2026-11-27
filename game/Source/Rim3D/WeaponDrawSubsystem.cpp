@@ -1738,6 +1738,17 @@ void UWeaponDrawSubsystem::UpdateShield(ASimPawnActor& Actor, const colony::Thin
 	FTransform OnArm = Lowered;
 	if (bArm)
 	{
+		// The def's `hold.main` is for the plain shapes, which hang down from their origin; the real models (ShieldArt,
+		// tools/shield_models.py) have theirs in the middle, so the straps sat 37 cm below the arm and the shield rode at
+		// head height (sneed 2026-11-27). On a model the straps are the middle of its back face.
+		const UStaticMesh* Drawn = Pawn.Shield.IsValid() ? Pawn.Shield->GetStaticMesh() : nullptr;
+		if (Drawn && Drawn->GetPathName().StartsWith(TEXT("/Game/")))
+		{
+			const FBox Box = Drawn->GetBoundingBox();
+			Hold.main.x = static_cast<float>(Box.Min.X);
+			Hold.main.y = static_cast<float>(Box.GetCenter().Y);
+			Hold.main.z = static_cast<float>(Box.GetCenter().Z);
+		}
 		OnArm = HoldDraw::WeaponWorld(Frame, Hold, Gear.size);
 	}
 	// With the arm's bones it always stays on the forearm (sneed 2026-11-27: it floated in front of the head whenever the
