@@ -172,10 +172,18 @@
       "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/animals/cobra_bake.py", "--"]}]
     },
     {
+      "name": "leopard-glb",
+      "what": "Write the Fab leopard (our panther) as a GLB with each motion on its own frames (assets/raw/fab/leopard-hybrid-a2)",
+      "inputs": ["tools/animals/leopard_glb.py"],
+      "needs": ["blender"],
+      "makes": ["assets/raw/fab/leopard-hybrid-a2/Leopard.glb"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/animals/leopard_glb.py", "--"]}]
+    },
+    {
       "name": "animal-art",
       "what": "Animals",
       "inputs": ["assets/animal_art.json"],
-      "after": ["animal-glb-join", "codex-models", "cobra-bake"],
+      "after": ["animal-glb-join", "codex-models", "cobra-bake", "leopard-glb"],
       "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab", "assets/raw/codex", "assets/raw/fab/leopard-hybrid-a2", "assets/raw/fab/snake-cobra"],
       "run": [{"commandlet": "AnimalArt", "args": ["-nullrhi"]}]
     },
