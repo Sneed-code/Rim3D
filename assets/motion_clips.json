@@ -292,14 +292,17 @@
     },
     {
       "defName": "Motion_SS_Overhead",
+      "kind": "Attack",
       "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldAttack"
     },
     {
       "defName": "Motion_SS_Slash4",
+      "kind": "Attack",
       "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldSlash4"
     },
     {
       "defName": "Motion_SS_Riposte",
+      "kind": "Attack",
       "anim": "SwordLunge/A_SwordLunge",
       "from": 0.1,
       "to": 1.6,
