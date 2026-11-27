@@ -121,6 +121,10 @@ void USimAnimalSubsystem::LoadArtTable()
 			{
 				FitFromPose.Add(ModelName);
 			}
+			if (bool bRecentre = false; Entry->TryGetBoolField(TEXT("recentre"), bRecentre) && bRecentre)
+			{
+				Recentred.Add(ModelName);
+			}
 			if (double Fix = 1.0; Entry->TryGetNumberField(TEXT("sizeFix"), Fix) && Fix > 0.0)
 			{
 				SizeFixes.Add(ModelName, static_cast<float>(Fix));
@@ -253,6 +257,7 @@ const FSimAnimalModel* USimAnimalSubsystem::GetModelFor(FName DefName, FSimAnima
 		Model.WantedLengthCm = WantedLength ? *WantedLength : 0.0f;
 		Model.bFitFromPose = Model.WantedLengthCm > 0.0f && FitFromPose.Contains(OutArt.Model);
 		Model.SizeFix = SizeFixes.Contains(OutArt.Model) ? SizeFixes[OutArt.Model] : 1.0f;
+		Model.bRecentre = Model.bFitFromPose && Recentred.Contains(OutArt.Model);
 		Model.FitScale *= Model.SizeFix;
 		Model.bLoaded = true;
 		KeepAlive.Add(Model.Mesh);

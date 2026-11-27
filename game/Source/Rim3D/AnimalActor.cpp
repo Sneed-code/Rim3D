@@ -83,9 +83,44 @@ void ASimAnimalActor::FitToPose(float InArtScale)
 	Body->TickAnimation(0.0f, false);
 	Body->RefreshBoneTransforms();
 	FBox Box(ForceInit);
-	for (const FTransform& Bone : Body->GetComponentSpaceTransforms())
+	const TArray<FTransform>& Bones = Body->GetComponentSpaceTransforms();
+	if (Model.bRecentre && Bones.Num() >= 8)
 	{
-		Box += Bone.GetLocation();
+		// The body is far from the file's origin but its top bones stay there (the leopard's RL_BoneRoot and pivots):
+		// measure only the bones near the skeleton's middle (the median, per axis), within three times their median
+		// distance from it, so a few far-off bones don't stretch the box.
+		TArray<double> Xs, Ys, Zs;
+		for (const FTransform& Bone : Bones)
+		{
+			Xs.Add(Bone.GetLocation().X);
+			Ys.Add(Bone.GetLocation().Y);
+			Zs.Add(Bone.GetLocation().Z);
+		}
+		Xs.Sort();
+		Ys.Sort();
+		Zs.Sort();
+		const FVector Middle(Xs[Xs.Num() / 2], Ys[Ys.Num() / 2], Zs[Zs.Num() / 2]);
+		TArray<double> Distances;
+		for (const FTransform& Bone : Bones)
+		{
+			Distances.Add(FVector::Dist(Bone.GetLocation(), Middle));
+		}
+		Distances.Sort();
+		const double Reach = FMath::Max(3.0 * Distances[Distances.Num() / 2], 1.0);
+		for (const FTransform& Bone : Bones)
+		{
+			if (FVector::Dist(Bone.GetLocation(), Middle) <= Reach)
+			{
+				Box += Bone.GetLocation();
+			}
+		}
+	}
+	else
+	{
+		for (const FTransform& Bone : Bones)
+		{
+			Box += Bone.GetLocation();
+		}
 	}
 	if (!Box.IsValid)
 	{
@@ -101,6 +136,10 @@ void ASimAnimalActor::FitToPose(float InArtScale)
 	const double Fit = Model.WantedLengthCm * 0.9 / Span * Model.SizeFix;
 	ArtScale = static_cast<float>(InArtScale * Fit);
 	PoseHalfSize = Size * 0.5;
+	if (Model.bRecentre)
+	{
+		PoseCentre = FVector(Box.GetCenter().X, Box.GetCenter().Y, 0.0);
+	}
 	// The mesh's bounds are in the file's other unit: grow them to the posed size so the body is not culled.
 	const double MeshSpan = FMath::Max(Model.Extent.X, Model.Extent.Y) * 2.0;
 	Body->SetBoundsScale(static_cast<float>(FMath::Clamp(MeshSpan > 0.01 ? Span / MeshSpan : 1.0, 1.0, 1000.0)));
@@ -115,15 +154,22 @@ void ASimAnimalActor::FitToPose(float InArtScale)
 void ASimAnimalActor::PlaceBody(bool bOnSide)
 {
 	const FQuat Facing = FRotator(0.0, Model.YawOffset, 0.0).Quaternion();
+	bBodyOnSide = bOnSide;
 	if (!bOnSide)
 	{
-		Body->SetRelativeLocationAndRotation(FVector::ZeroVector, Facing);
+		Body->SetRelativeLocationAndRotation(BodyOffset(Facing), Facing);
 		return;
 	}
 	// Rolled onto its side about the actor's forward axis, lifted by half its width so it lies on the ground.
 	const FVector Size = !PoseHalfSize.IsNearlyZero() ? PoseHalfSize : Model.Mesh ? Model.Mesh->GetBounds().BoxExtent : FVector(20.0);
 	const FVector Side = Facing.RotateVector(FVector(Size.X, Size.Y, 0.0)).GetAbs();
-	Body->SetRelativeLocationAndRotation(FVector(0.0, 0.0, Side.Y * DrawScale), FQuat(FVector::ForwardVector, UE_HALF_PI) * Facing);
+	const FQuat OnSide = FQuat(FVector::ForwardVector, UE_HALF_PI) * Facing;
+	Body->SetRelativeLocationAndRotation(FVector(0.0, 0.0, Side.Y * DrawScale) - OnSide.RotateVector(PoseCentre * DrawScale), OnSide);
+}
+
+FVector ASimAnimalActor::BodyOffset(const FQuat& Facing) const
+{
+	return PoseCentre.IsNearlyZero() ? FVector::ZeroVector : -Facing.RotateVector(PoseCentre * DrawScale);
 }
 
 float ASimAnimalActor::GetDrawLengthCm() const
@@ -223,6 +269,10 @@ void ASimAnimalActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::T
 	const int32 Stage = Now.lifeStage < 0 ? 2 : FMath::Clamp(Now.lifeStage, 0, 2);
 	DrawScale = ArtScale * AnimalStageScale[Stage];
 	Body->SetRelativeScale3D(FVector(DrawScale));
+	if (!PoseCentre.IsNearlyZero() && !bBodyOnSide)
+	{
+		Body->SetRelativeLocation(BodyOffset(FRotator(0.0, Model.YawOffset, 0.0).Quaternion()));
+	}
 
 	// Animation runs at the game's speed and stops while paused.
 	Body->GlobalAnimRateScale = static_cast<float>(Speed);

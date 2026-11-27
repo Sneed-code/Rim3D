@@ -84,6 +84,13 @@ private:
 	bool bPoseSet = false;
 	float ArtScale = 1.0f;
 	float DrawScale = 1.0f;
+	/** For a `"recentre"` model: the middle of its skeleton across the ground in the idle pose (mesh space, cm), which
+	 *  the body is moved back by so it stands over the actor; zero for the rest. */
+	FVector PoseCentre = FVector::ZeroVector;
+	/** True while the body lies on its side (PlaceBody). */
+	bool bBodyOnSide = false;
+	/** The body's place under the actor: zero, or back by PoseCentre at the drawn scale. */
+	FVector BodyOffset(const FQuat& Facing) const;
 	float Yaw = 0.0f;
 	float SwimLiftCm = 0.0f;
 	/** Game time a one-shot fight clip (Attack, Shoot) began, and how long it lasts; -1 for none under way. */
