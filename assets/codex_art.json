@@ -1368,6 +1368,294 @@
   },
   "Boomrat": {
    "kind": "creature"
+  },
+  "SleeperShard": {
+   "kind": "item",
+   "def": "SleeperShard",
+   "size": [
+    0.161,
+    0.161,
+    0.18
+   ]
+  },
+  "ProstheticArm": {
+   "kind": "item",
+   "def": "ProstheticArm",
+   "size": [
+    0.718,
+    0.301,
+    0.118
+   ]
+  },
+  "ProstheticLeg": {
+   "kind": "item",
+   "def": "ProstheticLeg",
+   "size": [
+    0.942,
+    0.319,
+    0.197
+   ]
+  },
+  "BionicEye": {
+   "kind": "item",
+   "def": "BionicEye",
+   "size": [
+    0.1,
+    0.071,
+    0.04
+   ]
+  },
+  "BionicEar": {
+   "kind": "item",
+   "def": "BionicEar",
+   "size": [
+    0.1,
+    0.07,
+    0.039
+   ]
+  },
+  "WeaponPart_Scope": {
+   "kind": "item",
+   "def": "WeaponPart_Scope",
+   "size": [
+    0.33,
+    0.071,
+    0.144
+   ]
+  },
+  "WeaponPart_ExtendedMagazine": {
+   "kind": "item",
+   "def": "WeaponPart_ExtendedMagazine",
+   "size": [
+    0.327,
+    0.103,
+    0.03
+   ]
+  },
+  "WeaponPart_LongBarrel": {
+   "kind": "item",
+   "def": "WeaponPart_LongBarrel",
+   "size": [
+    0.6,
+    0.059,
+    0.061
+   ]
+  },
+  "WeaponPart_Compensator": {
+   "kind": "item",
+   "def": "WeaponPart_Compensator",
+   "size": [
+    0.08,
+    0.05,
+    0.03
+   ]
+  },
+  "WeaponPart_HairTrigger": {
+   "kind": "item",
+   "def": "WeaponPart_HairTrigger",
+   "size": [
+    0.138,
+    0.107,
+    0.056
+   ]
+  },
+  "WoodenHand": {
+   "kind": "item",
+   "def": "WoodenHand",
+   "size": [
+    0.24,
+    0.1,
+    0.06
+   ]
+  },
+  "Flake": {
+   "kind": "item",
+   "def": "Flake",
+   "size": [
+    0.105,
+    0.071,
+    0.027
+   ]
+  },
+  "Yayo": {
+   "kind": "item",
+   "def": "Yayo",
+   "size": [
+    0.093,
+    0.067,
+    0.027
+   ]
+  },
+  "WakeUp": {
+   "kind": "item",
+   "def": "WakeUp",
+   "size": [
+    0.106,
+    0.048,
+    0.011
+   ]
+  },
+  "Luciferium": {
+   "kind": "item",
+   "def": "Luciferium",
+   "size": [
+    0.11,
+    0.061,
+    0.037
+   ]
+  },
+  "Hops": {
+   "kind": "item",
+   "def": "Hops",
+   "size": [
+    0.22,
+    0.16,
+    0.08
+   ]
+  },
+  "Composite": {
+   "kind": "item",
+   "def": "Composite",
+   "size": [
+    0.41,
+    0.302,
+    0.061
+   ]
+  },
+  "Copper": {
+   "kind": "item",
+   "def": "Copper",
+   "size": [
+    0.249,
+    0.145,
+    0.072
+   ]
+  },
+  "RawPotatoes": {
+   "kind": "item",
+   "def": "RawPotatoes",
+   "size": [
+    0.24,
+    0.182,
+    0.095
+   ]
+  },
+  "Strawberries": {
+   "kind": "item",
+   "def": "Strawberries",
+   "size": [
+    0.189,
+    0.144,
+    0.066
+   ]
+  },
+  "DevilstrandCloth": {
+   "kind": "item",
+   "def": "DevilstrandCloth",
+   "size": [
+    0.301,
+    0.23,
+    0.105
+   ]
+  },
+  "Synthread": {
+   "kind": "item",
+   "def": "Synthread",
+   "size": [
+    0.282,
+    0.219,
+    0.098
+   ]
+  },
+  "Hyperweave": {
+   "kind": "item",
+   "def": "Hyperweave",
+   "size": [
+    0.3,
+    0.222,
+    0.082
+   ]
+  },
+  "PlantFibre": {
+   "kind": "item",
+   "def": "PlantFibre",
+   "size": [
+    0.316,
+    0.186,
+    0.069
+   ]
+  },
+  "WoodenFoot": {
+   "kind": "item",
+   "def": "WoodenFoot",
+   "size": [
+    0.26,
+    0.114,
+    0.142
+   ]
+  },
+  "Stool": {
+   "kind": "building",
+   "def": "Stool",
+   "size": [
+    0.383,
+    0.381,
+    0.454
+   ]
+  },
+  "DiningChair": {
+   "kind": "building",
+   "def": "DiningChair",
+   "size": [
+    0.484,
+    0.532,
+    0.95
+   ]
+  },
+  "Table1x2": {
+   "kind": "building",
+   "def": "Table1x2",
+   "size": [
+    0.951,
+    1.9,
+    0.783
+   ]
+  },
+  "Table2x2": {
+   "kind": "building",
+   "def": "Table2x2",
+   "size": [
+    1.9,
+    1.9,
+    0.784
+   ]
+  },
+  "Table2x4": {
+   "kind": "building",
+   "def": "Table2x4",
+   "size": [
+    1.905,
+    3.904,
+    0.784
+   ]
+  },
+  "PlantPot": {
+   "kind": "building",
+   "def": "PlantPot",
+   "size": [
+    0.799,
+    0.791,
+    0.928
+   ]
+  },
+  "CraftingSpot": {
+   "kind": "building",
+   "def": "CraftingSpot",
+   "size": [
+    0.901,
+    0.708,
+    0.252
+   ]
   }
  },
  "buildings": [
@@ -3131,6 +3419,358 @@
     "fbx": "assets/raw/codex/Uranium/Uranium_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/Uranium",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "SleeperShard",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "SleeperShard",
+    "fbx": "assets/raw/codex/SleeperShard/SleeperShard_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/SleeperShard",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ProstheticArm",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ProstheticArm",
+    "fbx": "assets/raw/codex/ProstheticArm/ProstheticArm_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ProstheticArm",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ProstheticLeg",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ProstheticLeg",
+    "fbx": "assets/raw/codex/ProstheticLeg/ProstheticLeg_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ProstheticLeg",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BionicEye",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicEye",
+    "fbx": "assets/raw/codex/BionicEye/BionicEye_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicEye",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BionicEar",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BionicEar",
+    "fbx": "assets/raw/codex/BionicEar/BionicEar_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BionicEar",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WeaponPart_Scope",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WeaponPart_Scope",
+    "fbx": "assets/raw/codex/WeaponPart_Scope/WeaponPart_Scope_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WeaponPart_Scope",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WeaponPart_ExtendedMagazine",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WeaponPart_ExtendedMagazine",
+    "fbx": "assets/raw/codex/WeaponPart_ExtendedMagazine/WeaponPart_ExtendedMagazine_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WeaponPart_ExtendedMagazine",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WeaponPart_LongBarrel",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WeaponPart_LongBarrel",
+    "fbx": "assets/raw/codex/WeaponPart_LongBarrel/WeaponPart_LongBarrel_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WeaponPart_LongBarrel",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WeaponPart_Compensator",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WeaponPart_Compensator",
+    "fbx": "assets/raw/codex/WeaponPart_Compensator/WeaponPart_Compensator_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WeaponPart_Compensator",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WeaponPart_HairTrigger",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WeaponPart_HairTrigger",
+    "fbx": "assets/raw/codex/WeaponPart_HairTrigger/WeaponPart_HairTrigger_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WeaponPart_HairTrigger",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodenHand",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WoodenHand",
+    "fbx": "assets/raw/codex/WoodenHand/WoodenHand_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodenHand",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Flake",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Flake",
+    "fbx": "assets/raw/codex/Flake/Flake_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Flake",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Yayo",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Yayo",
+    "fbx": "assets/raw/codex/Yayo/Yayo_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Yayo",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WakeUp",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WakeUp",
+    "fbx": "assets/raw/codex/WakeUp/WakeUp_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WakeUp",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Luciferium",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Luciferium",
+    "fbx": "assets/raw/codex/Luciferium/Luciferium_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Luciferium",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hops",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Hops",
+    "fbx": "assets/raw/codex/Hops/Hops_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hops",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Composite",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Composite",
+    "fbx": "assets/raw/codex/Composite/Composite_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Composite",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Copper",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Copper",
+    "fbx": "assets/raw/codex/Copper/Copper_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Copper",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "RawPotatoes",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "RawPotatoes",
+    "fbx": "assets/raw/codex/RawPotatoes/RawPotatoes_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/RawPotatoes",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Strawberries",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Strawberries",
+    "fbx": "assets/raw/codex/Strawberries/Strawberries_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Strawberries",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "DevilstrandCloth",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "DevilstrandCloth",
+    "fbx": "assets/raw/codex/DevilstrandCloth/DevilstrandCloth_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/DevilstrandCloth",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Synthread",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Synthread",
+    "fbx": "assets/raw/codex/Synthread/Synthread_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Synthread",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Hyperweave",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Hyperweave",
+    "fbx": "assets/raw/codex/Hyperweave/Hyperweave_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Hyperweave",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PlantFibre",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "PlantFibre",
+    "fbx": "assets/raw/codex/PlantFibre/PlantFibre_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PlantFibre",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodenFoot",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WoodenFoot",
+    "fbx": "assets/raw/codex/WoodenFoot/WoodenFoot_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodenFoot",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Stool",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Stool",
+    "fbx": "assets/raw/codex/Stool/Stool_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Stool",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "DiningChair",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "DiningChair",
+    "fbx": "assets/raw/codex/DiningChair/DiningChair_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/DiningChair",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Table1x2",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Table1x2",
+    "fbx": "assets/raw/codex/Table1x2/Table1x2_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Table1x2",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Table2x2",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Table2x2",
+    "fbx": "assets/raw/codex/Table2x2/Table2x2_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Table2x2",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Table2x4",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Table2x4",
+    "fbx": "assets/raw/codex/Table2x4/Table2x4_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Table2x4",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "PlantPot",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "PlantPot",
+    "fbx": "assets/raw/codex/PlantPot/PlantPot_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/PlantPot",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "CraftingSpot",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "CraftingSpot",
+    "fbx": "assets/raw/codex/CraftingSpot/CraftingSpot_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/CraftingSpot",
     "normalOpenGL": true
    }
   }

@@ -16,6 +16,8 @@ follows the sim between steps, and whole-body clips blend in over 0.15 s. **HUD*
 icon and label. **Mugshots**: retaken once each colonist stands still with the body built (first ones were taken
 mid-stride or before the body and hair had settled).
 
+Models batch 10 (sneed, 2026-11-27; data only, `assets/codex_art.json`): 32 more non-living models. **Codex** (GPT 6.2 Sol, high for detailed, medium for simple): Sleeper shard, prosthetic arm and leg, wooden hand and foot, bionic eye and ear, the five weapon parts, flake, yayo, wake-up, luciferium, hops, composite, copper, potatoes, strawberries, devilstrand, synthread, hyperweave, plant fibre. **Neon** (high): stool, all three tables, plant pot and crafting spot replace the placeholder shapes, and a new **dining chair** (wiki numbers, complex furniture research). Briefs in `tools/codex_assets/` and `tools/neon_assets/`; the import runs in the codex-models/codex-art art steps on the next update.
+
 Elden Ring style melee, sword and shield first (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`):
 **stamina** for every pawn (light 10, heavy 20, half on a blocked hit, roll 30, refills over 2 s, not while the guard is
 up; out of stamina breaks the guard), shown green under a red health bar top left. **Attacks**: one press one attack,
