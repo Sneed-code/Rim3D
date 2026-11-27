@@ -65,17 +65,17 @@
     "unverified": ["fillPercent"]
   },
   {
-    "defName": "Table1x2", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table1x2/SM_Table1x2.SM_Table1x2"}, "parent": "TableBase", "label": "table (1x2)",
+    "defName": "Table1x2", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table1x2/SM_Table1x2.SM_Table1x2", "mesh": "/Game/Rim3D/Generated/Buildings/Table1x2/SM_Table1x2.SM_Table1x2"}, "parent": "TableBase", "label": "table (1x2)",
     "size": [1, 2], "costStuffCount": 28,
     "stats": { "maxHitPoints": 75, "workToBuild": 1080, "beauty": 0.5 }
   },
   {
-    "defName": "Table2x2", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table2x2/SM_Table2x2.SM_Table2x2"}, "parent": "TableBase", "label": "table (2x2)",
+    "defName": "Table2x2", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table2x2/SM_Table2x2.SM_Table2x2", "mesh": "/Game/Rim3D/Generated/Buildings/Table2x2/SM_Table2x2.SM_Table2x2"}, "parent": "TableBase", "label": "table (2x2)",
     "size": [2, 2], "costStuffCount": 50,
     "stats": { "maxHitPoints": 100, "workToBuild": 2160, "beauty": 1 }
   },
   {
-    "defName": "Table2x4", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table2x4/SM_Table2x4.SM_Table2x4"}, "parent": "TableBase", "label": "table (2x4)",
+    "defName": "Table2x4", "visual": {"mesh": "/Game/Rim3D/Generated/Buildings/Table2x4/SM_Table2x4.SM_Table2x4", "mesh": "/Game/Rim3D/Generated/Buildings/Table2x4/SM_Table2x4.SM_Table2x4"}, "parent": "TableBase", "label": "table (2x4)",
     "size": [2, 4], "costStuffCount": 95,
     "stats": { "maxHitPoints": 150, "workToBuild": 4320, "beauty": 2 }
   },

@@ -158,7 +158,7 @@ TEST_CASE("Husbandry: chances follow skill and wildness, and what can be learned
     CHECK(hu.tameChance(10, muffalo) == doctest::Approx(0.5));
     CHECK(hu.tameChance(20, muffalo) == doctest::Approx(0.75));
     CHECK(hu.tameChance(10, deer) < hu.tameChance(10, muffalo));  // wilder is harder
-    CHECK(hu.tameChance(20, f.animal("Thrumbo", CellPos{50, 50, 0})) < 0.05);
+    CHECK(hu.tameChance(20, f.animal("TRex", CellPos{50, 50, 0})) < 0.05);
     CHECK(hu.trainChance(10, muffalo) == doctest::Approx(1.0));
     CHECK(hu.trainChance(0, muffalo) == doctest::Approx(0.5));
     CHECK(hu.stepsNeeded(Trainable::Obedience) == 10);

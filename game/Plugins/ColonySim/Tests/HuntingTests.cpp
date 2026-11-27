@@ -511,14 +511,14 @@ TEST_CASE("Hunting: hunters keep away from animals that turn on them, and take t
     HuntFixture f;
     f.addColonist(CellPos{10, 10, 0}, 8, true);
     const Entity bear = f.animal("GrizzlyBear", CellPos{16, 10, 0});
-    const Entity thrumbo = f.animal("Thrumbo", CellPos{16, 14, 0});
-    HUNT_REQUIRE(bear != kNoEntity && thrumbo != kNoEntity);
+    const Entity boar = f.animal("WildBoar", CellPos{16, 14, 0});
+    HUNT_REQUIRE(bear != kNoEntity && boar != kNoEntity);
     CHECK(f.sim.animals().manhunterChanceOf(bear) >= 0.1f);
-    CHECK(f.sim.animals().manhunterChanceOf(thrumbo) >= 0.1f);
+    CHECK(f.sim.animals().manhunterChanceOf(boar) >= 0.1f);
     CHECK(f.sim.animals().manhunterChanceOf(f.colonist) == 0.0f);
     std::string error;
     HUNT_REQUIRE(f.hu().markHunt(bear, true, error));
-    HUNT_REQUIRE(f.hu().markHunt(thrumbo, true, error));
+    HUNT_REQUIRE(f.hu().markHunt(boar, true, error));
     bool hunting = false;
     for (int i = 0; i < 1500; ++i) {
         f.sim.step();
@@ -528,7 +528,7 @@ TEST_CASE("Hunting: hunters keep away from animals that turn on them, and take t
     }
     CHECK_FALSE(hunting);
     CHECK_FALSE(f.dead(bear));
-    CHECK_FALSE(f.dead(thrumbo));
+    CHECK_FALSE(f.dead(boar));
     // A harmless hare marked too is hunted.
     const Entity hare = f.animal("Hare", CellPos{14, 12, 0});
     HUNT_REQUIRE(f.hu().markHunt(hare, true, error));

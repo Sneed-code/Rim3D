@@ -78,7 +78,7 @@ public:
                 if (!care.markHunt || !a.wild || pos.level != at.level || huntDead(reg, animal)) {
                     return;
                 }
-                // A bear or a thrumbo that turns on its hunter is no animal to send a colonist after.
+                // A bear or a boar that turns on its hunter is no animal to send a colonist after.
                 if (static_cast<double>(jobs.husbandry()->animals().manhunterChanceOf(animal)) >= avoidChance) {
                     return;
                 }

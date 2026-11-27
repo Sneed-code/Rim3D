@@ -2,6 +2,18 @@
 
 Updated 2026-11-27.
 
+No AI-made animals (sneed, 2026-11-27, standing rule: never make living things with Neon or Codex; data, art steps and
+Unreal): the 21 Neon creatures from batches 7 to 9 and the two chitinids are gone (art table entries, `codex_art.json`
+prep, briefs), back on their free models: monkey on the chimpanzee, cougar and boar and boomalope on the lioness and
+donkey, hare and squirrel and boomrat on the fox, yak on the buffalo, gazelle on the doe, sheep on the bighorn, duck on
+the goose, chicken, ostrich and cassowary on the guineafowl, iguana on the raptor, spelopede and megaspider on the rhino
+beetle. The **panther** is now Animated3D's free **Leopard Hybrid_A2** from Fab (a black big cat; walk, run, two idles,
+two attacks; `"recentre"` in the art table moves its body back over the actor, it stands 28 m off its file origin) and
+the **cobra** DaVe inc.'s free Fab cobra, its path-driven slither baked in place by the new `cobra-bake` art step.
+The **thrumbo is out of the game** (def, meat, leather, sounds; a T-rex replaces it); the tortoise has no free model
+yet and doesn't spawn. The duel lag the same day was not the game: another session's sound-effects job filled the
+16 GB graphics card (the game ran at 2 frames a second even on the title screen).
+
 Sword and shield follow-up (sneed, 2026-11-27; sim, data and Unreal; `docs/design/souls-combat.md`): **heavy attack**
 is holding left click (0.22 s, `Melee.HeavyHoldSeconds`; kept held it charges), Shift + click is gone, and the heavy has
 its own clips (the sword and shield slash 4, then the overhead blow). **Critical attacks** as Elden Ring has them: a click at

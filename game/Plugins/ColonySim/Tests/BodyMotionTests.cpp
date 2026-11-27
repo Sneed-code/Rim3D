@@ -282,11 +282,11 @@ TEST_CASE("Motion: bodies don't pass through each other: an equal body is shoved
     CHECK(motionTestPos(*sim, mover).x < moverStart + 3.0f * motion.sizeScale(mover) - 0.5f);  // and it cost the mover ground
     CHECK(motion.shoves() > 0);
 
-    // The same dash into a thrumbo: it barely moves, and the man is stopped at its flank.
+    // The same dash into an elephant: it barely moves, and the man is stopped at its flank.
     auto sim2 = motionTestSim();
     BodyMotionSystem& motion2 = sim2->combat().motion();
     const Entity runner = motionTestPawn(*sim2, 20.5f, 30.5f);
-    const Entity beast = motionTestPawn(*sim2, 23.0f, 30.5f, nullptr, "Thrumbo");
+    const Entity beast = motionTestPawn(*sim2, 23.0f, 30.5f, nullptr, "Elephant");
     sim2->stepMany(3);
     motionTestFace(*sim2, runner, 1.0f, 0.0f);
     const Position beastStart = motionTestPos(*sim2, beast);
@@ -455,7 +455,7 @@ TEST_CASE("Motion: how close a fighter must be follows its height, its weapon an
     const Entity knife = motionTestPawn(*sim, 20.5f, 20.5f, "Melee_Knife");
     const Entity spear = motionTestPawn(*sim, 22.5f, 20.5f, "Melee_Spear");
     const Entity man = motionTestPawn(*sim, 30.5f, 20.5f);
-    const Entity beast = motionTestPawn(*sim, 40.5f, 20.5f, nullptr, "Thrumbo");
+    const Entity beast = motionTestPawn(*sim, 40.5f, 20.5f, nullptr, "Elephant");
     sim->stepMany(3);
     entt::registry& reg = sim->things().registry();
     reg.get_or_emplace<PawnLooks>(knife).height = 1.0f;
@@ -463,7 +463,7 @@ TEST_CASE("Motion: how close a fighter must be follows its height, its weapon an
     const MeleeSystem& melee = sim->melee();
     // The weapon.
     CHECK(melee.engageDistance(spear, man) > melee.engageDistance(knife, man) + 0.5f);
-    // The target's size: a thrumbo's flank is nearer than its centre.
+    // The target's size: an elephant's flank is nearer than its centre.
     CHECK(melee.engageDistance(knife, beast) > melee.engageDistance(knife, man) + 0.2f);
     // The attacker's height: a tall fighter reaches further, a short one less.
     const float average = melee.reach(knife);
@@ -474,7 +474,7 @@ TEST_CASE("Motion: how close a fighter must be follows its height, its weapon an
     CHECK(tall > average);
     CHECK(small < average);
     CHECK(tall - small == doctest::Approx(average * 0.21f * melee.rules().reachHeightFollow).epsilon(0.01));
-    // And inReach agrees: at the thrumbo's flank the knife reaches, at the same distance from a man's centre it doesn't.
+    // And inReach agrees: at the elephant's flank the knife reaches, at the same distance from a man's centre it doesn't.
     reg.get<PawnLooks>(knife).height = 1.0f;
     Position& p = reg.get<Position>(knife);
     const float d = melee.engageDistance(knife, beast);

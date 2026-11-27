@@ -164,11 +164,19 @@
       "run": [{"python": ["tools/animals/glb_merge.py"]}]
     },
     {
+      "name": "cobra-bake",
+      "what": "Bake the Fab cobra's path-driven slither into one in-place clip (assets/raw/fab/snake-cobra)",
+      "inputs": ["tools/animals/cobra_bake.py"],
+      "needs": ["blender"],
+      "makes": ["assets/raw/fab/snake-cobra/source/Cobra.glb"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/animals/cobra_bake.py", "--"]}]
+    },
+    {
       "name": "animal-art",
       "what": "Animals",
       "inputs": ["assets/animal_art.json"],
-      "after": ["animal-glb-join", "codex-models"],
-      "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab", "assets/raw/codex"],
+      "after": ["animal-glb-join", "codex-models", "cobra-bake"],
+      "raw": ["game/Content/ThirdParty/Animals", "assets/raw/sketchfab", "assets/raw/codex", "assets/raw/fab/leopard-hybrid-a2", "assets/raw/fab/snake-cobra"],
       "run": [{"commandlet": "AnimalArt", "args": ["-nullrhi"]}]
     },
     {

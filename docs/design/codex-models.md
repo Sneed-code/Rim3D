@@ -1,5 +1,11 @@
 # Codex models: the 15 things free Fab didn't have
 
+> **Rule (sneed, 2026-11-27, standing): never make living things (animals, insects, any creature) with Neon or
+> Codex.** They looked awful. Living things come from free Fab or Sketchfab models only; Neon and Codex make
+> machines (mechanoids), buildings and items. The AI-made animals (batches 7 to 9, PRs #472, #476, #481) and the
+> two chitinids were taken out again and their briefs deleted.
+
+
 sneed asked on 2026-11-19 for 15 models the game needs that free Fab doesn't have, made with Codex (GPT 6.2 Sol)
 on his PC. Fab was searched first (free listings); good free models exist for the frag grenade, a single-tube
 rocket launcher (the doomsday launcher), an EMP-style grenade, solar panels, a wind turbine and a ration pack, so
