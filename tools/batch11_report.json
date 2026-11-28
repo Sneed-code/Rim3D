@@ -1,0 +1,326 @@
+[
+  {
+    "name": "Door",
+    "maker": "neon high",
+    "problems": [],
+    "minutes": 21.8,
+    "size": [
+      0.74,
+      0.1,
+      2.15
+    ],
+    "triangles": 4786,
+    "sheet": true,
+    "anim_gif": false,
+    "note": "no animation in brief, so no gif (correct)"
+  },
+  {
+    "name": "Stairs",
+    "maker": "neon high",
+    "problems": [
+      "height 3.886 m includes the handrail above the 3.0 m top tread (treads per brief); footprint 1.0 x 3.0 as asked"
+    ],
+    "minutes": 21.4,
+    "size": [
+      1.0,
+      3.0,
+      3.886
+    ],
+    "triangles": 6478,
+    "sheet": true,
+    "anim_gif": false,
+    "note": "no animation in brief, so no gif (correct)"
+  },
+  {
+    "name": "Ladder",
+    "maker": "neon high",
+    "problems": [
+      "depth 1.19 m, ~0.13 m more than the 1 m cell plus rails; check top hooks/overhang on import"
+    ],
+    "minutes": 23.7,
+    "size": [
+      0.823,
+      1.19,
+      3.019
+    ],
+    "triangles": 3828,
+    "sheet": true,
+    "anim_gif": false,
+    "note": "no animation in brief, so no gif (correct)"
+  },
+  {
+    "name": "Gun_HeavyChargeBlaster",
+    "maker": "neon high",
+    "problems": [],
+    "minutes": 16.2,
+    "size": [
+      1.562,
+      0.262,
+      0.331
+    ],
+    "triangles": 19214,
+    "sheet": true,
+    "anim_gif": false,
+    "note": "no animation in brief, so no gif (correct)"
+  },
+  {
+    "name": "MealSimple",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 13.9,
+    "size": [
+      0.2,
+      0.205,
+      0.088
+    ],
+    "triangles": 2935,
+    "sheet": true
+  },
+  {
+    "name": "MealFine",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 16.1,
+    "size": [
+      0.28,
+      0.28,
+      0.079
+    ],
+    "triangles": 3857,
+    "sheet": true
+  },
+  {
+    "name": "Meat",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 12.8,
+    "size": [
+      0.26,
+      0.201,
+      0.083
+    ],
+    "triangles": 2492,
+    "sheet": true
+  },
+  {
+    "name": "WoodLog",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 11.5,
+    "size": [
+      0.563,
+      0.298,
+      0.221
+    ],
+    "triangles": 2928,
+    "sheet": true
+  },
+  {
+    "name": "Leather",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 16.2,
+    "size": [
+      0.403,
+      0.26,
+      0.138
+    ],
+    "triangles": 1992,
+    "sheet": true
+  },
+  {
+    "name": "Wool",
+    "maker": "codex high",
+    "problems": [],
+    "minutes": 15.0,
+    "size": [
+      0.34,
+      0.26,
+      0.2
+    ],
+    "triangles": 2496,
+    "sheet": true
+  },
+  {
+    "name": "ChunkGranite",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.7,
+    "size": [
+      0.6,
+      0.5,
+      0.32
+    ],
+    "triangles": 2850,
+    "sheet": true
+  },
+  {
+    "name": "ChunkLimestone",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.5,
+    "size": [
+      0.6,
+      0.48,
+      0.3
+    ],
+    "triangles": 2944,
+    "sheet": true
+  },
+  {
+    "name": "ChunkSandstone",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.8,
+    "size": [
+      0.62,
+      0.5,
+      0.3
+    ],
+    "triangles": 2952,
+    "sheet": true
+  },
+  {
+    "name": "ChunkSlate",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.4,
+    "size": [
+      0.62,
+      0.46,
+      0.26
+    ],
+    "triangles": 2808,
+    "sheet": true
+  },
+  {
+    "name": "ChunkMarble",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 9.9,
+    "size": [
+      0.58,
+      0.5,
+      0.32
+    ],
+    "triangles": 2844,
+    "sheet": true
+  },
+  {
+    "name": "BlocksGranite",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 10.7,
+    "size": [
+      0.407,
+      0.315,
+      0.197
+    ],
+    "triangles": 2298,
+    "sheet": true
+  },
+  {
+    "name": "BlocksLimestone",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.1,
+    "size": [
+      0.411,
+      0.316,
+      0.193
+    ],
+    "triangles": 2400,
+    "sheet": true
+  },
+  {
+    "name": "BlocksSandstone",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 9.3,
+    "size": [
+      0.418,
+      0.318,
+      0.202
+    ],
+    "triangles": 2400,
+    "sheet": true
+  },
+  {
+    "name": "BlocksSlate",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 9.8,
+    "size": [
+      0.413,
+      0.305,
+      0.203
+    ],
+    "triangles": 2304,
+    "sheet": true
+  },
+  {
+    "name": "BlocksMarble",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 7.5,
+    "size": [
+      0.411,
+      0.313,
+      0.195
+    ],
+    "triangles": 1340,
+    "sheet": true
+  },
+  {
+    "name": "RawBerries",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 9.4,
+    "size": [
+      0.122,
+      0.113,
+      0.053
+    ],
+    "triangles": 1988,
+    "sheet": true
+  },
+  {
+    "name": "MilkRaw",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 9.4,
+    "size": [
+      0.116,
+      0.096,
+      0.142
+    ],
+    "triangles": 1312,
+    "sheet": true
+  },
+  {
+    "name": "EggSmall",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.2,
+    "size": [
+      0.15,
+      0.13,
+      0.059
+    ],
+    "triangles": 1500,
+    "sheet": true
+  },
+  {
+    "name": "EggLarge",
+    "maker": "codex medium",
+    "problems": [],
+    "minutes": 8.6,
+    "size": [
+      0.2,
+      0.168,
+      0.114
+    ],
+    "triangles": 1500,
+    "sheet": true
+  }
+]
