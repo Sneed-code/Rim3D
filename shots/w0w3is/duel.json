@@ -1,0 +1,101 @@
+{
+	"test": "duel",
+	"status": "pass",
+	"durationSeconds": 46.694429099559784,
+	"errors": [],
+	"gpu": "NVIDIA GeForce RTX 5080",
+	"resolution": "888x500",
+	"phases": [
+		{
+			"phase": "duel",
+			"frames": 715,
+			"avgFps": 178.42357426944841,
+			"p95FrameMs": 5.7063026428222656,
+			"medianGameThreadMs": 4.8888001441955566,
+			"medianRenderThreadMs": 4.7434000968933105,
+			"medianGpuMs": 3.4214999675750732,
+			"actors": 0,
+			"screenshot": "duel/duel.png"
+		},
+		{
+			"phase": "duel_watch_1",
+			"frames": 297,
+			"avgFps": 98.429632951874169,
+			"p95FrameMs": 10.84959888458252,
+			"medianGameThreadMs": 5.3734002113342285,
+			"medianRenderThreadMs": 9.8898000717163086,
+			"medianGpuMs": 8.4506998062133789,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_1.png"
+		},
+		{
+			"phase": "duel_watch_2",
+			"frames": 293,
+			"avgFps": 97.579931002698217,
+			"p95FrameMs": 10.85779857635498,
+			"medianGameThreadMs": 5.4489002227783203,
+			"medianRenderThreadMs": 9.9475002288818359,
+			"medianGpuMs": 8.4815998077392578,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_2.png"
+		},
+		{
+			"phase": "duel_watch_3",
+			"frames": 293,
+			"avgFps": 97.367340222042642,
+			"p95FrameMs": 11.013101577758789,
+			"medianGameThreadMs": 5.500999927520752,
+			"medianRenderThreadMs": 9.9715995788574219,
+			"medianGpuMs": 8.5465002059936523,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_3.png"
+		},
+		{
+			"phase": "duel_watch_4",
+			"frames": 297,
+			"avgFps": 98.612800287717633,
+			"p95FrameMs": 10.580498695373535,
+			"medianGameThreadMs": 5.4723000526428223,
+			"medianRenderThreadMs": 9.8821001052856445,
+			"medianGpuMs": 8.477299690246582,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_4.png"
+		},
+		{
+			"phase": "duel_watch_5",
+			"frames": 295,
+			"avgFps": 97.867805585364422,
+			"p95FrameMs": 10.779697418212891,
+			"medianGameThreadMs": 5.4860000610351562,
+			"medianRenderThreadMs": 9.9972000122070312,
+			"medianGpuMs": 8.5324001312255859,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_5.png"
+		},
+		{
+			"phase": "duel_watch_6",
+			"frames": 296,
+			"avgFps": 98.34287270950135,
+			"p95FrameMs": 10.802700996398926,
+			"medianGameThreadMs": 5.3571000099182129,
+			"medianRenderThreadMs": 9.9310998916625977,
+			"medianGpuMs": 8.4897003173828125,
+			"actors": 0,
+			"screenshot": "duel/duel_watch_6.png"
+		},
+		{
+			"phase": "duel_hud",
+			"frames": 297,
+			"avgFps": 98.544284747493819,
+			"p95FrameMs": 10.746102333068848,
+			"medianGameThreadMs": 5.2803001403808594,
+			"medianRenderThreadMs": 9.9038000106811523,
+			"medianGpuMs": 8.5026998519897461,
+			"actors": 0,
+			"screenshot": "duel/duel_hud.png"
+		}
+	],
+	"notes": [
+		"duel: 46 swings, 7 heavies, 27 staggers, 0 new opponents, stamina bar 444 frames, hud 444 frames, direct 1, you standing"
+	]
+}
