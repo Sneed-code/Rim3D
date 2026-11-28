@@ -1940,6 +1940,7 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
         h.add(p->lastHit);
         h.add(p->lastBreak);
         h.add(p->knockdownImmuneUntil);
+        h.add(p->immuneUntil);
     }
     const Melee* m = things_.registry().try_get<Melee>(e);
     if (m == nullptr) {
@@ -2004,6 +2005,9 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->guardStun);
     h.add(m->rollEndsAt);
     h.add(m->openUntil);
+    h.add(m->attackAfter);
+    h.add(m->mistimed);
+    h.add(m->critImmuneUntil);
 }
 
 // ---- Fight response, focus and footwork (docs/design/focus.md) ----------------------------------

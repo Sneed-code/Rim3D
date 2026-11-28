@@ -121,6 +121,8 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     whole("knockdownImmuneSteps", r.knockdownImmuneSteps);
     whole("doubleBreakSteps", r.doubleBreakSteps);
     whole("staggerSteps", r.staggerSteps);
+    whole("postureBreakSteps", r.postureBreakSteps);
+    whole("poiseImmuneSteps", r.poiseImmuneSteps);
     num("hyperArmorTaken", r.hyperArmorTaken);
     num("animalPoisePerPower", r.animalPoisePerPower);
     num("chainShare", r.chainShare);
@@ -128,6 +130,10 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     whole("comboResetSteps", r.comboResetSteps);
     whole("rollAttackSteps", r.rollAttackSteps);
     whole("openingSteps", r.openingSteps);
+    whole("blockedDelaySteps", r.blockedDelaySteps);
+    r.earlyPressBreaksChain = def->flag("earlyPressBreaksChain", r.earlyPressBreaksChain);
+    num("shieldRoom", r.shieldRoom);
+    num("shieldPushPerStep", r.shieldPushPerStep);
     num("chargeShare", r.chargeShare);
     whole("minChargeSteps", r.minChargeSteps);
     whole("maxChargeSteps", r.maxChargeSteps);
@@ -294,8 +300,8 @@ SoulsAttack MeleeSystem::attackKind(Entity pawn) const {
 bool MeleeSystem::exposed(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
-    return souls_.enabled && m != nullptr && now() < m->stunUntil && !m->guardStun && !reg.any_of<KnockedDown>(pawn) &&
-           !health_.incapacitated(pawn);
+    return souls_.enabled && m != nullptr && now() < m->stunUntil && !m->guardStun && now() >= m->critImmuneUntil &&
+           !reg.any_of<KnockedDown>(pawn) && !health_.incapacitated(pawn);
 }
 
 SoulsAttack MeleeSystem::criticalFor(Entity pawn, Entity target) const {
@@ -419,11 +425,12 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
         return fail("staggered");
     }
     SoulsAttack kind = soulsKindFor(pawn, &m, press);
-    // A light press at a foe that is open to it is a critical attack (Elden Ring: R1 near a stance-broken foe, or behind
-    // one); one knocked to the ground takes a stab whatever the press.
+    // A press at a foe that is open to it is a critical attack (Elden Ring: R1 near a stance-broken foe, or behind one).
+    // sneed 2026-11-28: any open hit on a foe whose poise broke is the riposte (the impale); a backstab is a light press;
+    // one knocked to the ground takes a stab whatever the press.
     if (target != kNoEntity && !press.jumping) {
         const SoulsAttack crit = criticalFor(pawn, target);
-        if (crit == SoulsAttack::GroundStab || (crit != SoulsAttack::None && !press.heavy)) {
+        if (crit == SoulsAttack::GroundStab || crit == SoulsAttack::Riposte || (crit != SoulsAttack::None && !press.heavy)) {
             kind = crit;
         }
     }
@@ -449,10 +456,22 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
             target = kNoEntity;
         }
     }
+    // Too early (sneed 2026-11-28: time the attacks, don't spam): a press during the wind-up is dropped and the attack
+    // under way won't chain.
+    if (souls_.earlyPressBreaksChain && player && m.kind != SoulsAttack::None && m.phase == MeleePhase::Windup && m.finisher == 0) {
+        m.mistimed = true;
+        m.buffered = SoulsAttack::None;
+        m.bufferedTarget = kNoEntity;
+        m.bufferedHold = false;
+        return true;
+    }
     // Mid-roll, or mid-attack before its combo opens: kept, it plays as soon as it can (Elden Ring's input buffer).
-    const bool chainOpen = m.kind != SoulsAttack::None && m.phase == MeleePhase::Recovery &&
+    const bool chainOpen = m.kind != SoulsAttack::None && m.phase == MeleePhase::Recovery && !m.mistimed && now() >= m.attackAfter &&
                            m.recoverySteps - m.stepsLeft >= static_cast<int>(std::lround(static_cast<float>(m.recoverySteps) * souls_.chainShare));
-    if (combat_.rollLocked(pawn) || now() < m.openUntil ||
+    if (m.mistimed && m.kind != SoulsAttack::None && m.phase == MeleePhase::Recovery && m.finisher == 0) {
+        return true;  // the chain was broken by a press too early: this one is dropped too, the recovery plays out
+    }
+    if (combat_.rollLocked(pawn) || now() < m.openUntil || now() < m.attackAfter ||
         (m.kind != SoulsAttack::None && m.phase != MeleePhase::Ready && m.finisher == 0 && !chainOpen)) {
         m.buffered = kind;
         m.bufferedTarget = target;
@@ -562,6 +581,7 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
     m.buffered = SoulsAttack::None;
     m.bufferedTarget = kNoEntity;
     m.bufferedHold = false;
+    m.mistimed = false;
     m.holding = hold && kind == SoulsAttack::Heavy;
     m.chargeSteps = -1;
     m.aiChargeFor = 0;
@@ -581,6 +601,9 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
         m.engagedAt = now();
         const Position& to = reg.get<Position>(target);
         face(pawn, to.x, to.y);
+        if (kind == SoulsAttack::Riposte) {
+            ++ripostes_;
+        }
         if (kind == SoulsAttack::Riposte || kind == SoulsAttack::Backstab) {
             // Caught (Elden Ring's critical lock): the victim can't guard, roll or strike back until it is thrown down.
             soulsInterrupt(target, windup + souls_.criticalHoldSteps, true);
@@ -599,7 +622,10 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
             const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
             const float clipStep = std::max(0.0f, motion.forwardAt(clip->def, hitSeconds)) * motion.sizeScale(pawn);
             const float bodyExtra = std::max(0.0f, motion.bodyRadius(target) - kPawnRadius);
-            const float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
+            float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
+            if (reg.all_of<Blocking>(target)) {
+                ideal = std::max(ideal, souls_.shieldRoom + bodyExtra);  // not into a raised shield (the shield's room)
+            }
             const float shift = std::clamp(d - clipStep - ideal, -souls_.warpBack, rule.maxWarp);
             // Over most of the wind-up, so the carry is a lean into the blow, not a glide (sneed 2026-11-28: "moves weird").
             int steps = std::max(3, windup * 5 / 6);
@@ -817,6 +843,13 @@ bool MeleeSystem::soulsGuard(Entity attacker, const Melee& m, Entity victim, flo
         vm.stunUntil = std::max(vm.stunUntil, now() + souls_.blockStunSteps);
         vm.guardStun = true;
         vm.counterUntil = now() + souls_.blockStunSteps + souls_.counterSteps;
+        vm.attackAfter = std::max(vm.attackAfter, now() + souls_.blockStunSteps + souls_.blockedDelaySteps);
+    }
+    // sneed 2026-11-28: a blow that meets a guard puts the attacker's next attack back by blockedDelaySteps (0.15 s), from
+    // when its combo would have opened.
+    if (Melee* am = reg.try_get<Melee>(attacker); am != nullptr && am->kind != SoulsAttack::None) {
+        const int chainAt = static_cast<int>(std::lround(static_cast<float>(am->recoverySteps) * souls_.chainShare));
+        am->attackAfter = std::max(am->attackAfter, now() + chainAt + souls_.blockedDelaySteps);
     }
     // What the guard lets through (a weapon's guard: a share of the blow).
     const float chip = power * (1.0f - negation);
@@ -838,7 +871,16 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
     if (soulsCriticalKind(m.kind)) {
         // A riposte or a backstab throws the victim to the ground (no poise needed, no immunity); a ground stab keeps it
         // down where it lies.
-        if (m.kind != SoulsAttack::GroundStab && bodySizeOf(victim) < souls_.noKnockdownBodySize) {
+        if (m.kind == SoulsAttack::Riposte) {
+            // sneed 2026-11-28: the impale "is fast but the target is stunned as you do it, then staggers": held through
+            // the blow, it reels back on its feet afterwards (no second riposte while it does).
+            soulsInterrupt(victim, souls_.staggerSteps, true);
+            reg.get_or_emplace<Melee>(victim).critImmuneUntil = now() + souls_.staggerSteps + 1;
+            combat_.stagger(victim, from);
+            if (combat_.motion().hasClips(victim)) {
+                combat_.motion().setLayers(victim, false, false);
+            }
+        } else if (m.kind != SoulsAttack::GroundStab && bodySizeOf(victim) < souls_.noKnockdownBodySize) {
             soulsInterrupt(victim, 0, true);
             combat_.knockDown(victim, from, souls_.criticalKnockdown);
         }
@@ -852,6 +894,9 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
     }
     PoiseMeter& p = reg.get_or_emplace<PoiseMeter>(victim);
     const float most = poiseMax(victim);
+    if (now() < p.immuneUntil) {
+        return;  // it broke a moment ago: 10 s before it can break again (sneed 2026-11-28)
+    }
     if (p.value < 0.0f || now() - p.lastHit > souls_.poiseRegenSteps) {
         p.value = most;
     }
@@ -863,6 +908,7 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
     p.value = most;
     const bool second = now() - p.lastBreak <= souls_.doubleBreakSteps;
     p.lastBreak = now();
+    p.immuneUntil = now() + souls_.poiseImmuneSteps;
     const bool knocks = m.kind != SoulsAttack::None && souls_.kinds[soulsIndex(m.kind)].knockdown;
     if ((knocks || second) && now() >= p.knockdownImmuneUntil && bodySizeOf(victim) < souls_.noKnockdownBodySize &&
         combat_.knockDown(victim, from, damage)) {
@@ -870,7 +916,8 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
         soulsInterrupt(victim, 0, true);
         return;
     }
-    soulsInterrupt(victim, souls_.staggerSteps, true);
+    // Its stance broken: it reels for postureBreakSteps, open to a riposte.
+    soulsInterrupt(victim, souls_.postureBreakSteps, true);
     combat_.stagger(victim, from);
     if (combat_.motion().hasClips(victim)) {
         combat_.motion().setLayers(victim, false, false);  // a stumble on the whole body, not a flinch over walking legs
@@ -927,7 +974,12 @@ bool MeleeSystem::soulsStepWindup(Entity pawn, Melee& m) {
 void MeleeSystem::soulsStepRecovery(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
     if (m.recoverySteps - m.stepsLeft < static_cast<int>(std::lround(static_cast<float>(m.recoverySteps) * souls_.chainShare)) ||
-        now() < m.stunUntil || !soulsAble(reg, pawn)) {
+        now() < m.stunUntil || now() < m.attackAfter || !soulsAble(reg, pawn)) {
+        return;
+    }
+    if (m.mistimed) {
+        m.buffered = SoulsAttack::None;  // a press came too early: no chain from this attack
+        m.aiChain = 0;
         return;
     }
     SoulsAttack next = m.buffered;
@@ -1000,7 +1052,8 @@ void MeleeSystem::soulsStep() {
     std::sort(order_.begin(), order_.end());
     for (const Entity pawn : order_) {
         Melee& m = reg.get<Melee>(pawn);
-        if (m.buffered == SoulsAttack::None || m.phase != MeleePhase::Ready || combat_.rollLocked(pawn) || now() < m.openUntil) {
+        if (m.buffered == SoulsAttack::None || m.phase != MeleePhase::Ready || combat_.rollLocked(pawn) || now() < m.openUntil ||
+            now() < m.attackAfter) {
             continue;
         }
         const SoulsAttack next = m.buffered;
@@ -1022,6 +1075,77 @@ void MeleeSystem::soulsStep() {
         }
         soulsStart(pawn, target, m.player, next, hold, nullptr);
     }
+    soulsShieldRoom();
+}
+
+// The shield's room (sneed 2026-11-28: "the shield can clip the enemy, make sure there's a barrier when you hold it up"):
+// a raised shield keeps any body in front of it shieldRoom metres off, centre to centre. The two are eased apart, half
+// each (a shove both ways), by at most shieldPushPerStep a step, never into a wall.
+void MeleeSystem::soulsShieldRoom() {
+    entt::registry& reg = things_.registry();
+    order_.clear();
+    for (const Entity pawn : reg.view<Blocking>()) {
+        order_.push_back(pawn);
+    }
+    if (order_.empty()) {
+        return;
+    }
+    std::sort(order_.begin(), order_.end());
+    const auto pushable = [&](Entity e) {
+        return reg.valid(e) && things_.spawned(e) && reg.all_of<Position, Posture>(e) && soulsAble(reg, e) &&
+               !combat_.rollLocked(e);
+    };
+    for (const Entity pawn : order_) {
+        if (!pushable(pawn) || combat_.apparelStats().activeShield(reg, pawn) == kNoEntity) {
+            continue;
+        }
+        const Blocking& b = reg.get<Blocking>(pawn);
+        const Posture& posture = reg.get<Posture>(pawn);
+        float gx = b.hasDir ? b.dirX : posture.facingX;
+        float gy = b.hasDir ? b.dirY : posture.facingY;
+        const float gl = std::sqrt(gx * gx + gy * gy);
+        if (gl < 1e-4f) {
+            continue;
+        }
+        gx /= gl;
+        gy /= gl;
+        for (const auto [other, thing, op] : reg.view<const Thing, Position>().each()) {
+            if (other == pawn || thing.category != ThingCategory::Pawn || !pushable(other)) {
+                continue;
+            }
+            Position& a = reg.get<Position>(pawn);
+            if (op.level != a.level) {
+                continue;
+            }
+            float dx = op.x - a.x;
+            float dy = op.y - a.y;
+            const float d = std::sqrt(dx * dx + dy * dy);
+            const float room = souls_.shieldRoom + std::max(0.0f, combat_.motion().bodyRadius(other) - kPawnRadius);
+            if (d >= room || d < 1e-3f) {
+                continue;
+            }
+            dx /= d;
+            dy /= d;
+            if (dx * gx + dy * gy < souls_.guardCos) {
+                continue;  // beside or behind the shield: not in its way
+            }
+            const float push = std::min(room - d, 2.0f * souls_.shieldPushPerStep) * 0.5f;
+            bool moved = false;
+            if (pawnFitsAt(map_, op.x + dx * push, op.y + dy * push, kPawnRadius, op.level)) {
+                op.x += dx * push;
+                op.y += dy * push;
+                moved = true;
+            }
+            if (pawnFitsAt(map_, a.x - dx * push, a.y - dy * push, kPawnRadius, a.level)) {
+                a.x -= dx * push;
+                a.y -= dy * push;
+                moved = true;
+            }
+            if (moved) {
+                ++shieldPushes_;
+            }
+        }
+    }
 }
 
 // ---- The fighter AI --------------------------------------------------------------------------
@@ -1034,6 +1158,10 @@ bool MeleeSystem::aiSoulsTurn(Entity pawn, Entity victim) {
     const Melee* m = reg.try_get<Melee>(pawn);
     if (m != nullptr && (now() < m->stunUntil || now() < m->openUntil)) {
         return true;  // reeling, stunned by a block, or still committed after its chain: nothing to do
+    }
+    if (m != nullptr && m->phase == MeleePhase::Ready && now() < m->attackAfter) {
+        footwork(pawn, victim, false);  // its blow met a guard (or it took one): a moment before the next
+        return true;
     }
     const bool idle = m == nullptr || m->phase == MeleePhase::Ready;
     if (idle && stamina(pawn) < souls_.aiStaminaFloor) {

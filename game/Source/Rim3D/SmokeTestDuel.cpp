@@ -43,8 +43,9 @@ namespace
 	constexpr float DuelSmokePlayHealth = 0.5f;
 	// Many small cuts bleed to death while no one part looks hurt: healed past this much blood lost too.
 	constexpr float DuelSmokePracticeBlood = 0.1f;
-	// Seconds after the opponent falls before the next one comes.
-	constexpr float DuelSmokeRematchSeconds = 4.0f;
+	// Seconds after the opponent falls before the next one comes (sneed 2026-11-28: "the pawns despawn too fast when I down
+	// them, make it take 10 sec just in that demo": time to walk up and finish them).
+	constexpr float DuelSmokeRematchSeconds = 10.0f;
 	constexpr int DuelSmokeSkill = 10;
 
 	struct FDuelSmokeState

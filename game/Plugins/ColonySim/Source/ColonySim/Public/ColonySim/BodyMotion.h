@@ -104,6 +104,11 @@ struct MotionRules {
     // the way the body fell (back, forward, left, right), so it starts lying as the fall left it.
     float getUpSeconds = 4.2f;
     float getUpTurn[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    // sneed 2026-11-28: "when a pawn is knocked on its back it spins round at once to get up from its front": a fall
+    // with its own get-up clip (getUpClips, e.g. up from lying on the back) plays that one instead, over
+    // getUpClipSeconds (0: the clip's own length), turned by getUpTurn as above.
+    std::string getUpClips[4];
+    float getUpClipSeconds[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     // Plain pushes, for bodies with no clips (animals) or clips not there yet.
     float staggerMetres = 0.5f;
     int staggerSteps = 12;

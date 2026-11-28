@@ -2308,7 +2308,10 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 	if (Clip && !Clip->anim.empty())
 	{
 		const FString Rel = UTF8_TO_TCHAR(Clip->anim.c_str());
-		Asset = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Rim3D/Generated/Animations/%s.%s"), *Rel, *FPaths::GetBaseFilename(Rel)), nullptr,
+		// Under the generated clips folder; a full /Game/ path for one already on the mannequin (the Game Animation
+		// Sample's get-up from the back, sneed 2026-11-28).
+		const FString Folder = Rel.StartsWith(TEXT("/Game/")) ? FString() : FString(TEXT("/Game/Rim3D/Generated/Animations/"));
+		Asset = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%s%s.%s"), *Folder, *Rel, *FPaths::GetBaseFilename(Rel)), nullptr,
 			LOAD_NoWarn | LOAD_Quiet);
 	}
 	if (!Asset)

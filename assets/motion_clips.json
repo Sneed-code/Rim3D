@@ -1,5 +1,5 @@
 {
-  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations. `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are Mixamo singles (Lead Jab, Cross Punch, Hook Punch; category Fighting); the jab is thrown with the left (lead) hand, so its blow is set by hand from the left hand reaching full stretch. The low blows at the downed (KnifeStabLow, SpearStabLow, OneHandHackLow, TwoHandHackLow, UnarmedStomp) are Mixamo singles too (Stabbing, Bayonet Stab, Sword And Shield Slash, Great Sword Slash, Stomping; category Fighting); the stomp's blow is the right foot's fastest moment, measured in Blender, as -Trace has no feet. The flinches (a bullet's stagger, sneed 2026-11-27: 'when I shoot someone, esp in the head, the body staggers') are the first 0.3 s of the staggers: a step of about 0.3 to 0.4 m. The souls heavy (Motion_SS_Overhead, Motion_SS_Slash4) and the critical thrust (Motion_SS_Riposte, the sword lunge held a little longer: sword through the chest) are for souls-combat.md.",
+  "comment": "Clips the sim moves bodies along (docs/design/body-motion.md). The MotionClips commandlet (-run=MotionClips) measures each animation's hip travel and writes data/defs/MotionClips/MotionClips.json. `anim` is relative to /Game/Rim3D/Generated/Animations, or a full /Game/ path for a clip already on the mannequin (the Game Animation Sample's get-ups from the ground, sneed 2026-11-28: up from the back without spinning round). `kind` Attack gets hitSeconds (the list's own, else the moment the weapon hand is fastest). `from`/`to` trim a clip (seconds). `turn` keeps the clip's turning. `keepWhenDown` for falls. The def names are the ones Rules/MotionRules.json and Rules/MeleeRules.json (styleAttacks) ask for. `hitSeconds` and `from`/`to` are in the animation's own time. Trims and blows were chosen from -run=MotionClips -Trace=<names> (each sample's hip travel and hand speeds). Unarmed Jab/Cross/Hook are Mixamo singles (Lead Jab, Cross Punch, Hook Punch; category Fighting); the jab is thrown with the left (lead) hand, so its blow is set by hand from the left hand reaching full stretch. The low blows at the downed (KnifeStabLow, SpearStabLow, OneHandHackLow, TwoHandHackLow, UnarmedStomp) are Mixamo singles too (Stabbing, Bayonet Stab, Sword And Shield Slash, Great Sword Slash, Stomping; category Fighting); the stomp's blow is the right foot's fastest moment, measured in Blender, as -Trace has no feet. The flinches (a bullet's stagger, sneed 2026-11-27: 'when I shoot someone, esp in the head, the body staggers') are the first 0.3 s of the staggers: a step of about 0.3 to 0.4 m. The souls heavy (Motion_SS_Overhead, Motion_SS_Slash4) and the critical thrust (Motion_SS_Riposte, the sword lunge held a little longer: sword through the chest) are for souls-combat.md.",
   "metresScale": 1.0,
   "clips": [
     {
@@ -101,6 +101,22 @@
       "anim": "Mixamo/Falls/A_GettingUp",
       "from": 1.0,
       "to": 6.6
+    },
+    {
+      "defName": "Motion_GetUpBack",
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B"
+    },
+    {
+      "defName": "Motion_GetUpFront",
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F"
+    },
+    {
+      "defName": "Motion_GetUpLeft",
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_L"
+    },
+    {
+      "defName": "Motion_GetUpRight",
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_R"
     },
     {
       "defName": "Motion_Club_Downward",

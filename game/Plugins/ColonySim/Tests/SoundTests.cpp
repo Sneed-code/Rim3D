@@ -480,6 +480,23 @@ TEST_CASE("sound: melee blows sound by what strikes what") {
     CHECK(soundMeleeCue(db, e) == "Melee_Clang");
 }
 
+TEST_CASE("sound: a sword on a raised shield is a short knock, not a ringing clash (sneed 2026-11-28)") {
+    DefDatabase db;
+    if (!soundTestLoad(db)) { CHECK(false); return; }
+    Event e;
+    e.type = EventType::MeleeHit;
+    e.def = db.idOf("Things", "Melee_Gladius");
+    e.stuff = db.idOf("Things", "Steel");
+    e.message = "blocked";
+    e.hit = ProjectileHitKind::Armor;
+    e.struckDef = db.idOf("Things", "Apparel_ShieldMedium");
+    e.struckStuff = db.idOf("Things", "Steel");
+    CHECK(soundMeleeCue(db, e) == "Block_Shield");
+    // Blade on blade (a weapon's guard) keeps the clash.
+    e.struckDef = db.idOf("Things", "Melee_Gladius");
+    CHECK(soundMeleeCue(db, e) != "Block_Shield");
+}
+
 TEST_CASE("sound: shots and blasts have a far layer and carry like real ones") {
     DefDatabase db;
     if (!soundTestLoad(db)) { CHECK(false); return; }

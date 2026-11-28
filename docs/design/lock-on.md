@@ -59,7 +59,11 @@ that had EndFocus on F1 move to the new default.
   2026-11-24: the body curves round to the enemy during the roll, `MeleeSystem::steerRoll`, so neither body nor view
   snaps round at the end).
 - **Gun in hand**: no auto-face, no camera pull. WASD and the mouse work exactly as unlocked. The marker and HP bar stay.
-- **Sprint while locked**: the body turns to the run direction (as Elden Ring), facing returns when sprint stops.
+- **Sprint while locked**: the body turns to the run direction (as Elden Ring), facing returns when sprint stops. Sprint
+  is a toggle in Rim3D; locked on with melee the toggle is ignored and only holding the sprint key sprints (sneed
+  2026-11-28: with the toggle on, every move turned the body away from the target and broke the lock). Elden Ring has no
+  free camera orbit while locked: the camera stick switches targets (here a mouse flick), so the only ways to turn away
+  are sprinting and rolling.
 - **Roll**: goes the way you press, relative to the target when locked with melee.
 
 ### Letting go
@@ -68,10 +72,8 @@ The lock drops when any of these hold:
 
 - the target dies, leaves, changes level, or is beyond `focusBreakRange` (25 m, as now);
 - it has been out of sight for `lockSightLostSeconds` (3 s);
-- **turned and moving away** (sneed's rule): for `lockTurnAwaySeconds` (0.75 s) you are moving away from it (more than
-  `lockTurnAwayMetresPerSecond` 1.5 m/s of your speed is away from it) **and** your body or camera faces more than 100
-  degrees off it. With melee that happens when you sprint away; with a gun when you turn the view and walk off.
-  Backing away while still facing it (S with melee) keeps the lock;
+- ~~turned and moving away~~: dropped (sneed 2026-11-28: "if I turn and move it breaks; we need it more like Elden Ring
+  where it's only if you move away far"). Turning and walking off keeps the lock; only distance and sight let go;
 - Middle mouse again.
 
 Switching weapon never drops it.

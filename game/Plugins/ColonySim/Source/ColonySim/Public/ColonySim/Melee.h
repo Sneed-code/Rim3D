@@ -115,6 +115,12 @@ struct Melee {
     // The opening after a chain (sneed 2026-11-28, melee section 9): once an attack's recovery runs out with no next blow
     // pressed, the attacker stays committed until this step: no attack, roll or guard (a press is kept for after).
     int64_t openUntil = 0;
+    // sneed 2026-11-28 (melee section 10): no attack starts before this step (a blow that met a guard, or one taken on the
+    // guard, adds blockedDelaySteps); a press during the wind-up was too early (`mistimed`: the attack won't chain); no
+    // riposte at it before `critImmuneUntil` (it is reeling from one already).
+    int64_t attackAfter = 0;
+    bool mistimed = false;
+    int64_t critImmuneUntil = 0;
 };
 
 // A press of the attack buttons (MeleeCommand), Elden Ring style.
@@ -474,6 +480,9 @@ public:
     uint64_t blocks() const { return blocks_; }
     uint64_t armBlocks() const { return armBlocks_; }  // weapon blows taken on a bare forearm held up
     uint64_t guardBreaks() const { return guardBreaks_; }
+    // Steps a raised shield held another body off (souls-combat.md "The shield's room"), and ripostes thrown.
+    uint64_t shieldPushes() const { return shieldPushes_; }
+    uint64_t ripostes() const { return ripostes_; }
     uint64_t impales() const { return impales_; }  // impales struck at the downed (sneed 2026-11-28)
     uint64_t rolls() const { return rolls_; }
     uint64_t footworks() const { return footworks_; }
@@ -516,6 +525,7 @@ private:
     bool soulsStepWindup(Entity pawn, Melee& m);
     void soulsStepRecovery(Entity pawn, Melee& m);
     void soulsStep();
+    void soulsShieldRoom();
     float bodySizeOf(Entity pawn) const;
     bool humanlike(Entity pawn) const;
     const Tool* toolOf(Entity pawn, const Melee& m) const;
@@ -559,6 +569,8 @@ private:
     uint64_t blocks_ = 0;
     uint64_t armBlocks_ = 0;
     uint64_t guardBreaks_ = 0;
+    uint64_t shieldPushes_ = 0;
+    uint64_t ripostes_ = 0;
     uint64_t impales_ = 0;
     uint64_t rolls_ = 0;
     uint64_t footworks_ = 0;

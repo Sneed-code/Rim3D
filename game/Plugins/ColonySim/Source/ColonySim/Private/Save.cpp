@@ -2814,6 +2814,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
     if (ar.sectionVersion() >= 9) {  // the opening after a chain (sneed 2026-11-28)
         ar.value("openUntil", m.openUntil);
     }
+    if (ar.sectionVersion() >= 10) {  // blocked-hit delay, too-early presses, riposte reel (sneed 2026-11-28)
+        ar.value("attackAfter", m.attackAfter);
+        ar.value("mistimed", m.mistimed);
+        ar.value("critImmuneUntil", m.critImmuneUntil);
+    }
 }
 
 template <typename Ar>
@@ -3864,7 +3869,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 9, [&] {
+    ar.section("melee", 10, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
         if (ar.sectionVersion() >= 8) {  // Elden Ring style stamina and poise (souls-combat.md)
             saveParts(ar, "stamina", e, &SaveEntity::stamina, [&](Stamina& st) {
@@ -3877,6 +3882,9 @@ void saveSections(Ar& ar, SaveData& d) {
                 ar.value("lastHit", p.lastHit);
                 ar.value("lastBreak", p.lastBreak);
                 ar.value("knockdownImmuneUntil", p.knockdownImmuneUntil);
+                if (ar.sectionVersion() >= 10) {
+                    ar.value("immuneUntil", p.immuneUntil);
+                }
                 ar.require(p.value >= -1.0f && p.value <= 1.0e5f, "the save file has an impossible poise meter");
             });
         }

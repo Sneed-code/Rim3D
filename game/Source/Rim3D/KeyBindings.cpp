@@ -322,7 +322,7 @@ namespace Rim3DKeys
 			SetLockOnFocusEnabled(bLockOn);
 		}
 		bool bAutoFocus = IsAutoFocusAttackerEnabled();
-		if (ImGui::Checkbox("Lock on to an enemy who swings at you (when facing them, locked on to nobody)", &bAutoFocus))
+		if (ImGui::Checkbox("Auto focus: lock on to a melee enemy who locks on to you nearby (melee in hand), or swings at you", &bAutoFocus))
 		{
 			SetAutoFocusAttackerEnabled(bAutoFocus);
 		}

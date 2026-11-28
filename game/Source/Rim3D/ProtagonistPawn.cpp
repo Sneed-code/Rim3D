@@ -257,6 +257,20 @@ void AProtagonistPawn::Tick(float DeltaTime)
 		// Sprint is a toggle (sneed 2026-11-17): on until pressed again, and it stays on when you take over another colonist.
 		// It doesn't sprint while walking slowly or aiming.
 		// Sprint switches when the key comes up (the heavy attack is now holding the attack button, souls-combat.md).
+		// Locked on with a melee weapon or bare hands (sneed 2026-11-28: "when I focus with a melee weapon, strafing etc, I
+		// should keep facing my target"): the sprint toggle stays off, so every walk and run faces the enemy and circles it;
+		// holding the sprint key down sprints off, Elden Ring style (the run turns the body), and its release doesn't flip
+		// the toggle.
+		bool bLockedMelee = false;
+		if (const USimSubsystem* LockBridge = GetBridge(); LockBridge && LockBridge->GetSim() && Thing != colony::kNoEntity && !HasGunDrawn())
+		{
+			const colony::ThingView* LockMe = LockBridge->GetCurrentSnapshot().find(Thing);
+			bLockedMelee = LockMe && LockMe->focusTarget != colony::kNoEntity;
+		}
+		if (bLockedMelee && IsDown(PC, ERim3DAction::Sprint))
+		{
+			bSprintKeyChorded = true;
+		}
 		if (Rim3DKeys::WasReleased(PC, ERim3DAction::Sprint) && !Rim3DKeys::AreGameKeysBlocked())
 		{
 			if (!bSprintKeyChorded)
@@ -265,7 +279,7 @@ void AProtagonistPawn::Tick(float DeltaTime)
 			}
 			bSprintKeyChorded = false;
 		}
-		bSprinting = IsSprintToggleOn() && !bWalk && !bAimHeld;
+		bSprinting = (bLockedMelee ? IsDown(PC, ERim3DAction::Sprint) && !Rim3DKeys::AreGameKeysBlocked() : IsSprintToggleOn()) && !bWalk && !bAimHeld;
 		if (!bUnstucking && WasPressed(PC, ERim3DAction::Jump))
 		{
 			Jump();

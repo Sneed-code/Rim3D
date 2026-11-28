@@ -280,7 +280,9 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 		const FString Kind = Entry->HasField(TEXT("kind")) ? Entry->GetStringField(TEXT("kind")) : TEXT("Clip");
 		const bool bTurn = Entry->HasField(TEXT("turn")) && Entry->GetBoolField(TEXT("turn"));
 		const bool bKeep = Entry->HasField(TEXT("keepWhenDown")) && Entry->GetBoolField(TEXT("keepWhenDown"));
-		const FString AssetPath = FString::Printf(TEXT("%s/%s.%s"), MotionClipsFolder, *Anim, *FPaths::GetBaseFilename(Anim));
+		// A full /Game/ path for a clip already on the mannequin (the Game Animation Sample's get-ups), else under the folder.
+		const FString AssetPath = Anim.StartsWith(TEXT("/Game/")) ? FString::Printf(TEXT("%s.%s"), *Anim, *FPaths::GetBaseFilename(Anim))
+			: FString::Printf(TEXT("%s/%s.%s"), MotionClipsFolder, *Anim, *FPaths::GetBaseFilename(Anim));
 		const UAnimSequence* Clip = LoadObject<UAnimSequence>(nullptr, *AssetPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
 		FMotionClipsPath Path;
 		if (!Clip || !MotionClipsMeasure(Clip, bTurn, Scale, Path))
@@ -313,6 +315,30 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 			bKeep ? TEXT(", \"keepWhenDown\": true") : TEXT(""), *Root);
 		const FVector2D End = Path.Travel[Last] - Path.Travel[First];
 		UE_LOG(LogMotionClips, Display, TEXT("CLIP %s seconds=%.2f hit=%.2f end=(%.2f fwd, %.2f right)"), *DefName, To - From, Hit - From, End.X, End.Y);
+		// How the body lies at the start and the end (sneed 2026-11-28, get-ups that start as the fall left the body): where
+		// the head points from the hips and which way the chest faces, each as (forward, right, up) of the clip's frame. A
+		// chest facing up is a body on its back, down on its front.
+		{
+			const FReferenceSkeleton& Ref = Clip->GetSkeleton()->GetReferenceSkeleton();
+			const int32 PelvisBone = MotionClipsFindBone(Ref, {TEXT("pelvis"), TEXT("Hips")});
+			const int32 HeadBone = MotionClipsFindBone(Ref, {TEXT("head"), TEXT("Head")});
+			const int32 LeftBone = MotionClipsFindBone(Ref, {TEXT("upperarm_l"), TEXT("LeftArm")});
+			const int32 RightBone = MotionClipsFindBone(Ref, {TEXT("upperarm_r"), TEXT("RightArm")});
+			if (PelvisBone != INDEX_NONE && HeadBone != INDEX_NONE && LeftBone != INDEX_NONE && RightBone != INDEX_NONE)
+			{
+				const auto Lie = [&](double Time)
+				{
+					const FVector P = MotionClipsBoneAt(Clip, Ref, PelvisBone, Time).GetLocation();
+					const FVector H = (MotionClipsBoneAt(Clip, Ref, HeadBone, Time).GetLocation() - P).GetSafeNormal();
+					const FVector L = MotionClipsBoneAt(Clip, Ref, LeftBone, Time).GetLocation();
+					const FVector R = MotionClipsBoneAt(Clip, Ref, RightBone, Time).GetLocation();
+					const FVector C = FVector::CrossProduct(R - L, H).GetSafeNormal();
+					// Forward is +Y, right is -X (as the path above).
+					return FString::Printf(TEXT("head (%.2f, %.2f, %.2f) chest (%.2f, %.2f, %.2f) hips %.0f cm up"), H.Y, -H.X, H.Z, C.Y, -C.X, C.Z, P.Z);
+				};
+				UE_LOG(LogMotionClips, Display, TEXT("POSE %s start: %s; end: %s"), *DefName, *Lie(From), *Lie(To));
+			}
+		}
 		++Written;
 	}
 	Out += TEXT("\n]\n");
