@@ -740,7 +740,12 @@ namespace
 			}
 			else
 			{
-				const double Ground = Lower(FMath::Max(0.0, Length - 0.02));
+				// The ground: the lowest the lower foot goes in the whole clip (a run's landing ends mid-stride, a foot up).
+				double Ground = Lower(0.0);
+				for (double T = Step; T <= Length; T += Step)
+				{
+					Ground = FMath::Min(Ground, Lower(T));
+				}
 				for (double T = 0.0; T <= FMath::Min(0.5, Length); T += Step)
 				{
 					if (Lower(T) <= Ground + 2.5)
@@ -758,6 +763,18 @@ namespace
 	/** Blend times for the jump's clips (seconds): into the landing at most this (less when it starts closer to the ground),
 	 *  and the landing's blend back to the walk or run. */
 	constexpr float PawnJumpLandBlendIn = 0.1f;
+	/** The lower foot's height in the body mesh's own space (cm): where the pose has it, whatever the body is lifted by. */
+	double PawnJumpLowerFoot(const USkeletalMeshComponent* Mesh)
+	{
+		if (!Mesh || Mesh->GetBoneIndex(TEXT("foot_l")) == INDEX_NONE || Mesh->GetBoneIndex(TEXT("foot_r")) == INDEX_NONE)
+		{
+			return 0.0;
+		}
+		const FTransform ToMesh = Mesh->GetComponentTransform();
+		const double L = ToMesh.InverseTransformPosition(Mesh->GetSocketLocation(TEXT("foot_l"))).Z * ToMesh.GetScale3D().Z;
+		const double R = ToMesh.InverseTransformPosition(Mesh->GetSocketLocation(TEXT("foot_r"))).Z * ToMesh.GetScale3D().Z;
+		return FMath::Min(L, R);
+	}
 	constexpr float PawnJumpLandBlendOut = 0.3f;
 }
 
@@ -781,6 +798,7 @@ bool ASimPawnActor::StartJump()
 	JumpLandLegsLeft = 0.0f;
 	JumpStartLength = 0.0f;
 	JumpLiftDelay = 0.0f;
+	JumpFootGround = PawnJumpLowerFoot(Body);  // the planted foot, before the take-off clip moves it
 	if (UAnimSequence* Start = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Start_%s_Lfoot"), PawnJumpGait(JumpSpeed))))
 	{
 		if (Anim->PlaySlotAnimationAsDynamicMontage(Start, FAnimSlotGroup::DefaultSlotName, 0.08f, 0.15f))
@@ -3078,7 +3096,8 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	AdvanceJump(GameDelta);
 	const float JumpHeight = GetJumpHeight();
 	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01) || !WallClimbOffset.IsNearlyZero(0.01);
-	if (!bReacting && !bMelee && !bRolling && !bMotion && FMath::IsNearlyZero(JumpHeight, 0.01f))
+	const bool bJumpFeet = IsJumping() || JumpLandLegsLeft > 0.0f;
+	if (!bReacting && !bMelee && !bRolling && !bMotion && !bJumpFeet && FMath::IsNearlyZero(JumpHeight, 0.01f))
 	{
 		if (bBodyPosed)
 		{
@@ -3141,6 +3160,18 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 		Offset += RootQuat.Inverse().RotateVector(World);
 	}
 	Offset.Z += JumpHeight;
+	if (bJumpFeet)
+	{
+		// The feet, not the hips, meet the ground (PC check 2026-11-28: the standing landing came down with its feet 18 cm
+		// up, the take-off's crouch put a foot 9 cm into the ground). Near the ground the body is set so its lower foot is
+		// where the arc says, against where it was planted when it jumped; high in the air the arc is the hips' (legs
+		// tuck as they like). Eased out with the landing's blend.
+		const float Lift = FMath::Clamp(static_cast<float>(PawnJumpLowerFoot(Body) - JumpFootGround), -30.0f, 30.0f);
+		const float W = IsJumping() ? 1.0f - FMath::Clamp(JumpHeight / FMath::Max(1.0f, kJumpHeight * JumpFactor), 0.0f, 1.0f)
+									: FMath::Clamp(JumpLandLegsLeft / PawnJumpLandBlendOut, 0.0f, 1.0f);
+		const float Ease = W * W * (3.0f - 2.0f * W);
+		Offset.Z -= Lift * Ease;
+	}
 	Offset += MotionOffset;  // a clip's own travel is taken out: the sim's position already has it (body-motion.md)
 	Offset += CrawlOffset;   // and the crawl clip's
 	Offset += WallClimbOffset;  // and the wall climb's

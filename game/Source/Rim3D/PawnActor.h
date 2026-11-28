@@ -549,6 +549,8 @@ private:
 	 *  does (bJumpLanding), and its legs stay the clip's until it has blended back out (JumpLandLegsLeft), so the walk's
 	 *  foot locks don't grab the feet half way. */
 	float JumpLiftDelay = 0.0f;
+	/** The lower foot's height in the mesh's own space when the jump began (cm): the ground the feet come back to. */
+	double JumpFootGround = 0.0;
 	bool bJumpLanding = false;
 	float JumpLandLegsLeft = 0.0f;
 	/** The landing clip picked for this jump and when in it the feet touch down (seconds at play rate 1). */
