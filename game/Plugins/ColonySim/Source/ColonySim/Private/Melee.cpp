@@ -384,13 +384,27 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
             }
         }
         // Its Elden Ring style moveset (souls-combat.md): listed by weapon (or a creature's race def), else by style.
+        // A lungeOnly moveset gives only the running lunge (sneed 2026-11-28): the weapon keeps its old swing otherwise.
+        const bool person = !weapon && def.text("race.intelligence") == "Humanlike";
+        bool lungeNamed = false;
         for (size_t i = 0; i < souls_.movesets.size(); ++i) {
             const SoulsMoveset& ms = souls_.movesets[i];
             const bool named = std::find(ms.weapons.begin(), ms.weapons.end(), def.defName()) != ms.weapons.end();
             const bool styled = weapon && std::find(ms.styles.begin(), ms.styles.end(), style) != ms.styles.end();
+            if (ms.lungeOnly) {
+                if ((weapon && named) || (!lungeNamed && (styled || (person && ms.unarmed)))) {
+                    set.lungeSet = static_cast<int>(i);
+                    lungeNamed = lungeNamed || named;
+                }
+                continue;
+            }
             if (named || (styled && set.moveset < 0)) {
                 set.moveset = static_cast<int>(i);
             }
+        }
+        // A full moveset with running clips lunges with its own.
+        if (set.moveset >= 0 && !souls_.movesets[static_cast<size_t>(set.moveset)].clips[static_cast<size_t>(SoulsAttack::Running)].empty()) {
+            set.lungeSet = set.moveset;
         }
         // A finisher at the downed (sneed 2026-11-20): the weapon's own entry if it has one, else its style's.
         if (weapon) {
@@ -2008,6 +2022,7 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->attackAfter);
     h.add(m->mistimed);
     h.add(m->critImmuneUntil);
+    h.add(m->lungeSpeed);
 }
 
 // ---- Fight response, focus and footwork (docs/design/focus.md) ----------------------------------

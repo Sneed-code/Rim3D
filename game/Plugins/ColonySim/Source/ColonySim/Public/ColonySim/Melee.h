@@ -17,6 +17,7 @@ namespace colony {
 
 class CombatSystem;
 struct HitFrom;
+struct MotionClip;
 class HealthSystem;
 class Map;
 class StateHasher;
@@ -121,6 +122,9 @@ struct Melee {
     int64_t attackAfter = 0;
     bool mistimed = false;
     int64_t critImmuneUntil = 0;
+    // The running lunge's carry (melee section 11): metres a step the attacker is carried on over its clip, from the speed
+    // it ran at, eased toward what it needs to stand right for the blow (souls-combat.md "Running lunges").
+    float lungeSpeed = 0.0f;
     // Run through by an impale (a riposte): at this step it comes off the blade and staggers back from where the blow came.
     int64_t impaleStaggerAt = 0;
     float impaleFromX = 0.0f;
@@ -362,6 +366,15 @@ public:
     bool aiSoulsTurn(Entity pawn, Entity victim);
     // A charging fighter's leap from a few metres off (a running heavy). True if it leapt.
     bool aiLeap(Entity pawn, Entity victim);
+    // The running lunge (sneed 2026-11-28; souls-combat.md "Running lunges"): every weapon kind and the bare fists have
+    // one. `hasLunge`: the pawn has a running attack's clips (its moveset's, else its weapon kind's lunge). `getsAway`:
+    // the target moves away from the pawn faster than lungeFleeSpeed (m/s along the line between them).
+    bool hasLunge(Entity pawn) const;
+    float awaySpeed(Entity pawn, Entity target) const;
+    bool runningPace(Entity pawn) const;
+    // The fighter AI's lunge at a target getting away (or as it runs in): it goes straight from its run into the blow,
+    // never stopping first. True if it lunged.
+    bool aiLunge(Entity pawn, Entity victim);
 
     // The player's block: raises the weapon (or a person's fists) for playerBlockSteps (after blockSteps); sent again
     // while it is up (the button held) it stays up playerBlockHoldSteps longer. Not with a gun in hand.
@@ -491,6 +504,9 @@ public:
     uint64_t shieldPushes() const { return shieldPushes_; }
     uint64_t ripostes() const { return ripostes_; }
     uint64_t impales() const { return impales_; }  // impales struck at the downed (sneed 2026-11-28)
+    // Running lunges started, and lunges the fighter AI cut short to run on after a target still getting away.
+    uint64_t lunges() const { return lunges_; }
+    uint64_t lungeChases() const { return lungeChases_; }
     uint64_t rolls() const { return rolls_; }
     uint64_t footworks() const { return footworks_; }
 
@@ -515,12 +531,19 @@ private:
         int finisherLethal = 0;          // 1 + the index of that finisher's impale (its `lethal`), 0 none
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
         int moveset = -1;                // its SoulsRules moveset (index), or -1
+        int lungeSet = -1;               // its running lunge's moveset (a lungeOnly one, or its own), or -1
     };
 
     const ToolSet* toolsOf(Entity pawn, bool& weapon, bool fists = false) const;
     uint8_t impaleTool(const ToolSet& set) const;  // the tool an impale strikes with (its stab, else the hardest-hitting)
     // Souls (Souls.cpp).
     const SoulsMoveset* movesetOf(Entity pawn) const;
+    // The moveset an attack of `kind` takes its clips, pace and poise from: the pawn's own moveset, or for a running
+    // attack its weapon kind's lunge (lungeOnly). Null: none (the old swing).
+    const SoulsMoveset* soulsSetFor(Entity pawn, SoulsAttack kind) const;
+    const MotionClip* soulsFirstClip(Entity pawn, SoulsAttack kind) const;
+    void soulsLungeCarry(Entity pawn, Melee& m);
+    float soulsWindupSeconds(Entity pawn, SoulsAttack kind, const MotionClip& clip) const;
     bool soulsLowTarget(Entity pawn, Entity target, bool player) const;
     bool soulsStart(Entity pawn, Entity target, bool player, SoulsAttack kind, bool hold, std::string* why);
     SoulsAttack soulsKindFor(Entity pawn, const Melee* m, const SoulsPress& press) const;
@@ -579,6 +602,8 @@ private:
     uint64_t shieldPushes_ = 0;
     uint64_t ripostes_ = 0;
     uint64_t impales_ = 0;
+    uint64_t lunges_ = 0;
+    uint64_t lungeChases_ = 0;
     uint64_t rolls_ = 0;
     uint64_t footworks_ = 0;
 };

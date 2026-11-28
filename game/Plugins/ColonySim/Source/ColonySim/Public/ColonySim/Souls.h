@@ -85,6 +85,11 @@ struct SoulsMoveset {
     std::array<std::vector<std::string>, kSoulsAttackKinds> clips;
     float speed = 1.0f;               // the whole moveset's pace
     float weaponPoise = 12.0f;        // poise damage of a light hit
+    // Only its running attack (sneed 2026-11-28, "lunging attack while running, all weapons"): a weapon kind still on the
+    // old swing (clubs, two-handers, the spear, fists) gets its running lunge from here and keeps the old swing for the
+    // rest. `unarmed`: it is the bare fists' (a person's body, no weapon in hand).
+    bool lungeOnly = false;
+    bool unarmed = false;
     // sneed 2026-11-28 ("for this weapon attacks don't move us forward for now, we can move as we want"): the player's
     // grounded attacks (light, heavy, charged, roll, guard counter) carry nobody in and leave the feet to the keys: the
     // clip plays where the body stands and walking goes on under it (drawn on the upper body once it walks).
@@ -186,6 +191,23 @@ struct SoulsRules {
     float aiLeapChance = 0.02f;       // per step it is in that band
     float aiGuardChance = 0.7f;       // a shield-bearer raises its guard against a swing at it
     float aiCounterChance = 0.6f;     // and counters after a block
+    // The running lunge (sneed 2026-11-28: "enemies chasing you never melee you, they stop before attacking; make it so
+    // they run into you, a lunging attack while running, they don't stop running until you do"). A Running attack keeps
+    // the speed the attacker ran at and tracks where its target is now through the wind-up: carried on at up to
+    // lungeTopSpeed (m/s) over the clip's own step, easing by at most lungeAccel (m/s each second) so it never stops dead
+    // or jerks, until it stands right for the blow; after the blow it slows the same way.
+    float lungeTopSpeed = 6.0f;
+    float lungeAccel = 14.0f;
+    // A target moving away faster than this (m/s) is getting away; an attacker faster than lungeRunSpeed is running.
+    float lungeFleeSpeed = 0.8f;
+    float lungeRunSpeed = 2.4f;
+    // The fighter AI lunges at a target that is getting away (or when it runs in) from no further than its reach, the
+    // clip's step, the carry it can make in the wind-up (aiLungeCarryShare of lungeTopSpeed) and the target's lead.
+    float aiLungeCarryShare = 0.7f;
+    // A lunge whose target is still getting away after the blow: the fighter AI ends its recovery from this share on
+    // and runs on after it (no standing about, no opening).
+    float lungeChaseShare = 0.35f;
+    int aiLungeGapSteps = 20;         // the fighter AI's next lunge no sooner after the last one ended
     std::array<SoulsKind, kSoulsAttackKinds> kinds{};
     std::vector<SoulsMoveset> movesets;
 };

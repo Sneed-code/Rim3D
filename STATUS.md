@@ -2,6 +2,14 @@
 
 Updated 2026-11-28.
 
+Running lunges and the jump's landing (sneed, 2026-11-28; sim, data and Unreal; `docs/design/souls-combat.md` "Running
+lunges", "The jump's landing"): **chasers run into you** instead of stopping to swing: every weapon kind and the bare fists
+have a **running lunge** (one hand and clubs a running slash, two hand a forward greatsword slash, the spear a straight
+impale lunge, fists a lunging jab; a dual-wield slot waits for weapons), **6 poise** each. A lunge keeps the pace it ran
+at and tracks where you will be, slowing only into the blow; the AI lunges at a target getting away, runs the last
+metres instead of walking, and after a lunge that misses a target still running it runs straight on. The player lunges
+by attacking while sprinting, with any weapon. **Jump landing**: lift-off and touch-down timed from the jump clips' own
+feet, the landing clip's feet down the moment the body is, no foot locks mid-blend; new smoke `jump`.
 Scalp, hair colours and lashes (sneed, 2026-11-28; art steps and Unreal; `docs/design/hair-physics.md` "The scalp
 follows the hair"): **no scalp through the hair on any head shape.** Some sliders (the brow ridge most, with the ethnic
 base shapes) bulged the back of the crown in a way the hair's per-axis fit can't follow: a Melanesian preset showed skin

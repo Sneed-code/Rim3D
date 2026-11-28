@@ -43,6 +43,7 @@ namespace colony { class Map; }
  * sound (V20: the cues and their files, the voice budget, walls muffling, footsteps, loops, ambience, weather, music, the mixer).
  * shuttle (the landing zone tool and overlay, a visitors' shuttle flying in, swinging its engines down, landing with flames, dust and leaning grass, door opening).
  * look (L1, the look bench: the same shots of seed 42 every run for the before and after sheets; tools/look_sheet.ps1).
+ * jump (sneed 2026-11-28: the protagonist's jump standing, walking, running and sprinting; feet on the ground at the touchdown, no float or snap).
  * Optional: -SmokeTimeout=<seconds> (default 300) fails a run that hangs.
  * To add a test: write a Build<Name>Phases() and add a branch in OnWorldBeginPlay.
  * Run it with tools/smoke.ps1.
@@ -122,6 +123,7 @@ private:
 	void BuildClothesPhases();      // SmokeTestClothes.cpp
 	void BuildLevelsPhases();       // SmokeTestLevels.cpp
 	void BuildFeelPhases();         // SmokeTestFeel.cpp
+	void BuildJumpPhases();         // SmokeTestJump.cpp
 	void BuildFirePhases();         // SmokeTestFire.cpp
 	void BuildPerfPhases();         // SmokeTestPerf.cpp
 	void BuildFacesPhases();        // SmokeTestFaces.cpp

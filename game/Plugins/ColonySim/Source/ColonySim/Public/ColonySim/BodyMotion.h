@@ -206,8 +206,10 @@ public:
     uint64_t shoves() const { return shoves_; }
     uint64_t stopped() const { return stopped_; }
 
-private:
+    // A body may stand at (x, y): clear of walls (as wide as the pathfinder thinks) and of tree trunks.
     bool fits(Entity pawn, float x, float y, int level) const;
+
+private:
     void gatherBodies(Entity pawn, float x, float y, int level, float range);
 
     Things& things_;
