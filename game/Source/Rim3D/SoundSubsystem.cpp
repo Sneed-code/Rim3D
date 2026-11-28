@@ -1361,6 +1361,7 @@ void USoundSubsystem::Tick(float DeltaTime)
 					Audio->Stop();
 					Audio->SetSound(nullptr);
 				}
+				UE_LOG(LogTemp, Display, TEXT("Sound: removed the level's ambient sound actor %s (Unreal sample music)"), *It->GetName());
 				It->Destroy();
 				++LevelSoundsRemoved;
 			}
