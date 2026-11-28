@@ -23,7 +23,7 @@
   ],
   "cueMap": [
     {"cues": "^(Shot_|Throw_|Flyby_|Incoming_|Ricochet|Impact_|Arrow_|Explosion_|Gore_|Swing_|Flesh_|Hit_|Punch|Work_|Tree_Fall|Bed_Creak|Gun_Shell|Step_|Fire_|Hum_|Short_Circuit|Weather_|Alarm|Raid_Horn|Amb_(Temperate|Boreal|Arid|Indoor)|Animal_|Voice_Male|Pawn_)", "from": ["freesound", "oga-firearms"], "pick": "Freesound CC0/CC-BY recordings by cue (sound_freesound.json), the firearm library for guns; picked by title, not by ear"},
-    {"cues": "^Hit_(Wood|Steel)_(Flesh|Wood|Steel|Stone)$", "from": ["kenney-impact", "oga-sword-clash"], "pick": "melee by material: punch and soft thuds (flesh), wood and plank knocks, metal plate and clangs, mining clinks (stone)"},
+    {"cues": "^(Hit_(Wood|Steel)_(Flesh|Wood|Steel|Stone)|Block_Shield)$", "from": ["kenney-impact", "oga-sword-clash"], "pick": "melee by material, and a short plate/wood knock for blows on a raised shield: punch and soft thuds (flesh), wood and plank knocks, metal plate and clangs, mining clinks (stone)"},
     {"cues": "^Shot_Far_|^Explosion_Far$", "from": ["oga-firearms", "oga-distant-explosion", "oga-explosions"], "pick": "far layers: the near shots low-passed with a rolling echo (sound_assets.py filters), the distant explosion"},
     {"cues": "^Shot_(Revolver|Pistol)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "revolver and handgun shots"},
     {"cues": "^Shot_(Rifle|AssaultRifle)$", "from": ["oga-firearms", "oga-gunshots"], "pick": "rifle, carbine and automatic shots"},
