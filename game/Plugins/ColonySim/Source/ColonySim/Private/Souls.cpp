@@ -164,6 +164,14 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     num("aiLeapChance", r.aiLeapChance);
     num("aiGuardChance", r.aiGuardChance);
     num("aiCounterChance", r.aiCounterChance);
+    num("lungeTopSpeed", r.lungeTopSpeed);
+    num("lungeAccel", r.lungeAccel);
+    num("lungeFleeSpeed", r.lungeFleeSpeed);
+    num("lungeRunSpeed", r.lungeRunSpeed);
+    num("aiLungeCarryShare", r.aiLungeCarryShare);
+    num("lungeChaseShare", r.lungeChaseShare);
+    whole("aiLungeGapSteps", r.aiLungeGapSteps);
+    r.lungeChaseShare = std::clamp(r.lungeChaseShare, 0.0f, 1.0f);
     r.staminaMax = std::max(1.0f, r.staminaMax);
     r.regenSeconds = std::max(0.05f, r.regenSeconds);
     r.chainShare = std::clamp(r.chainShare, 0.0f, 1.0f);
@@ -195,6 +203,8 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
         }
         ms.speed = std::max(0.1f, static_cast<float>(def->number((base + "speed").c_str(), ms.speed)));
         ms.weaponPoise = static_cast<float>(def->number((base + "weaponPoise").c_str(), ms.weaponPoise));
+        ms.lungeOnly = def->flag((base + "lungeOnly").c_str(), ms.lungeOnly);
+        ms.unarmed = def->flag((base + "unarmed").c_str(), ms.unarmed);
         for (size_t i = 0; i < kSoulsAttackKinds; ++i) {
             const std::string clips = base + "clips." + kSoulsKindNames[i];
             for (size_t j = 0; j < def->count(clips.c_str()); ++j) {
@@ -274,6 +284,77 @@ const SoulsMoveset* MeleeSystem::movesetOf(Entity pawn) const {
 }
 
 bool MeleeSystem::hasMoveset(Entity pawn) const { return movesetOf(pawn) != nullptr; }
+
+const SoulsMoveset* MeleeSystem::soulsSetFor(Entity pawn, SoulsAttack kind) const {
+    if (const SoulsMoveset* ms = movesetOf(pawn); ms != nullptr && (kind != SoulsAttack::Running || ms->clips[soulsIndex(kind)].size() > 0)) {
+        return ms;
+    }
+    if (kind != SoulsAttack::Running || !souls_.enabled || !things_.registry().valid(pawn)) {
+        return nullptr;
+    }
+    bool weapon = false;
+    const ToolSet* set = toolsOf(pawn, weapon);
+    if (set == nullptr || set->lungeSet < 0 || static_cast<size_t>(set->lungeSet) >= souls_.movesets.size()) {
+        return nullptr;
+    }
+    return &souls_.movesets[static_cast<size_t>(set->lungeSet)];
+}
+
+// The first measured clip an attack of `kind` would play (its combo's first; a lunge's only one).
+const MotionClip* MeleeSystem::soulsFirstClip(Entity pawn, SoulsAttack kind) const {
+    const SoulsMoveset* ms = soulsSetFor(pawn, kind);
+    if (ms == nullptr) {
+        return nullptr;
+    }
+    const std::vector<std::string>* list = &ms->clips[soulsIndex(kind)];
+    if (list->empty()) {
+        list = soulsHeavyChain(kind) ? &ms->clips[static_cast<size_t>(SoulsAttack::Heavy)] : &ms->clips[0];
+    }
+    if (list->empty()) {
+        list = &ms->clips[0];
+    }
+    for (const std::string& name : *list) {
+        const MotionClip* c = combat_.motion().clip(name);
+        if (c != nullptr && c->hitSeconds > 0.0f) {
+            return c;
+        }
+    }
+    return nullptr;
+}
+
+bool MeleeSystem::hasLunge(Entity pawn) const {
+    if (!souls_.enabled) {
+        return false;
+    }
+    const SoulsMoveset* ms = soulsSetFor(pawn, SoulsAttack::Running);
+    return ms != nullptr && (!ms->lungeOnly || !ms->clips[soulsIndex(SoulsAttack::Running)].empty());
+}
+
+float MeleeSystem::awaySpeed(Entity pawn, Entity target) const {
+    const entt::registry& reg = things_.registry();
+    if (!reg.valid(pawn) || !reg.valid(target) || !reg.all_of<Position>(pawn) || !reg.all_of<Position>(target)) {
+        return 0.0f;
+    }
+    const Mover* mv = reg.try_get<Mover>(target);
+    if (mv == nullptr) {
+        return 0.0f;
+    }
+    const Position& a = reg.get<Position>(pawn);
+    const Position& b = reg.get<Position>(target);
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    const float d = std::sqrt(dx * dx + dy * dy);
+    if (!(d > 1e-3f)) {
+        return 0.0f;
+    }
+    return (mv->vx * dx + mv->vy * dy) / d * static_cast<float>(kStepsPerRealSecondAt1x);
+}
+
+bool MeleeSystem::runningPace(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Mover* mv = reg.valid(pawn) ? reg.try_get<Mover>(pawn) : nullptr;
+    return mv != nullptr && std::sqrt(mv->vx * mv->vx + mv->vy * mv->vy) * static_cast<float>(kStepsPerRealSecondAt1x) >= souls_.lungeRunSpeed;
+}
 
 bool MeleeSystem::soulsStunned(Entity pawn) const {
     const entt::registry& reg = things_.registry();
@@ -398,7 +479,9 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
         }
         return false;
     };
-    if (!souls_.enabled || movesetOf(pawn) == nullptr || soulsLowTarget(pawn, target, player)) {
+    // A weapon kind still on the old swing has only its running lunge here (sneed 2026-11-28).
+    const bool lungeOnly = movesetOf(pawn) == nullptr;
+    if (!souls_.enabled || (lungeOnly && !(press.running && !press.jumping && hasLunge(pawn))) || soulsLowTarget(pawn, target, player)) {
         return attack(pawn, target, player, why);  // the old swing (it checks the rest)
     }
     if (!things_.spawned(pawn) || !reg.all_of<Posture, Mover>(pawn)) {
@@ -436,6 +519,14 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
             kind = crit;
         }
     }
+    if (lungeOnly) {
+        if (kind == SoulsAttack::RunningHeavy) {
+            kind = SoulsAttack::Running;  // its lunge is its only running attack
+        }
+        if (kind != SoulsAttack::Running) {
+            return attack(pawn, target, player, why);
+        }
+    }
     // In reach: a lunging kind reaches as far as it may be carried in. The player swings anyway (Elden Ring): at nobody,
     // straight ahead, when the target is too far.
     if (target != kNoEntity) {
@@ -444,12 +535,15 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
         const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
         // A lunging kind's clip (a running heavy's leap) carries the body on by its own step.
         float clipStep = 0.0f;
-        if (const SoulsMoveset* ms = movesetOf(pawn); ms != nullptr && !ms->clips[soulsIndex(kind)].empty()) {
-            if (const MotionClip* c = combat_.motion().clip(ms->clips[soulsIndex(kind)].front()); c != nullptr && c->hitSeconds > 0.0f) {
-                clipStep = std::max(0.0f, combat_.motion().forwardAt(c->def, c->hitSeconds)) * combat_.motion().sizeScale(pawn);
+        float lungeCarry = 0.0f;
+        if (const MotionClip* c = soulsFirstClip(pawn, kind); c != nullptr) {
+            clipStep = std::max(0.0f, combat_.motion().forwardAt(c->def, c->hitSeconds)) * combat_.motion().sizeScale(pawn);
+            if (kind == SoulsAttack::Running) {
+                // A running lunge is carried on through its wind-up (soulsLungeCarry): it reaches as far as that takes it.
+                lungeCarry = souls_.lungeTopSpeed * souls_.aiLungeCarryShare * soulsWindupSeconds(pawn, kind, *c);
             }
         }
-        const float reachTo = std::max(engageDistance(pawn, target), reach(pawn) + clipStep) + rules_.reachSlack +
+        const float reachTo = std::max(engageDistance(pawn, target), reach(pawn) + clipStep) + rules_.reachSlack + lungeCarry +
                               souls_.kinds[soulsIndex(kind)].maxWarp + (player ? rules_.playerReachSlack : 0.0f);
         if (a.level != b.level || d > reachTo) {
             if (!player) {
@@ -513,7 +607,7 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
     };
     bool weapon = false;
     const ToolSet* set = toolsOf(pawn, weapon);
-    const SoulsMoveset* ms = movesetOf(pawn);
+    const SoulsMoveset* ms = soulsSetFor(pawn, kind);
     if (set == nullptr || ms == nullptr || set->tools.empty()) {
         return fail("that pawn has nothing to fight with");
     }
@@ -565,6 +659,14 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
     const float clipSeconds = clip != nullptr ? std::max(clip->seconds, hitSeconds + 0.1f) : 1.0f;
     const int windup = std::max(3, static_cast<int>(std::lround(hitSeconds * 30.0f * factor)));
     const int recovery = std::max(4, static_cast<int>(std::lround((clipSeconds - hitSeconds) * 30.0f * factor)));
+    // A running lunge keeps the pace it ran at (sneed 2026-11-28: "they don't stop running"): soulsLungeCarry eases it.
+    m.lungeSpeed = 0.0f;
+    if (kind == SoulsAttack::Running) {
+        ++lunges_;
+        if (const Mover* mv = reg.try_get<Mover>(pawn)) {
+            m.lungeSpeed = std::min(std::sqrt(mv->vx * mv->vx + mv->vy * mv->vy), souls_.lungeTopSpeed / static_cast<float>(kStepsPerRealSecondAt1x));
+        }
+    }
     combat_.motion().stop(pawn);  // the last blow's clip (a combo goes straight on)
     m.phase = MeleePhase::Windup;
     m.stepsLeft = windup;
@@ -641,9 +743,12 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
             if (m.holding) {
                 steps = std::min(steps, std::max(2, static_cast<int>(std::lround(static_cast<float>(windup) * souls_.chargeShare)) - 1));
             }
-            if (std::fabs(shift) > 0.02f) {
+            if (kind != SoulsAttack::Running && std::fabs(shift) > 0.02f) {
                 combat_.motion().shiftClip(pawn, shift, steps);
             }
+        }
+        if (kind == SoulsAttack::Running) {
+            combat_.motion().shiftClip(pawn, 0.0f, 1);  // the carry is laid on step by step (soulsLungeCarry, from this step)
         }
     }
     if (events_ != nullptr) {
@@ -919,7 +1024,7 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
         }
         return;
     }
-    const SoulsMoveset* ms = m.kind != SoulsAttack::None ? movesetOf(attacker) : nullptr;
+    const SoulsMoveset* ms = m.kind != SoulsAttack::None ? soulsSetFor(attacker, m.kind) : nullptr;
     float damage = ms != nullptr ? ms->weaponPoise * souls_.kinds[soulsIndex(m.kind)].poise : toolPower * souls_.animalPoisePerPower;
     const Melee* vm = reg.try_get<Melee>(victim);
     if (vm != nullptr && vm->phase == MeleePhase::Windup && vm->kind != SoulsAttack::None && souls_.kinds[soulsIndex(vm->kind)].hyperArmor) {
@@ -970,6 +1075,9 @@ bool MeleeSystem::soulsStepWindup(Entity pawn, Melee& m) {
         bm->faceX = posture.facingX;
         bm->faceY = posture.facingY;
     }
+    if (m.kind == SoulsAttack::Running) {
+        soulsLungeCarry(pawn, m);  // the run carries on into the blow
+    }
     // The impale's victim, caught, stands where it is turned to the blade through the thrust (nothing else may walk or
     // turn it meanwhile: it stepped aside and the thrust went past, PC 2026-11-28).
     if (m.kind == SoulsAttack::Riposte && m.target != kNoEntity && reg.valid(m.target) && reg.all_of<Posture>(m.target)) {
@@ -1017,6 +1125,19 @@ bool MeleeSystem::soulsStepWindup(Entity pawn, Melee& m) {
 // recovery has run chainShare of its length.
 void MeleeSystem::soulsStepRecovery(Entity pawn, Melee& m) {
     entt::registry& reg = things_.registry();
+    if (m.kind == SoulsAttack::Running) {
+        soulsLungeCarry(pawn, m);  // slowing out of the lunge, not stopping dead
+        // The fighter AI runs on after a target still getting away (sneed 2026-11-28: "they don't stop running until you
+        // do"): the rest of the recovery and the opening are cut, and the chase goes on.
+        if (!m.player && m.finisher == 0 && now() >= m.stunUntil && m.target != kNoEntity && reg.valid(m.target) &&
+            things_.spawned(m.target) && soulsAble(reg, pawn) &&
+            m.recoverySteps - m.stepsLeft >= static_cast<int>(std::lround(static_cast<float>(m.recoverySteps) * souls_.lungeChaseShare)) &&
+            !inReach(pawn, m.target) && awaySpeed(pawn, m.target) > souls_.lungeFleeSpeed) {
+            soulsEnd(pawn, m);
+            ++lungeChases_;
+            return;
+        }
+    }
     if (m.recoverySteps - m.stepsLeft < static_cast<int>(std::lround(static_cast<float>(m.recoverySteps) * souls_.chainShare)) ||
         now() < m.stunUntil || now() < m.attackAfter || !soulsAble(reg, pawn)) {
         return;
@@ -1285,12 +1406,137 @@ bool MeleeSystem::aiLeap(Entity pawn, Entity victim) {
     if (a.level != b.level || d < souls_.aiLeapMin || d > souls_.aiLeapMax) {
         return false;
     }
+    if (awaySpeed(pawn, victim) > souls_.lungeFleeSpeed) {
+        return false;  // the leap's step is fixed and it would land short of one getting away: the lunge runs it down
+    }
     Rng rng(splitMix64(seed_ ^ (static_cast<uint64_t>(now()) << 22) ^ (uint64_t{entt::to_integral(pawn)} * 0x51ED27ULL)));
     if (rng.unit() >= souls_.aiLeapChance) {
         return false;
     }
     SoulsPress press;
     press.heavy = true;
+    press.running = true;
+    return soulsAttack(pawn, victim, false, press, nullptr);
+}
+
+// A lunge's (or any attack's) wind-up in seconds: its clip's blow at the pace soulsStart plays it.
+float MeleeSystem::soulsWindupSeconds(Entity pawn, SoulsAttack kind, const MotionClip& clip) const {
+    const SoulsMoveset* ms = soulsSetFor(pawn, kind);
+    const float speed = std::max(0.1f, souls_.kinds[soulsIndex(kind)].speed * (ms != nullptr ? ms->speed : 1.0f));
+    const float factor = combat_.attackTimeFactor(pawn) / swingSpeed(pawn) / speed;
+    return std::max(0.1f, clip.hitSeconds * factor);
+}
+
+// The running lunge's carry, each step of its wind-up and recovery (sneed 2026-11-28: "make it so they run into you, a
+// lunging attack while running; they don't stop running until you do"). The attacker goes on at the pace it ran at, laid
+// over its clip's own step, and eases (by lungeAccel) to the speed that brings it to stand right for the blow by the time
+// it lands, on where its target will be by then: never faster than it could still slow from in time, so it arrives
+// rather than stopping short or running through. Once the line is fixed (and after the blow) it only slows.
+void MeleeSystem::soulsLungeCarry(Entity pawn, Melee& m) {
+    entt::registry& reg = things_.registry();
+    BodyMotion* bm = reg.try_get<BodyMotion>(pawn);
+    if (bm == nullptr || !bm->clip.valid() || bm->freeFeet) {
+        m.lungeSpeed = 0.0f;
+        return;
+    }
+    const float perStep = 1.0f / static_cast<float>(kStepsPerRealSecondAt1x);
+    const float top = souls_.lungeTopSpeed * perStep;
+    const float accel = std::max(1e-4f, souls_.lungeAccel * perStep * perStep);
+    float want = 0.0f;
+    if (m.phase == MeleePhase::Windup && !m.committed && m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) &&
+        reg.all_of<Position>(m.target)) {
+        const Position& a = reg.get<Position>(pawn);
+        const Position& b = reg.get<Position>(m.target);
+        if (a.level == b.level) {
+            const BodyMotionSystem& motion = combat_.motion();
+            const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+            float clipLeft = 0.0f;
+            if (const MotionClip* c = motion.clip(bm->clip); c != nullptr && c->hitSeconds > 0.0f) {
+                clipLeft = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds) - motion.forwardAt(c->def, bm->time)) * bm->scale;
+            }
+            const float bodyExtra = std::max(0.0f, motion.bodyRadius(m.target) - kPawnRadius);
+            float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
+            if (reg.all_of<Blocking>(m.target)) {
+                ideal = std::max(ideal, souls_.shieldRoom + bodyExtra);
+            }
+            const int left = std::max(1, m.stepsLeft);
+            const float lead = std::max(0.0f, awaySpeed(pawn, m.target)) * perStep * static_cast<float>(left);
+            const float need = d + lead - clipLeft - ideal;
+            if (need > 0.0f) {
+                // Just in time for the blow (need over the steps left), never faster than it could still come down to a
+                // stand in what is left (v^2 = 2 a s).
+                want = std::min({top, need / static_cast<float>(left), std::sqrt(2.0f * accel * need) + accel});
+            }
+        }
+    }
+    if (m.lungeSpeed < want) {
+        m.lungeSpeed = std::min(want, m.lungeSpeed + accel);
+    } else {
+        m.lungeSpeed = std::max(want, m.lungeSpeed - accel);
+    }
+    // Not into a wall or a trunk: a lunge that meets one stops there instead of running on the spot.
+    if (m.lungeSpeed > 1e-5f) {
+        const Position& at = reg.get<Position>(pawn);
+        const float ahead = m.lungeSpeed + 0.2f;
+        if (!combat_.motion().fits(pawn, at.x + bm->faceX * ahead, at.y + bm->faceY * ahead, at.level)) {
+            m.lungeSpeed = 0.0f;
+        }
+    }
+    if (m.lungeSpeed > 1e-5f && bm->rate > 0.0f) {
+        bm->pushTo = std::max(1, bm->pushTo);
+        bm->pushMetres += m.lungeSpeed / std::max(1e-3f, bm->scale);
+    }
+}
+
+bool MeleeSystem::aiLunge(Entity pawn, Entity victim) {
+    entt::registry& reg = things_.registry();
+    if (!souls_.enabled || !hasLunge(pawn) || !ready(pawn) || !reg.valid(victim) || !things_.spawned(victim) ||
+        soulsLowTarget(pawn, victim, false) || !reg.all_of<Position>(victim)) {
+        return false;
+    }
+    if (const Melee* m = reg.try_get<Melee>(pawn);
+        m != nullptr && (now() < m->openUntil || now() < m->attackAfter || (m->kind == SoulsAttack::Running && now() < m->endedAt + souls_.aiLungeGapSteps))) {
+        return false;
+    }
+    if (stamina(pawn) < souls_.kinds[soulsIndex(SoulsAttack::Running)].stamina) {
+        return false;  // not enough breath for it: it closes in on foot
+    }
+    const float away = awaySpeed(pawn, victim);
+    const bool gettingAway = away > souls_.lungeFleeSpeed;
+    if (!gettingAway && !runningPace(pawn)) {
+        return false;  // a target standing its ground and an attacker not running at it: the standing attacks
+    }
+    const MotionClip* c = soulsFirstClip(pawn, SoulsAttack::Running);
+    if (c == nullptr) {
+        return false;
+    }
+    const Position& a = reg.get<Position>(pawn);
+    const Position& b = reg.get<Position>(victim);
+    if (a.level != b.level) {
+        return false;
+    }
+    const BodyMotionSystem& motion = combat_.motion();
+    const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+    const float seconds = soulsWindupSeconds(pawn, SoulsAttack::Running, *c);
+    const float clipStep = std::max(0.0f, motion.forwardAt(c->def, c->hitSeconds)) * motion.sizeScale(pawn);
+    const float bodyExtra = std::max(0.0f, motion.bodyRadius(victim) - kPawnRadius);
+    const float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
+    const float carry = souls_.lungeTopSpeed * souls_.aiLungeCarryShare * seconds;
+    const float lead = std::max(0.0f, away) * seconds;
+    // From no further than the clip's step and the carry bring it in time (less the target's lead); running in at one
+    // standing still, not from right on top of it (the standing attacks are for that).
+    const float farthest = ideal + clipStep + carry - lead;
+    const float nearest = gettingAway ? 0.0f : ideal + 0.5f * clipStep;
+    if (d > farthest || d < nearest) {
+        return false;
+    }
+    // A clear run at it: no wall or tree trunk on the straight line (the path may go round one; the lunge can't).
+    for (float t = 0.25f; t < d; t += 0.25f) {
+        if (!motion.fits(pawn, a.x + (b.x - a.x) * t / d, a.y + (b.y - a.y) * t / d, a.level)) {
+            return false;
+        }
+    }
+    SoulsPress press;
     press.running = true;
     return soulsAttack(pawn, victim, false, press, nullptr);
 }

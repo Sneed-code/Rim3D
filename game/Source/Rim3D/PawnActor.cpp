@@ -566,7 +566,8 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 		// (Not in a finisher: it steps to its place and holds still, feet planted.)
 		In.bTurnFeet = GPawnsTurnFeetInSwing.GetValueOnGameThread() != 0 && Now.meleeFinisher == 0 && (Now.meleePhase != colony::MeleePhase::Ready || GetSwing().IsActive());
 		In.bStandTwist = !(IsInMotionClip() && !bMotionUpper) && RollProgress <= 0.0f && !IsJumping() && !Now.crawling && !Now.downed && !KneelMontage.IsValid();
-		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || (IsInMotionClip() && !bMotionUpper) || KneelMontage.IsValid();
+		In.bLegsFromClip = LegsClipWeight > 0.001f || ActionEndSeconds > 0.0 || JumpLandLegsLeft > 0.0f || (IsInMotionClip() && !bMotionUpper) ||
+			KneelMontage.IsValid();
 		In.bHitLayer = true;
 		In.LimpLeft = LimpLeft;
 		In.LimpRight = LimpRight;
@@ -697,6 +698,74 @@ namespace
 	}
 }
 
+namespace
+{
+	FVector PawnMotionBoneAt(const UAnimSequence& Clip, int32 Bone, double Time);
+
+	/** When a jump clip's feet leave the ground (a take-off clip) or come back to it (a landing clip), seconds at play rate
+	 *  1, read off the clip's own foot bones once and kept. Take-off: the last moment both feet are still within 3 cm of
+	 *  where they stand at its first frame (nought if they never rise in its first 0.4 s). Landing: the first moment the
+	 *  lower foot is within 2.5 cm of where it stands at the end (nought if it starts on the ground). */
+	float PawnJumpClipTime(const UAnimSequence* Clip, bool bTakeOff)
+	{
+		static TMap<TWeakObjectPtr<const UAnimSequence>, float> Known[2];
+		if (!Clip || !Clip->GetSkeleton())
+		{
+			return 0.0f;
+		}
+		if (const float* Found = Known[bTakeOff ? 1 : 0].Find(Clip))
+		{
+			return *Found;
+		}
+		const FReferenceSkeleton& Ref = Clip->GetSkeleton()->GetReferenceSkeleton();
+		const int32 FootL = Ref.FindBoneIndex(TEXT("foot_l"));
+		const int32 FootR = Ref.FindBoneIndex(TEXT("foot_r"));
+		float Result = 0.0f;
+		if (FootL != INDEX_NONE && FootR != INDEX_NONE)
+		{
+			const auto Lower = [&](double T) { return FMath::Min(PawnMotionBoneAt(*Clip, FootL, T).Z, PawnMotionBoneAt(*Clip, FootR, T).Z); };
+			const double Length = Clip->GetPlayLength();
+			const double Step = 1.0 / 60.0;
+			if (bTakeOff)
+			{
+				const double Ground = Lower(0.0);
+				for (double T = Step; T <= FMath::Min(0.4, Length); T += Step)
+				{
+					if (Lower(T) > Ground + 3.0)
+					{
+						Result = static_cast<float>(T - Step);
+						break;
+					}
+				}
+			}
+			else
+			{
+				const double Ground = Lower(FMath::Max(0.0, Length - 0.02));
+				for (double T = 0.0; T <= FMath::Min(0.5, Length); T += Step)
+				{
+					if (Lower(T) <= Ground + 2.5)
+					{
+						Result = static_cast<float>(T);
+						break;
+					}
+				}
+			}
+		}
+		Known[bTakeOff ? 1 : 0].Add(Clip, Result);
+		return Result;
+	}
+
+	/** Blend times for the jump's clips (seconds): into the landing at most this (less when it starts closer to the ground),
+	 *  and the landing's blend back to the walk or run. */
+	constexpr float PawnJumpLandBlendIn = 0.1f;
+	constexpr float PawnJumpLandBlendOut = 0.3f;
+}
+
+float ASimPawnActor::JumpTotalSeconds() const
+{
+	return JumpLiftDelay + kJumpSeconds * FMath::Sqrt(JumpFactor);
+}
+
 bool ASimPawnActor::StartJump()
 {
 	USimPawnAnimInstance* Anim = GetAnim();
@@ -708,14 +777,25 @@ bool ASimPawnActor::StartJump()
 	JumpSpeed = GroundSpeed;
 	JumpFactor = FMath::Clamp(JumpHeightFactor, 0.5f, 3.0f);
 	bJumpFalling = false;
+	bJumpLanding = false;
+	JumpLandLegsLeft = 0.0f;
 	JumpStartLength = 0.0f;
+	JumpLiftDelay = 0.0f;
 	if (UAnimSequence* Start = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Start_%s_Lfoot"), PawnJumpGait(JumpSpeed))))
 	{
 		if (Anim->PlaySlotAnimationAsDynamicMontage(Start, FAnimSlotGroup::DefaultSlotName, 0.08f, 0.15f))
 		{
 			JumpStartLength = Start->GetPlayLength();
+			// The body goes up when the clip's feet push off, not while they are still on the ground (it floated up off
+			// planted feet). At most 0.25 s: Space should still feel at once.
+			JumpLiftDelay = FMath::Min(0.25f, PawnJumpClipTime(Start, true));
 		}
 	}
+	// The landing for the pace it jumped at, picked now so its touch-down can be lined up with the ground.
+	JumpLandClip = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Land_%s_Light_Lfoot"), PawnJumpGait(JumpSpeed)));
+	JumpLandContact = PawnJumpClipTime(JumpLandClip.Get(), false);
+	LastJumpTiming = FString::Printf(TEXT("lift after %.3f s, flight %.3f s, landing %s touching down %.3f s in"), JumpLiftDelay,
+		kJumpSeconds * FMath::Sqrt(JumpFactor), JumpLandClip.IsValid() ? *JumpLandClip->GetName() : TEXT("none"), JumpLandContact);
 	ActionEndSeconds = 0.0;
 	++JumpsPlayed;
 	return true;
@@ -734,11 +814,8 @@ void ASimPawnActor::CancelJump()
 	bJumpAttackPending = true;
 	JumpAge = -1.0f;
 	bJumpFalling = false;
-}
-
-namespace
-{
-	FVector PawnMotionBoneAt(const UAnimSequence& Clip, int32 Bone, double Time);
+	bJumpLanding = false;
+	JumpLandLegsLeft = 0.0f;
 }
 
 void ASimPawnActor::JumpFitsClip(const UAnimSequence& Clip, float From, float Rate)
@@ -797,13 +874,54 @@ float ASimPawnActor::GetJumpHeight() const
 		return bJumpEasedToLanding ? JumpCancelHeight * (1.0f - T * T * (3.0f - 2.0f * T)) : JumpCancelHeight * (1.0f - T) * (1.0f - T);
 	}
 	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds. A higher jump
-	// (the lineage's factor) takes longer by its square root, as a thrown body does.
-	const float T = FMath::Clamp(JumpAge / (kJumpSeconds * FMath::Sqrt(JumpFactor)), 0.0f, 1.0f);
+	// (the lineage's factor) takes longer by its square root, as a thrown body does. It leaves the ground only once the
+	// take-off clip's feet push off (JumpLiftDelay).
+	const float T = FMath::Clamp((JumpAge - JumpLiftDelay) / (kJumpSeconds * FMath::Sqrt(JumpFactor)), 0.0f, 1.0f);
 	return 4.0f * kJumpHeight * JumpFactor * T * (1.0f - T);
+}
+
+void ASimPawnActor::StartJumpLanding(float Lead)
+{
+	USimPawnAnimInstance* Anim = GetAnim();
+	bJumpLanding = true;
+	if (!Anim)
+	{
+		return;
+	}
+	// The landing for how fast it is going now (it may have slowed or set off in the air).
+	if (UAnimSequence* Now = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Land_%s_Light_Lfoot"), PawnJumpGait(GroundSpeed))))
+	{
+		JumpLandClip = Now;
+		JumpLandContact = PawnJumpClipTime(Now, false);
+	}
+	UAnimSequence* Land = JumpLandClip.Get();
+	if (!Land)
+	{
+		Anim->StopSlotAnimation(PawnJumpLandBlendOut, FAnimSlotGroup::DefaultSlotName);
+		return;
+	}
+	// Started so its feet touch down exactly as the body reaches the ground: `Lead` seconds before it, at the moment of the
+	// clip that far ahead of its touch-down (sneed 2026-11-28: the body landed while the falling pose still held the feet
+	// up, then the landing snapped them down).
+	const float StartAt = FMath::Max(0.0f, JumpLandContact - Lead);
+	const float BlendIn = FMath::Clamp(Lead, 0.03f, PawnJumpLandBlendIn);
+	if (Anim->PlaySlotAnimationAsDynamicMontage(Land, FAnimSlotGroup::DefaultSlotName, BlendIn, PawnJumpLandBlendOut, 1.0f, 1, -1.0f, StartAt))
+	{
+		// It plays on to its end standing (the knees take the weight and straighten), a short way when moving (the run
+		// takes over in stride); its legs stay its own through the blend back out.
+		const float Rest = FMath::Max(0.1f, Land->GetPlayLength() - StartAt - PawnJumpLandBlendOut);
+		const float Keep = GroundSpeed < 60.0f ? Rest : FMath::Min(Rest, Lead + 0.3f);
+		ActionEndSeconds = Keep;
+		JumpLandLegsLeft = Keep + PawnJumpLandBlendOut;
+	}
 }
 
 void ASimPawnActor::AdvanceJump(float GameDelta)
 {
+	if (JumpLandLegsLeft > 0.0f)
+	{
+		JumpLandLegsLeft = FMath::Max(0.0f, JumpLandLegsLeft - GameDelta);
+	}
 	if (!IsJumping())
 	{
 		JumpCancelAge += GameDelta;
@@ -820,9 +938,11 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 	}
 	USimPawnAnimInstance* Anim = GetAnim();
 	JumpAge += GameDelta;
-	const float Left = kJumpSeconds * FMath::Sqrt(JumpFactor) - JumpAge;
+	const float Left = JumpTotalSeconds() - JumpAge;
+	// The touch-down's lead: the landing clip's own time from its start to its feet on the ground, at least a short blend.
+	const float Lead = FMath::Clamp(JumpLandContact, 0.05f, 0.3f);
 	// The take-off animation runs out before the ground comes: the fall loop holds the body in the air.
-	if (Anim && !bJumpFalling && JumpAge > JumpStartLength - 0.15f && Left > 0.2f)
+	if (Anim && !bJumpFalling && !bJumpLanding && JumpAge > JumpStartLength - 0.15f && Left > Lead + 0.1f)
 	{
 		bJumpFalling = true;
 		if (UAnimSequence* Fall = PawnJumpAnimation(TEXT("M_Neutral_Jump_Loop_Fall")))
@@ -830,27 +950,15 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 			Anim->PlaySlotAnimationAsDynamicMontage(Fall, FAnimSlotGroup::DefaultSlotName, 0.15f, 0.1f, 1.0f, 100);
 		}
 	}
+	if (!bJumpLanding && Left <= Lead)
+	{
+		StartJumpLanding(FMath::Max(0.0f, Left));
+	}
 	if (Left <= 0.0f)
 	{
-		JumpAge = -1.0f;
-		if (!Anim)
-		{
-			return;
-		}
-		// The landing for how fast it is going now; the walk or run takes over again soon after.
-		const float Speed = GroundSpeed;
-		const TCHAR* Gait = PawnJumpGait(Speed);
-		if (UAnimSequence* Land = PawnJumpAnimation(FString::Printf(TEXT("M_Neutral_Jump_F_Land_%s_Light_Lfoot"), Gait)))
-		{
-			if (Anim->PlaySlotAnimationAsDynamicMontage(Land, FAnimSlotGroup::DefaultSlotName, 0.05f, 0.25f))
-			{
-				ActionEndSeconds = Speed < 60.0f ? 0.6 : 0.35;
-			}
-		}
-		else
-		{
-			Anim->StopSlotAnimation(0.2f, FAnimSlotGroup::DefaultSlotName);
-		}
+		JumpAge = -1.0f;  // on the ground: the landing clip plays on (StartJumpLanding)
+		bJumpFalling = false;
+		bJumpLanding = false;
 	}
 }
 

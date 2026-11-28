@@ -195,6 +195,41 @@ sides, a knockdown each way and the get-up, the impale, a light and a heavy jump
   (`UWeaponDrawSubsystem::ImpaleAim`; within about 10 cm of spine_03 in the looks).
 - **The shield**: the steel medium shield is a real CC0 round shield (shields.md "Models").
 
+## Running lunges (sneed 2026-11-28)
+
+sneed: "enemies chasing you while you back pedal never melee you, they have to stop before attacking. Make it so they run
+into you and add a lunging attack while running, all weapons; the key thing is they don't stop running until you do. A
+lunging attack is -6 poise." Numbers: `SoulsRules` `lunge*`, `kinds.Running` (poise 3, so 6 with `weaponPoise` 2).
+
+- **Every weapon kind has one.** The sword's moveset has its own `Running` clip; every weapon still on the old swing gets
+  a `lungeOnly` moveset that gives it only the running attack (the rest stays the old swing): one hand and clubs the
+  sword-and-shield running slash (`Motion_SS_Attack3`), two hand (not spear) the forward greatsword slash
+  (`Motion_TwoHand_Slash2`), the spear the straight impale lunge (`Motion_SS_Riposte`), the bare fists a lunging lead jab
+  (`Motion_Unarmed_Jab`, `unarmed`). `DualWieldLunge` is ready for the style `DualWield` (no dual-wield weapons yet). The
+  player gets the same by attacking while sprinting.
+- **It runs into you** (`MeleeSystem::soulsLungeCarry`): the lunge starts at the pace the attacker ran at and, each step of
+  its wind-up, is carried over its clip's own step at just the speed that brings it to stand right for the blow when it
+  lands, on where the target will be by then (its speed away times the steps left); never faster than `lungeTopSpeed`,
+  never changing by more than `lungeAccel`, never faster than it can still slow from (so it arrives instead of running
+  through), stopping at a wall or trunk. After the line is fixed and through the recovery it only slows.
+- **The AI** (`MeleeSystem::aiLunge`, from `FighterSystem::meleeAct` before any stop): at a target moving away faster than
+  `lungeFleeSpeed`, or when running in itself (faster than `lungeRunSpeed`), from no further than its reach, the clip's step
+  and the carry it can make (`aiLungeCarryShare` of the top speed) less the target's lead, with a clear straight line. A
+  chaser now runs (not walks) the last 3 m after a target getting away (`FighterSystem::sprinting`), and after a lunge
+  whose target is still getting away it cuts its recovery at `lungeChaseShare` and runs on (no opening). The leap
+  (running heavy) is not used at one getting away: its step is fixed. Tests: `Tests/LungeTests.cpp` (a colonist backing
+  off at 2.5 m/s took 2 to 4 blows in 20 s before, 6 or 7 now, with every weapon kind and fists).
+
+## The jump's landing (sneed 2026-11-28)
+
+"Whenever I jump the landing is messed up, I float then it glitches." Unreal only (`ASimPawnActor::StartJump`,
+`AdvanceJump`, `StartJumpLanding`): the jump's clips are measured on the fly (`PawnJumpClipTime`, the foot bones): the body
+leaves the ground when the take-off clip's feet push off; the landing clip starts early enough (and at the right moment
+of itself) that its feet touch down exactly as the body reaches the ground (the fall loop's tucked feet were still up
+when the body landed, then snapped down); it plays out standing or briefly when moving, and its legs stay its own through
+the blend back out (the walk's foot locks grabbed the feet half way). Smoke `jump` measures the feet against the ground
+every frame (standing, walking, running, sprinting).
+
 ## Still to do
 
 - The spear's flicking and jarring (the old swing path; it gets a moveset next).

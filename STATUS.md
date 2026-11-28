@@ -2,6 +2,15 @@
 
 Updated 2026-11-28.
 
+Running lunges and the jump's landing (sneed, 2026-11-28; sim, data and Unreal; `docs/design/souls-combat.md` "Running
+lunges", "The jump's landing"): **chasers run into you** instead of stopping to swing: every weapon kind and the bare fists
+have a **running lunge** (one hand and clubs a running slash, two hand a forward greatsword slash, the spear a straight
+impale lunge, fists a lunging jab; a dual-wield slot waits for weapons), **6 poise** each. A lunge keeps the pace it ran
+at and tracks where you will be, slowing only into the blow; the AI lunges at a target getting away, runs the last
+metres instead of walking, and after a lunge that misses a target still running it runs straight on. The player lunges
+by attacking while sprinting, with any weapon. **Jump landing**: lift-off and touch-down timed from the jump clips' own
+feet, the landing clip's feet down the moment the body is, no foot locks mid-blend; new smoke `jump`.
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then

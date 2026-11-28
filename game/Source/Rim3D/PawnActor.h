@@ -75,6 +75,9 @@ public:
 	/** Jump attacks whose clip took the jump's height over (JumpFitsClip), and what the last one did (smoke tests). */
 	int32 GetJumpsFitted() const { return JumpsFitted; }
 	const FString& GetLastJumpFit() const { return LastJumpFit; }
+	/** The last jump's timing (smoke test `jump`): the lift delay, the landing clip and its touch-down, seconds. */
+	FString GetLastJumpTiming() const { return LastJumpTiming; }
+	bool IsJumpLanding() const { return bJumpLanding || JumpLandLegsLeft > 0.0f; }
 	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
 	float GetGroundSpeed() const { return GroundSpeed; }
 	static constexpr float kJumpHeight = 45.0f;
@@ -540,6 +543,20 @@ private:
 	float JumpSpeed = 0.0f;
 	float JumpStartLength = 0.0f;
 	bool bJumpFalling = false;
+	/** sneed 2026-11-28 ("whenever I jump the landing is messed up, I float then it glitches; make it 100% fluid"): the
+	 *  jump's timing read off its own clips (PawnJumpClipTimes). The body leaves the ground when the take-off clip's feet
+	 *  do (JumpLiftDelay seconds in), the landing clip starts early enough that its feet touch down the moment the body
+	 *  does (bJumpLanding), and its legs stay the clip's until it has blended back out (JumpLandLegsLeft), so the walk's
+	 *  foot locks don't grab the feet half way. */
+	float JumpLiftDelay = 0.0f;
+	bool bJumpLanding = false;
+	float JumpLandLegsLeft = 0.0f;
+	/** The landing clip picked for this jump and when in it the feet touch down (seconds at play rate 1). */
+	TWeakObjectPtr<UAnimSequence> JumpLandClip;
+	float JumpLandContact = 0.0f;
+	/** Seconds of game time the whole arc takes (lift delay plus the flight). */
+	float JumpTotalSeconds() const;
+	void StartJumpLanding(float Lead);
 	/** The height (cm) a cancelled jump was at, eased to nought; and how far into that ease it is (game seconds). */
 	float JumpCancelHeight = 0.0f;
 	float JumpCancelAge = 0.0f;
@@ -551,6 +568,7 @@ private:
 	bool bJumpAttackPending = false;
 	int32 JumpsFitted = 0;
 	FString LastJumpFit;
+	FString LastJumpTiming;
 	/** A jump attack's whole-body clip starts at `From` (seconds, played at `Rate`): the jump's height is fitted to it. */
 	void JumpFitsClip(const UAnimSequence& Clip, float From, float Rate);
 	int32 JumpsPlayed = 0;

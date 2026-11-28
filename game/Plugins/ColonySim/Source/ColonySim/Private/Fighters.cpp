@@ -675,7 +675,10 @@ bool FighterSystem::sprinting(Entity pawn) const {
         return false;
     }
     const float d = fightDist(target->x, target->y, self->x, self->y);
-    return d > rules_.sprintChargeMin && d < rules_.sprintChargeMax;
+    // A target getting away is run after all the way in (sneed 2026-11-28: walking the last 3 m, the chaser never caught
+    // one backing off).
+    const bool gettingAway = melee_->soulsOn() && melee_->awaySpeed(pawn, f->target) > melee_->souls().lungeFleeSpeed;
+    return (d > rules_.sprintChargeMin || (gettingAway && d > 0.5f * melee_->reach(pawn))) && d < rules_.sprintChargeMax;
 }
 
 bool FighterSystem::fleeResponse(FightResponse response) {
@@ -1924,6 +1927,14 @@ bool FighterSystem::meleeAct(Entity pawn, Fighter& f) {
         // Running off: no new swings. In the year run a routed raider beat two colonists down as it went: the alarm had
         // stopped (a fleeing raider is no threat) and they stood about it unarmed in their minds (ninth pass).
         return false;
+    }
+    // The running lunge (sneed 2026-11-28: "enemies chasing you while you back pedal never melee you, they have to stop
+    // before attacking; make it so they run into you, a lunging attack while running"): at a target getting away, or
+    // running in at one, it goes from its run straight into the blow. It doesn't stop first, and its path stays, so the
+    // chase goes straight on after it.
+    if (melee_->soulsOn() && info(f.target) != nullptr && melee_->aiLunge(pawn, f.target)) {
+        combat_.setStance(pawn, Stance::Standing);
+        return true;
     }
     Entity victim = kNoEntity;
     if (info(f.target) != nullptr && melee_->inReach(pawn, f.target)) {

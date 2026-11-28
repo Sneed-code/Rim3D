@@ -266,6 +266,10 @@ void USmokeTestSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		BuildFeelPhases();
 	}
+	else if (TestName == TEXT("jump"))
+	{
+		BuildJumpPhases();
+	}
 	else if (TestName == TEXT("fire"))
 	{
 		BuildFirePhases();
