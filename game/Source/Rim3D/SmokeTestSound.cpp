@@ -152,9 +152,14 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		{
 			Fail(FString::Printf(TEXT("sound_cues: only %d SoundCues defs loaded"), S->GetCueCount()));
 		}
-		if (bHaveFiles && (S->GetCuesWithFiles() < 40 || S->GetMusicTracks(0) == 0))
+		if (bHaveFiles && S->GetCuesWithFiles() < 40)
 		{
-			Fail(FString::Printf(TEXT("sound_cues: the cut files are there but %d cues and %d calm tracks loaded"), S->GetCuesWithFiles(), S->GetMusicTracks(0)));
+			Fail(FString::Printf(TEXT("sound_cues: the cut files are there but only %d cues loaded"), S->GetCuesWithFiles()));
+		}
+		// No music at all (sneed 2026-11-28: "remove all default music from my game").
+		if (S->GetMusicTracks(0) + S->GetMusicTracks(1) + S->GetMusicTracks(2) + S->GetMusicTracks(3) != 0)
+		{
+			Fail(TEXT("sound_cues: music tracks loaded, but the game has no music"));
 		}
 		// A voice makes samples from a file (a rifle shot) and from a placeholder tone (the alarm).
 		const int32 Shot = S->RenderTest(TEXT("Shot_Rifle"), 4096);
@@ -428,9 +433,9 @@ void USmokeTestSubsystem::BuildSoundPhases()
 		{
 			Fail(FString::Printf(TEXT("sound_weather_music: music mood %d with the alarm on (1 is tense)"), S->GetMusicMood()));
 		}
-		if (bHaveFiles && S->GetMusicTracks(1) > 0 && !S->GetMusicTrack().StartsWith(TEXT("tense")))
+		if (!S->GetMusicTrack().IsEmpty())
 		{
-			Fail(FString::Printf(TEXT("sound_weather_music: the music playing is '%s', not a tense track"), *S->GetMusicTrack()));
+			Fail(FString::Printf(TEXT("sound_weather_music: music '%s' plays, but the game has none"), *S->GetMusicTrack()));
 		}
 	};
 	Phases.Add(Weather);

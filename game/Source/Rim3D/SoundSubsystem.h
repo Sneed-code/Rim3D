@@ -161,6 +161,8 @@ public:
 	/** 0 calm, 1 tense, 2 combat, and the track playing ("" between tracks). */
 	int32 GetMusicMood() const { return MusicMood; }
 	const FString& GetMusicTrack() const { return MusicTrackName; }
+	/** Level ambient sound actors (the samples' music bed) silenced and removed so far. */
+	int32 GetLevelSoundsRemoved() const { return LevelSoundsRemoved; }
 	/** The room the ears are in, for the echo: 0 outdoors, 1 under a built roof, 2 under rock (a cave). */
 	int32 GetEnvironment() const { return Environment; }
 	/** Pawn voices cut short by a newer voice of the same pawn (a scream over a hit grunt), and voices not played
@@ -423,6 +425,8 @@ private:
 	uint32 FlyFrame = 0;
 	float LoopScanAge = 99.0f;
 	bool bAlarmOn = false;
+	double NextLevelSoundSweep = 0.0;  // when the next look for level ambient sound actors (Unreal's sample music) comes
+	int32 LevelSoundsRemoved = 0;
 
 	// Ambience.
 	FString BedCue;

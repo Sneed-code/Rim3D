@@ -40,7 +40,7 @@ Elden Ring was not watched on the PC: the design is from how its lock-on is know
 
 | Key (rebindable) | What |
 | --- | --- |
-| **Middle mouse** | lock on to the enemy nearest the centre of the view; press again to let go |
+| **T** (middle mouse until 2026-11-28, now roll) | lock on to the enemy nearest the centre of the view; press again to let go |
 | **Tab** | switch to the next enemy (as now) |
 | **Mouse flick** while locked with a melee weapon | a quick sideways flick switches to the nearest enemy on that side |
 | F1 | nothing by default (editor build: wireframe) |

@@ -51,6 +51,9 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 
 /** The pawn's hair colour (linear) on a groom's MetaHuman hair material (melanin and redness). */
 void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair);
+/** The MetaHuman hair material's melanin (1 black .. 0 white) for a hair colour's linear luminance: black 1, brown 0.64,
+ *  light brown 0.43, blond 0.2, platinum 0.08, the Drow's white 0. */
+float StrandHairMelanin(float Luminance);
 
 /**
  * Who wears strands (docs/design/hair-physics.md "Near and far"). Strands cost GPU time per person, so only the people

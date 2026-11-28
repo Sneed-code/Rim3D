@@ -292,11 +292,12 @@ TEST_CASE("Landing blows: the player's swing at its lock just past its reach sti
     sim->submit(MeleeCommand{hero});
     sim->step();
     CHECK(sim->things().registry().get<Melee>(hero).target == enemy);
-    // The player walks on under the swing; the blow lands.
+    // The player runs on under the swing (since sneed 2026-11-28 the sword's swing carries nobody in: the feet are the
+    // player's); the blow lands.
     bool hit = false;
     for (int s = 0; s < 40 && !hit; ++s) {
         Position& p = sim->things().registry().get<Position>(hero);
-        sim->submit(DirectMoveCommand{hero, p.x + 0.05f, p.y});
+        sim->submit(DirectMoveCommand{hero, p.x + 0.08f, p.y});
         sim->step();
         for (const Event& e : sim->events()) {
             hit = hit || (e.type == EventType::MeleeHit && e.thing == hero && (e.message == "hit" || e.message == "deflected"));

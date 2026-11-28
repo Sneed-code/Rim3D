@@ -2824,6 +2824,9 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("impaleResumeAt", m.impaleResumeAt);
         ar.value("impaleRate", m.impaleRate);
     }
+    if (ar.sectionVersion() >= 11) {  // the running lunge's carry (sneed 2026-11-28)
+        ar.value("lungeSpeed", m.lungeSpeed);
+    }
 }
 
 template <typename Ar>
@@ -3874,7 +3877,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 10, [&] {
+    ar.section("melee", 11, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
         if (ar.sectionVersion() >= 8) {  // Elden Ring style stamina and poise (souls-combat.md)
             saveParts(ar, "stamina", e, &SaveEntity::stamina, [&](Stamina& st) {

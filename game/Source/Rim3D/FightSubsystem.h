@@ -213,6 +213,7 @@ public:
 	int32 GetRagdollsStarted() const { return RagdollsStarted; }
 	/** Shots and blows that jolted a lying ragdoll (a corpse) where they struck. */
 	int32 GetRagdollHitPushes() const { return RagdollHitPushes; }
+	int32 GetGoredBlows() const { return GoredBlows; }
 	/** Severed limbs and heads on the ground now, and how many were thrown since the start (body-health.md part F). */
 	int32 GetSeveredPiecesShown() const;
 	int32 GetSeveredPiecesThrown() const { return SeveredPiecesThrown; }
@@ -443,6 +444,7 @@ private:
 	int32 GroundDecals = 0;
 	int32 RagdollsStarted = 0;
 	int32 RagdollHitPushes = 0;
+	int32 GoredBlows = 0;
 	TMap<uint32, TWeakObjectPtr<class ASeveredPieceActor>> SeveredPieces;  // by the sim's piece id
 	int32 SeveredPiecesThrown = 0;
 	int32 TrunksBurst = 0;

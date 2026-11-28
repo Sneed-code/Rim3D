@@ -150,6 +150,8 @@ public:
     // Marks the motion playing on the pawn as drawn on the upper body (`upper`) and as leaving the feet to the player
     // (`freeFeet`: its path no longer moves the body). Nothing if no motion plays.
     void setLayers(Entity pawn, bool upper, bool freeFeet);
+    // A motion that leaves the feet free (freeFeet) but is drawn whole goes to the upper body: the player walks under it.
+    void walkUnder(Entity pawn);
     // Whether a motion holds the body: plays and carries it, so walking and steering wait (false for freeFeet).
     bool holdsBody(Entity pawn) const;
     // Whether a pawn standing at (x, y) on `level`, coming from (fromX, fromY), runs into no standing body more than it
@@ -204,8 +206,10 @@ public:
     uint64_t shoves() const { return shoves_; }
     uint64_t stopped() const { return stopped_; }
 
-private:
+    // A body may stand at (x, y): clear of walls (as wide as the pathfinder thinks) and of tree trunks.
     bool fits(Entity pawn, float x, float y, int level) const;
+
+private:
     void gatherBodies(Entity pawn, float x, float y, int level, float range);
 
     Things& things_;

@@ -11,6 +11,41 @@ skin and bakes colour, normal, roughness and cavity (`skin_scan*.png`); MakeHuma
 Tried end to end on a stand-in body in the cloud. Still to do on the PC: pick the exact textures from
 `game/Saved/ScanSkin/textures.json`, bake, look at pictures.
 
+Running lunges and the jump's landing (sneed, 2026-11-28; sim, data and Unreal; `docs/design/souls-combat.md` "Running
+lunges", "The jump's landing"): **chasers run into you** instead of stopping to swing: every weapon kind and the bare fists
+have a **running lunge** (one hand and clubs a running slash, two hand a forward greatsword slash, the spear a straight
+impale lunge, fists a lunging jab; a dual-wield slot waits for weapons), **6 poise** each. A lunge keeps the pace it ran
+at and tracks where you will be, slowing only into the blow; the AI lunges at a target getting away, runs the last
+metres instead of walking, and after a lunge that misses a target still running it runs straight on. The player lunges
+by attacking while sprinting, with any weapon. **Jump landing**: lift-off and touch-down timed from the jump clips' own
+feet, the landing clip's feet down the moment the body is, no foot locks mid-blend; new smoke `jump`.
+Scalp, hair colours and lashes (sneed, 2026-11-28; art steps and Unreal; `docs/design/hair-physics.md` "The scalp
+follows the hair"): **no scalp through the hair on any head shape.** Some sliders (the brow ridge most, with the ethnic
+base shapes) bulged the back of the crown in a way the hair's per-axis fit can't follow: a Melanesian preset showed skin
+10 mm out at the crown while the hair floated 9 mm off elsewhere. New `tools/makehuman/scalp_follow.py` (run by
+`mh_creator.py`) makes every morph change the hair-covered scalp exactly as the game moves the hair (scale per axis and
+move), blended back to the morph's own change below the hairline and off the ears; measured in the cloud on both bases,
+13 slider mixes: skin out at most 1.1 mm (the hair lies 1.2 mm off), hair float about 1 mm. **Long hair through the
+shoulders:** the body sliders moved the skin 1.5 to 7 cm past the hair's collision shapes (broad shoulders, heavy,
+masculine, ethnic shapes); `grow_hair.py` now writes `collision_morphs` and the game moves and grows each shape with the
+person's sliders (cloud: 95% of that skin back inside the barrier). **Blond hair** no longer renders platinum white
+(new melanin curve, `StrandHairMelanin`). **Eyelashes** are tinted: near black with a hint of the hair colour, the hair's
+own colour only on the Drow (they were never tinted: pale for everyone). **Backing out of a new colony** before landing
+returns to the real title screen (was the title menu over that colony's bare map). Needs the `creator-bodies`, `hair-grow`
+and following art steps (update-and-play runs them).
+
+Sword and shield, third round (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md` "Combos,
+feet, jumps and gore"): **fast combos** (press during a swing and the next blow follows right after it, three in a row),
+**the player's sword attacks stay put** with the feet free (walk while swinging; running, jump and critical attacks still
+lunge), **jumping heavy** a fast grounded chop with no air time, **jump attack** a lunging slash and the jump carries on
+until the attack's clip starts (no drop), **no flinch flicker** over whole-body clips. **Downward blows** (impale, hack,
+ground stab, anything at a body on the ground) no longer punt it: it is pinned, with heavy blood spray. **Blows land on the
+body you see**: corpses stay over their sim spot like the downed, hit effects go to the ragdoll's chest or head, and the
+blade turns through the chest of a body on the ground. **Sounds**: sneed's six blade-in-flesh sounds play at random for
+knives, gladius and reaper blades (`game/Content/Rim3D/Sounds/cues/Hit_Blade_Flesh`, swap files freely); the colony alarm
+siren (the "school drill ring" in the duel) is gone; no music at all (our tracks, stingers and the Unreal sample level's
+Starter Content music bed). **Mouse wheel click rolls, T locks on.**
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then

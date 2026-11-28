@@ -343,6 +343,9 @@ private:
 	FString NewDifficulty = TEXT("StriveToSurvive");
 	// The new game's landing site and people pages.
 	bool bAwaitingLanding = false;
+	/** A colony started for its people pages and not landed yet: backing out of the new colony pages goes back to the title
+	 *  screen, not to a title menu over that half-made colony's map (sneed 2026-11-28: "it reverts me to the default UE5"). */
+	bool bPregameColony = false;
 	int32 PeopleSelected = 0;
 	int32 PeopleGeneration = -1;
 	int32 PeopleRerolls = 0;

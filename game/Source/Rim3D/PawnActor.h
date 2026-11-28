@@ -69,12 +69,18 @@ public:
 	/** Ends a jump in the air without its landing (a jump attack's clip takes the body over): the height eases back to
 	 *  the ground over kJumpCancelSeconds instead of dropping. */
 	void CancelJump();
+	/** A jump attack was asked for in the air: the jump goes on as it is until the attack's clip really starts (then
+	 *  JumpFitsClip hands the height over to it), or ends as an ordinary jump if no clip comes. */
+	void MarkJumpAttack();
 	/** How high the body is off the ground now, cm. A cat-strain jumps twice as high (and longer, as a thrown body would). */
 	float GetJumpHeight() const;
 	int32 GetJumpsPlayed() const { return JumpsPlayed; }
 	/** Jump attacks whose clip took the jump's height over (JumpFitsClip), and what the last one did (smoke tests). */
 	int32 GetJumpsFitted() const { return JumpsFitted; }
 	const FString& GetLastJumpFit() const { return LastJumpFit; }
+	/** The last jump's timing (smoke test `jump`): the lift delay, the landing clip and its touch-down, seconds. */
+	FString GetLastJumpTiming() const { return LastJumpTiming; }
+	bool IsJumpLanding() const { return bJumpLanding || JumpLandLegsLeft > 0.0f; }
 	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
 	float GetGroundSpeed() const { return GroundSpeed; }
 	static constexpr float kJumpHeight = 45.0f;
@@ -205,6 +211,14 @@ public:
 	/** A bullet or blow on a ragdoll (a corpse, the knocked out): a velocity change `Impulse` (cm/s) on the bone
 	 *  nearest `At`, and a little of it on the whole body, waking it if it slept. */
 	void PushRagdollAt(const FVector& At, const FVector& Impulse);
+	/** A blade driven down into the body on the ground (sneed 2026-11-28: "they don't move and I'm goring them"): for
+	 *  `Seconds` every part's motion is damped away, so the limp body stays pinned where it lies under the blow. */
+	void PinRagdoll(float Seconds);
+	/** Where a blow at this body lands while it lies limp: the drawn chest (or head), wherever the ragdoll came to rest.
+	 *  False if it isn't a ragdoll. */
+	bool GetRagdollStrikePoint(bool bHead, FVector& OutLocation) const;
+	/** Whether the sim's body part `Part` of this pawn is in its head (for where a blow is drawn). */
+	bool IsHeadPart(const USimSubsystem& Bridge, int32 Part) const;
 	/** The soft flesh (breasts, belly, buttocks, thighs) knocked by a hit at `At`, living or dead: a velocity kick of
 	 *  `Velocity` (cm/s) to the soft parts within `RadiusCm`, a tenth of it to the whole body (sneed 2026-11-27:
 	 *  "corpses should retain their jiggle physics, so if breasts are shot they jiggle or the torso moves"). Cosmetic. */
@@ -218,6 +232,7 @@ public:
 	int32 GetRagdollSleeps() const { return RagdollSleeps; }
 	/** Frames a downed body's ragdoll was steered back over its sim spot (UpdateRagdollTether). */
 	int32 GetRagdollTethers() const { return RagdollTethers; }
+	int32 GetRagdollPins() const { return RagdollPins; }
 	int32 GetRagdollPushes() const { return RagdollPushes; }
 	/** For the tests: the fastest part of the ragdoll last frame, cm/s, and whether it sleeps now. */
 	float GetRagdollFastest() const { return RagdollFastest; }
@@ -283,6 +298,8 @@ public:
 	/** Clips the sim moved this body along so far, and whether one is playing now (docs/design/body-motion.md). */
 	int32 GetMotionClipsPlayed() const { return MotionClipsPlayed; }
 	bool IsInMotionClip() const { return MotionClipDef != MAX_uint32; }
+	/** A sim clip on the whole body (an attack, a stagger, a get-up, a roll): small hit flinches stay off it. */
+	bool IsInWholeBodyClip() const { return IsInMotionClip() && !bMotionUpper; }
 	bool IsMotionClipUpper() const { return IsInMotionClip() && bMotionUpper; }
 	FVector GetMotionOffset() const { return MotionOffset; }
 	float GetLegsClipWeight() const { return LegsClipWeight; }
@@ -480,12 +497,15 @@ private:
 	float RagdollSeconds = 0.0f;
 	float RagdollStillSeconds = 0.0f;
 	float RagdollCreepSeconds = 0.0f;
+	float RagdollPinSeconds = 0.0f;   // PinRagdoll: damped still until this runs out
+	bool bRagdollBlastThrown = false; // thrown by a blast: left where it flew, not steered back over its spot
 	float RagdollFastest = 0.0f;
 	bool bSoftTissueBeforeRagdoll = true;
 	int32 RagdollSleeps = 0;
 	int32 RagdollPushes = 0;
 	int32 RagdollTethers = 0;
 	int32 RagdollHitPushes = 0;
+	int32 RagdollPins = 0;
 	void UpdateRagdollRest(float DeltaTime);
 	/** A downed body's ragdoll is drawn over its sim spot: its pelvis is steered back there while it falls. */
 	void UpdateRagdollTether(const FVector& SimSpot, float DeltaTime);
@@ -540,6 +560,22 @@ private:
 	float JumpSpeed = 0.0f;
 	float JumpStartLength = 0.0f;
 	bool bJumpFalling = false;
+	/** sneed 2026-11-28 ("whenever I jump the landing is messed up, I float then it glitches; make it 100% fluid"): the
+	 *  jump's timing read off its own clips (PawnJumpClipTimes). The body leaves the ground when the take-off clip's feet
+	 *  do (JumpLiftDelay seconds in), the landing clip starts early enough that its feet touch down the moment the body
+	 *  does (bJumpLanding), and its legs stay the clip's until it has blended back out (JumpLandLegsLeft), so the walk's
+	 *  foot locks don't grab the feet half way. */
+	float JumpLiftDelay = 0.0f;
+	/** The lower foot's height in the mesh's own space when the jump began (cm): the ground the feet come back to. */
+	double JumpFootGround = 0.0;
+	bool bJumpLanding = false;
+	float JumpLandLegsLeft = 0.0f;
+	/** The landing clip picked for this jump and when in it the feet touch down (seconds at play rate 1). */
+	TWeakObjectPtr<UAnimSequence> JumpLandClip;
+	float JumpLandContact = 0.0f;
+	/** Seconds of game time the whole arc takes (lift delay plus the flight). */
+	float JumpTotalSeconds() const;
+	void StartJumpLanding(float Lead);
 	/** The height (cm) a cancelled jump was at, eased to nought; and how far into that ease it is (game seconds). */
 	float JumpCancelHeight = 0.0f;
 	float JumpCancelAge = 0.0f;
@@ -549,8 +585,10 @@ private:
 	bool bJumpEasedToLanding = false;
 	/** A jump attack cut the jump short a moment ago: the next whole-body clip fits its height to it. */
 	bool bJumpAttackPending = false;
+	float JumpAttackWait = 0.0f;  // seconds since MarkJumpAttack while still in the air
 	int32 JumpsFitted = 0;
 	FString LastJumpFit;
+	FString LastJumpTiming;
 	/** A jump attack's whole-body clip starts at `From` (seconds, played at `Rate`): the jump's height is fitted to it. */
 	void JumpFitsClip(const UAnimSequence& Clip, float From, float Rate);
 	int32 JumpsPlayed = 0;

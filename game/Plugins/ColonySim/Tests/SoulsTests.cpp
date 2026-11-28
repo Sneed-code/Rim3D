@@ -239,7 +239,8 @@ TEST_CASE("Souls: presses during a light attack chain the combo, each blow the n
     CHECK(sim->things().registry().get<Melee>(hero).combo == 0);
 }
 
-TEST_CASE("Souls: an attack carries the whole body: the walking keys don't move it until the cancel point") {
+TEST_CASE("Souls: the player's sword attacks stay put and leave the feet free; an AI's attack carries its whole body") {
+    // sneed 2026-11-28: "for this weapon attacks don't move us forward for now, we can move as we want".
     auto sim = soulsTestSim(5);
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
@@ -247,26 +248,34 @@ TEST_CASE("Souls: an attack carries the whole body: the walking keys don't move 
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
     const Melee& m = sim->things().registry().get<Melee>(hero);
     const int windup = m.windupSteps;
-    // Walking sideways (+y) the whole wind-up: the body goes only where the clip takes it (forward, +x).
     const Position& pos = sim->things().registry().get<Position>(hero);
+    const float startX = pos.x;
     const float startY = pos.y;
-    for (int s = 0; s < windup; ++s) {
-        sim->submit(DirectMoveCommand{hero, pos.x, pos.y + 0.1f});
-        sim->step();
-    }
-    CHECK(std::fabs(pos.y - startY) < 0.05f);
     const BodyMotion* bodyClip = sim->things().registry().try_get<BodyMotion>(hero);
-    CHECK((bodyClip == nullptr || !bodyClip->freeFeet));
-    // A roll is refused mid-swing...
-    CHECK_FALSE(sim->combat().dodgeRoll(hero, 0.0f, 1.0f, &why));
-    CHECK(why == "mid-attack");
-    // ...but past the cancel point it cuts the recovery short.
-    int s = 0;
-    while (!sim->combat().dodgeRoll(hero, 0.0f, 1.0f, &why) && s < 120) {
+    SOULS_REQUIRE(bodyClip != nullptr);
+    CHECK(bodyClip->freeFeet);
+    CHECK_FALSE(bodyClip->upper);  // drawn whole while standing
+    // Standing still the whole wind-up: the clip's own step forward doesn't move the body.
+    for (int s = 0; s < windup / 2; ++s) {
         sim->step();
-        ++s;
     }
-    CHECK(sim->combat().rollLocked(hero));
+    CHECK(std::fabs(pos.x - startX) < 0.02f);
+    // Walking sideways (+y): the body goes where the keys say, and the swing goes to the upper body.
+    for (int s = 0; s < 6; ++s) {
+        sim->submit(DirectMoveCommand{hero, pos.x, pos.y + 0.05f});
+        sim->step();
+    }
+    CHECK(pos.y - startY > 0.15f);
+    bodyClip = sim->things().registry().try_get<BodyMotion>(hero);
+    CHECK((bodyClip == nullptr || bodyClip->upper));
+
+    // An AI swordsman's attack still plays on the whole body and carries it along the clip.
+    const Entity ai = soulsTestPawn(*sim, 20.5f, 20.5f, "Melee_Gladius");
+    soulsTestFace(*sim, ai, 1.0f, 0.0f);
+    SOULS_REQUIRE(sim->melee().soulsAttack(ai, kNoEntity, false, SoulsPress{}, &why));
+    const BodyMotion* aiClip = sim->things().registry().try_get<BodyMotion>(ai);
+    SOULS_REQUIRE(aiClip != nullptr);
+    CHECK_FALSE(aiClip->freeFeet);
 }
 
 TEST_CASE("Souls: a held heavy stops at its charge point and lets go as a charged heavy") {
@@ -686,37 +695,19 @@ TEST_CASE("Souls: switched off, a sword swings as before and nothing costs stami
 
 // sneed 2026-11-28: "elden ring combat has fast attacks and quick follow ups ... but there's a slight delay after you
 // stop attacking that gives an opening".
-TEST_CASE("Souls: a follow-up press chains after a real recovery, one in the wind-up is too early, and a chain that ends leaves an opening") {
+TEST_CASE("Souls: a press during a swing chains the next blow right after it, and a chain that ends leaves an opening") {
+    // sneed 2026-11-28: "you attack and if you attack again you attack fast after, right after the breadth of the swing,
+    // then again for the 3rd".
     auto sim = soulsTestSim(31);
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
     entt::registry& reg = sim->things().registry();
     std::string why;
-    // Pressed again at once, in the wind-up: too early (sneed 2026-11-28, "time attacks right, not spam click"). The
-    // attack doesn't chain, even with more presses after the blow.
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
-    CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
-    CHECK(reg.get<Melee>(hero).mistimed);
-    const uint64_t spam = sim->melee().swings();
-    for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
-        if (s % 3 == 0) {
-            sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why);
-        }
-        sim->step();
-    }
-    CHECK(sim->melee().swings() == spam);  // no second blow out of the mashing
-    soulsTestRunOut(*sim, hero);
-    for (int s = 0; s < 20; ++s) {
-        sim->step();
-    }
-    // Pressed once the blow has landed: kept, and played once the recovery has run chainShare (a real pause).
-    SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
-    for (int s = 0; s < 120 && reg.get<Melee>(hero).phase != MeleePhase::Recovery; ++s) {
-        sim->step();
-    }
-    SOULS_REQUIRE(reg.get<Melee>(hero).phase == MeleePhase::Recovery);
+    // Pressed again at once, in the wind-up: kept, not dropped.
     CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
     CHECK_FALSE(reg.get<Melee>(hero).mistimed);
+    CHECK(reg.get<Melee>(hero).buffered != SoulsAttack::None);
     const uint64_t swings = sim->melee().swings();
     int intoRecovery = -1;
     int recovery = 0;
@@ -730,8 +721,15 @@ TEST_CASE("Souls: a follow-up press chains after a real recovery, one in the win
     }
     SOULS_REQUIRE(sim->melee().swings() == swings + 1);
     MESSAGE("chained " << intoRecovery << " steps into a " << recovery << " step recovery");
-    CHECK(intoRecovery >= static_cast<int>(std::lround(static_cast<float>(recovery) * sim->melee().souls().chainShare)) - 1);
-    CHECK(intoRecovery >= 6);  // at least 0.2 s of recovery between the blows
+    CHECK(intoRecovery <= static_cast<int>(std::lround(static_cast<float>(recovery) * sim->melee().souls().chainShare)) + 1);
+    CHECK(reg.get<Melee>(hero).combo == 1);
+    // And the third the same way.
+    CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    for (int s = 0; s < 120 && sim->melee().swings() == swings + 1; ++s) {
+        sim->step();
+    }
+    CHECK(sim->melee().swings() == swings + 2);
+    CHECK(reg.get<Melee>(hero).combo == 2);
     // Now let the chain end: the opening holds the attacker for openingSteps once the recovery runs out.
     for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
         sim->step();
