@@ -2,6 +2,18 @@
 
 Updated 2026-11-28.
 
+Sword and shield, PC round (sneed, 2026-11-28; sim, data, art steps and Unreal; `docs/design/souls-combat.md` "PC
+round"): checked with the new close looks (smoke `duel -DuelLooks`). **Guard** poses are back (a drafted swordsman
+crouched in cover like a rifleman between blows, which hid the stance and the held sword): with a shield the sword is
+raised at the right side behind its edge, alone it is held across the body, and in the stance it sits beside the shield
+instead of through it (HoldStyles `shieldReady`, `shieldBlock`). **Get-ups** start lying exactly as each fall ends (the
+Game Animation Sample's up-from-the-back and up-from-the-front, turned per side, cut to 3 s; no slide at the end).
+**Jump attacks** no longer pop 70 cm up when the attack's clip takes over the jump. **The impale** goes straight in (its
+lunge stepped sideways and missed), the victim turns to the blade, stands on it doubled over for 0.4 s with the blade held
+in its chest, then staggers back. **Real shield**: the steel medium shield is a CC0 round shield from OpenGameArt (new
+`shield-download` and `shield-real` art steps). Smoke `finishers`: the downed impale passes (point 15 cm from the chest's
+centre); `tab_run` still fails as before (not this change).
+
 Sword and shield refined (sneed, 2026-11-28; sim, data and Unreal; `docs/design/souls-combat.md`): **quick follow-ups**
 (the next blow of a combo starts 0.15 into the recovery, lights a little faster) and **an opening** after a chain ends:
 a third of a second where the attacker can't attack, roll or guard (a press is kept for after; the AI sees it as open).

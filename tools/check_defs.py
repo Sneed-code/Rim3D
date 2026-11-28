@@ -306,7 +306,7 @@ def check_hold_styles(defs_by_kind):
     rules = defs_by_kind.get("Rules", {}).get("MeleeRules")
     attack_styles = set((rules[1].get("styleAttacks") or {}).keys()) if rules else set()
     point = lambda v: isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)
-    place_keys = ("ready", "aim", "block", "fpReady", "fpAim", "fpBlock")
+    place_keys = ("ready", "aim", "block", "fpReady", "fpAim", "fpBlock", "shieldReady", "shieldBlock")
 
     def check_places(where, places):
         # Where the weapon is held: {anchor, point, at, turn} per state (docs/design/weapon-hold.md).

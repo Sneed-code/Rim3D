@@ -104,19 +104,23 @@
     },
     {
       "defName": "Motion_GetUpBack",
-      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B"
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_B",
+      "to": 3.0
     },
     {
       "defName": "Motion_GetUpFront",
-      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F"
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_F",
+      "to": 3.0
     },
     {
       "defName": "Motion_GetUpLeft",
-      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_L"
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_L",
+      "to": 3.0
     },
     {
       "defName": "Motion_GetUpRight",
-      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_R"
+      "anim": "/Game/Characters/UEFN_Mannequin/Animations/Ragdoll/M_ragdoll_getup_stand_R",
+      "to": 3.0
     },
     {
       "defName": "Motion_Club_Downward",
@@ -318,7 +322,7 @@
       "defName": "Motion_SS_Jump",
       "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldJump",
       "kind": "Attack",
-      "from": 0.0,
+      "from": 0.25,
       "to": 0.87,
       "hitSeconds": 0.7
     },
@@ -350,6 +354,7 @@
       "defName": "Motion_SS_Riposte",
       "kind": "Attack",
       "anim": "SwordLunge/A_SwordLunge",
+      "straight": true,
       "from": 0.1,
       "to": 1.6,
       "hitSeconds": 0.63

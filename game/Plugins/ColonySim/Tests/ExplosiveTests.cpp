@@ -276,7 +276,10 @@ TEST_CASE("Explosives: a knocked down pawn gets up with the get-up clip, never s
     exploHeal(*sim, pawn);
     exploBlast(*sim, 39.7f, 40.5f);
     EXPLO_REQUIRE(sim->combat().knockedDownFor(pawn) > 0);
-    const DefId getUp = sim->combat().motion().clipId("Motion_GetUp");
+    // Up the way it fell (sneed 2026-11-28: from the back, up from the back): the side's own get-up (MotionRules getUpClips).
+    const int side = sim->combat().motion().knockdownSide(pawn);
+    EXPLO_REQUIRE(side >= 0);
+    const DefId getUp = sim->combat().motion().clipId(sim->combat().motion().rules().getUpClips[side]);
     EXPLO_REQUIRE(getUp.valid());
     // Down until the fall is over, then the get-up clip plays, still knocked down (it can't act) but no longer lying.
     int steps = 0;
@@ -289,7 +292,7 @@ TEST_CASE("Explosives: a knocked down pawn gets up with the get-up clip, never s
     EXPLO_REQUIRE(sim->combat().gettingUp(pawn));
     CHECK(sim->things().registry().get<BodyMotion>(pawn).clip == getUp);
     const int rising = sim->combat().knockedDownFor(pawn);
-    CHECK(rising >= 100);  // over 4 seconds, not a snap
+    CHECK(rising >= 80);  // over about 3 seconds (the clip's own pace), not a snap
     Snapshot snap;
     sim->writeSnapshot(snap);
     const ThingView* view = snap.find(pawn);

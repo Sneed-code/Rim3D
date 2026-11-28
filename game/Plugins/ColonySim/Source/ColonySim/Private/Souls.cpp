@@ -147,6 +147,8 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     num("backstabRange", r.backstabRange);
     num("backstabCos", r.backstabCos);
     whole("criticalHoldSteps", r.criticalHoldSteps);
+    whole("impaleHoldSteps", r.impaleHoldSteps);
+    num("impaleStandOff", r.impaleStandOff);
     num("criticalKnockdown", r.criticalKnockdown);
     num("idealInset", r.idealInset);
     num("warpBack", r.warpBack);
@@ -603,6 +605,10 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
         face(pawn, to.x, to.y);
         if (kind == SoulsAttack::Riposte) {
             ++ripostes_;
+            // The impale goes in from the front: the reeling victim turns to meet it (PC 2026-11-28: it stood side on and
+            // the blade went past it).
+            const Position& from = reg.get<Position>(pawn);
+            face(target, from.x, from.y);
         }
         if (kind == SoulsAttack::Riposte || kind == SoulsAttack::Backstab) {
             // Caught (Elden Ring's critical lock): the victim can't guard, roll or strike back until it is thrown down.
@@ -625,6 +631,9 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
             float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
             if (reg.all_of<Blocking>(target)) {
                 ideal = std::max(ideal, souls_.shieldRoom + bodyExtra);  // not into a raised shield (the shield's room)
+            }
+            if (kind == SoulsAttack::Riposte) {
+                ideal = souls_.impaleStandOff + bodyExtra;  // in close: the blade goes all the way through
             }
             const float shift = std::clamp(d - clipStep - ideal, -souls_.warpBack, rule.maxWarp);
             // Over most of the wind-up, so the carry is a lean into the blow, not a glide (sneed 2026-11-28: "moves weird").
@@ -874,9 +883,33 @@ void MeleeSystem::soulsPoise(Entity attacker, const Melee& m, Entity victim, flo
         if (m.kind == SoulsAttack::Riposte) {
             // sneed 2026-11-28: the impale "is fast but the target is stunned as you do it, then staggers": held through
             // the blow, it reels back on its feet afterwards (no second riposte while it does).
-            soulsInterrupt(victim, souls_.staggerSteps, true);
-            reg.get_or_emplace<Melee>(victim).critImmuneUntil = now() + souls_.staggerSteps + 1;
-            combat_.stagger(victim, from);
+            // Stunned on the blade for impaleHoldSteps (a recoil where it stands), then it reels back off it.
+            const int hold = std::max(0, souls_.impaleHoldSteps);
+            soulsInterrupt(victim, hold + souls_.staggerSteps, true);
+            Melee& vm = reg.get_or_emplace<Melee>(victim);
+            vm.critImmuneUntil = now() + hold + souls_.staggerSteps + 1;
+            if (hold > 0 && from.known) {
+                vm.impaleStaggerAt = now() + hold;
+                vm.impaleFromX = from.x;
+                vm.impaleFromY = from.y;
+                const Position& at = reg.get<Position>(victim);
+                // Doubled over the blade (the flinch toward the blow, not one that throws the arms and shield up in front).
+                if (combat_.motion().throwBody(victim, from.x - at.x, from.y - at.y, false, 0.25f, false)) {
+                    if (BodyMotion* recoil = reg.try_get<BodyMotion>(victim)) {
+                        recoil->scale *= 0.15f;  // a recoil where it stands, on the blade: not carried off it
+                    }
+                }
+                // The blade stays in: the impaler's thrust holds at the blow as long, then draws back.
+                BodyMotion* thrust = reg.try_get<BodyMotion>(attacker);
+                if (thrust != nullptr && thrust->clip.valid() && thrust->rate > 0.0f) {
+                    Melee& am = reg.get_or_emplace<Melee>(attacker);
+                    am.impaleResumeAt = now() + hold;
+                    am.impaleRate = thrust->rate;
+                    thrust->rate = 0.0f;
+                }
+            } else {
+                combat_.stagger(victim, from);
+            }
             if (combat_.motion().hasClips(victim)) {
                 combat_.motion().setLayers(victim, false, false);
             }
@@ -936,6 +969,17 @@ bool MeleeSystem::soulsStepWindup(Entity pawn, Melee& m) {
         const Posture& posture = reg.get<Posture>(pawn);
         bm->faceX = posture.facingX;
         bm->faceY = posture.facingY;
+    }
+    // The impale's victim, caught, stands where it is turned to the blade through the thrust (nothing else may walk or
+    // turn it meanwhile: it stepped aside and the thrust went past, PC 2026-11-28).
+    if (m.kind == SoulsAttack::Riposte && m.target != kNoEntity && reg.valid(m.target) && reg.all_of<Posture>(m.target)) {
+        const Position& from = reg.get<Position>(pawn);
+        face(m.target, from.x, from.y);
+        if (Mover* held = reg.try_get<Mover>(m.target)) {
+            held->path.clear();
+            held->vx = 0.0f;
+            held->vy = 0.0f;
+        }
     }
     if (m.kind == SoulsAttack::Heavy && m.chargeSteps == -1 && m.holding &&
         m.windupSteps - m.stepsLeft >= static_cast<int>(std::lround(static_cast<float>(m.windupSteps) * souls_.chargeShare))) {
@@ -1052,6 +1096,36 @@ void MeleeSystem::soulsStep() {
     std::sort(order_.begin(), order_.end());
     for (const Entity pawn : order_) {
         Melee& m = reg.get<Melee>(pawn);
+        // The impaler draws its blade back out.
+        if (m.impaleResumeAt != 0 && now() >= m.impaleResumeAt) {
+            m.impaleResumeAt = 0;
+            if (BodyMotion* thrust = reg.try_get<BodyMotion>(pawn); thrust != nullptr && thrust->rate == 0.0f) {
+                thrust->rate = m.impaleRate;
+            }
+        }
+        // On the blade it stands still; off it now, it staggers back (sneed 2026-11-28).
+        if (m.impaleStaggerAt != 0 && now() < m.impaleStaggerAt) {
+            if (Mover* held = reg.try_get<Mover>(pawn)) {
+                held->path.clear();
+                held->vx = 0.0f;
+                held->vy = 0.0f;
+            }
+        }
+        if (m.impaleStaggerAt != 0 && now() >= m.impaleStaggerAt) {
+            m.impaleStaggerAt = 0;
+            const Health* hurt = reg.try_get<Health>(pawn);
+            if ((hurt == nullptr || !hurt->incapacitated()) && !reg.all_of<KnockedDown>(pawn) && things_.spawned(pawn)) {
+                HitFrom from;
+                from.known = true;
+                from.blow = true;
+                from.x = m.impaleFromX;
+                from.y = m.impaleFromY;
+                combat_.stagger(pawn, from);
+                if (combat_.motion().hasClips(pawn)) {
+                    combat_.motion().setLayers(pawn, false, false);
+                }
+            }
+        }
         if (m.buffered == SoulsAttack::None || m.phase != MeleePhase::Ready || combat_.rollLocked(pawn) || now() < m.openUntil ||
             now() < m.attackAfter) {
             continue;

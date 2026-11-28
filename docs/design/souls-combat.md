@@ -169,6 +169,32 @@ Title > Debug > **Sword and shield duel** (a downed opponent stays 10 s before t
 you against a mirrored hostile, healed before you go down, a new opponent
 after each falls), and **Sword and shield duel (watch)** (both sides AI, screenshots, fails if nobody swings).
 
+## PC round (2026-11-28): how it looks
+
+Checked on the PC with close looks (smoke `duel -DuelLooks`: guard with and without the shield, the stance from three
+sides, a knockdown each way and the get-up, the impale, a light and a heavy jump attack, several shots each).
+
+- **Guard**: a drafted swordsman between blows crouched in cover like a rifleman (FighterSystem), and a crouched body
+  draws no stance and no held weapon, so both guards were gone (arms hanging). Now a melee fighter waits standing. With
+  a shield the sword is held up at the right side behind the shield's edge (`places.shieldBlock`), and beside it in the
+  stance (`places.shieldReady`) instead of across it; alone, the guard is the blade across the body (`places.block`).
+- **Get-ups** (MotionRules `getUpClips`, `getUpTurn`): each fall gets up from the pose it ends in, read off the
+  `-run=MotionClips` POSE lines: back and left falls end on the back (the Game Animation Sample's up-from-the-back,
+  turned 25 and 106 degrees), forward and right falls face down (up-from-the-front, 5 and 101). The clips are cut at 3 s
+  (standing by 2.75 s). A clip that starts lying is set back by its hips' whole offset (`PawnActor`), so the hips stay
+  on the spot the fall left them and the body doesn't slide 35 cm as it ends.
+- **Jump attacks**: the attack's clip has its own jump in it (the heavy's mid-air slam starts with the hips 1.6 m up),
+  so on top of the jump's height the body shot up 70 cm at once. The height left from the jump is now fitted so the hips
+  go on from where they are and eased out by the moment the clip's feet land (`ASimPawnActor::JumpFitsClip`); the light
+  jump attack starts its clip already in the air (`Motion_SS_Jump` from 0.25 s).
+- **The impale** (riposte): its lunge clip stepped half a metre to the right and the thrust went past the victim; it is
+  now measured `straight` (only its forward travel). The reeling victim turns to meet the blade and stands still
+  through the thrust; the impaler is carried in to `impaleStandOff` (0.65 m) so the blade goes through; at the blow the
+  thrust holds in the body for `impaleHoldSteps` (0.4 s) while the victim doubles over the blade, then it is drawn out
+  and the victim staggers back. Unreal turns the blade about its grip so its line runs through the victim's chest
+  (`UWeaponDrawSubsystem::ImpaleAim`; within about 10 cm of spine_03 in the looks).
+- **The shield**: the steel medium shield is a real CC0 round shield (shields.md "Models").
+
 ## Still to do
 
 - The spear's flicking and jarring (the old swing path; it gets a moveset next).

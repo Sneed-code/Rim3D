@@ -569,6 +569,29 @@ TEST_CASE("Souls: a man knocked down but still in the fight takes a stab on the 
     CHECK(sim->melee().criticalFor(hero, hero) == SoulsAttack::None);
 }
 
+TEST_CASE("Souls: a drafted swordsman waiting for a foe stays on its feet, not crouched in cover like a rifleman") {
+    auto sim = soulsTestSim(5);
+    const Entity a = soulsTestPawn(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity b = soulsTestPawn(*sim, 42.5f, 30.5f, "Melee_Gladius");
+    soulsTestShield(*sim, a);
+    sim->submit(DraftCommand{a, true});
+    sim->submit(SetFactionCommand{b, 2});
+    const entt::registry& reg = sim->things().registry();
+    int waiting = 0;
+    int crouched = 0;
+    for (int s = 0; s < 600; ++s) {
+        sim->step();
+        const Position& pa = reg.get<Position>(a);
+        const Position& pb = reg.get<Position>(b);
+        if (std::hypot(pa.x - pb.x, pa.y - pb.y) > 3.0f) {
+            ++waiting;
+            crouched += reg.get<Posture>(a).stance == Stance::Crouching ? 1 : 0;
+        }
+    }
+    CHECK(waiting > 30);
+    CHECK(crouched == 0);
+}
+
 TEST_CASE("Souls: two sword-and-shield fighters duel it out with combos, heavies and blocks, the same way every run") {
     const auto duel = [](uint64_t seed, int& swings, int& heavies, int& blocks, int& staggers, bool& over) {
         auto sim = soulsTestSim(seed);
@@ -858,6 +881,50 @@ TEST_CASE("Souls (tactical): any hit at a foe whose poise broke is the impale ri
     CHECK_FALSE(reg.all_of<KnockedDown>(foe));
     CHECK(sim->melee().soulsStunned(foe));
     CHECK(sim->melee().criticalFor(hero, foe) != SoulsAttack::Riposte);
+}
+
+TEST_CASE("Souls (tactical): the impale turns the victim to meet it, holds it stunned on the blade, then it staggers back") {
+    auto sim = soulsTestSim(42);  // a seed whose impale leaves the victim on its feet (it can kill or down outright)
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.6f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, foe, 0.0f, 1.0f);  // side on, as a stagger can leave it
+    entt::registry& reg = sim->things().registry();
+    Melee& fm = reg.get_or_emplace<Melee>(foe);
+    fm.stunUntil = sim->time().steps + sim->melee().souls().postureBreakSteps;
+    fm.guardStun = false;
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Riposte);
+    CHECK(reg.get<Posture>(foe).facingX < -0.9f);  // turned to face the blade
+    int hitAt = -1;
+    int staggerAt = -1;
+    int thrustHeld = 0;
+    for (int s = 0; s < 120 && staggerAt < 0; ++s) {
+        sim->step();
+        if (const BodyMotion* thrust = reg.try_get<BodyMotion>(hero); hitAt >= 0 && thrust != nullptr && thrust->clip.valid() && thrust->rate == 0.0f) {
+            ++thrustHeld;  // the blade stays in while it stands on it
+        }
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit" && hitAt < 0) {
+                hitAt = s;
+            }
+            if (e.type == EventType::PawnStaggered && e.thing == foe && staggerAt < 0) {
+                staggerAt = s;
+            }
+        }
+    }
+    MESSAGE("hit " << hitAt << " stagger " << staggerAt << " impale at " << reg.get<Melee>(foe).impaleStaggerAt << " now " << sim->time().steps
+            << " downed " << sim->health().incapacitated(foe));
+    SOULS_REQUIRE(hitAt >= 0);
+    SOULS_REQUIRE(staggerAt >= 0);
+    // On the blade impaleHoldSteps, then off it and reeling (stunned all the while).
+    CHECK(staggerAt - hitAt == sim->melee().souls().impaleHoldSteps);
+    CHECK(thrustHeld >= sim->melee().souls().impaleHoldSteps - 1);
+    const BodyMotion* drawn = reg.try_get<BodyMotion>(hero);
+    CHECK((drawn == nullptr || !drawn->clip.valid() || drawn->rate > 0.0f));  // and drawn back out
+    CHECK(sim->melee().soulsStunned(foe));
+    CHECK_FALSE(reg.all_of<KnockedDown>(foe));
 }
 
 TEST_CASE("Souls (tactical): a blow on a guard puts both sides' next attack back 0.15 s") {

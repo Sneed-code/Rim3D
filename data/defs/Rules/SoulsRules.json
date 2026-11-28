@@ -45,6 +45,8 @@
     "backstabRange": 1.5,
     "backstabCos": -0.6,
     "criticalHoldSteps": 12,
+    "impaleHoldSteps": 12,
+    "impaleStandOff": 0.65,
     "criticalKnockdown": 6,
     "idealInset": 0.4,
     "warpBack": 0.3,

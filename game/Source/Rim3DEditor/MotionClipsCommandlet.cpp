@@ -212,6 +212,19 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 		Registry.Get().SearchAllAssets(true);
 		TArray<FAssetData> Assets;
 		Registry.Get().GetAssetsByPath(FName(MotionClipsFolder), Assets, true);
+		// A full /Game/ path (a clip already on the mannequin, the Game Animation Sample's get-ups) by its own path.
+		for (FString& Name : Names)
+		{
+			if (Name.StartsWith(TEXT("/Game/")))
+			{
+				const FAssetData Found = Registry.Get().GetAssetByObjectPath(FSoftObjectPath(Name + TEXT(".") + FPaths::GetBaseFilename(Name)));
+				if (Found.IsValid())
+				{
+					Assets.Add(Found);
+					Name = FPaths::GetBaseFilename(Name);
+				}
+			}
+		}
 		for (const FAssetData& Asset : Assets)
 		{
 			const UAnimSequence* Clip = Names.Contains(Asset.AssetName.ToString()) ? Cast<UAnimSequence>(Asset.GetAsset()) : nullptr;
@@ -279,6 +292,9 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 		const FString Anim = Entry->GetStringField(TEXT("anim"));  // relative to the folder, e.g. Mixamo/Magic/A_Name
 		const FString Kind = Entry->HasField(TEXT("kind")) ? Entry->GetStringField(TEXT("kind")) : TEXT("Clip");
 		const bool bTurn = Entry->HasField(TEXT("turn")) && Entry->GetBoolField(TEXT("turn"));
+		// `straight`: only the travel along the clip's facing, none to the side (a lunge that steps out to the right would
+		// carry the thrust past its target: the impale, PC 2026-11-28).
+		const bool bStraight = Entry->HasField(TEXT("straight")) && Entry->GetBoolField(TEXT("straight"));
 		const bool bKeep = Entry->HasField(TEXT("keepWhenDown")) && Entry->GetBoolField(TEXT("keepWhenDown"));
 		// A full /Game/ path for a clip already on the mannequin (the Game Animation Sample's get-ups), else under the folder.
 		const FString AssetPath = Anim.StartsWith(TEXT("/Game/")) ? FString::Printf(TEXT("%s.%s"), *Anim, *FPaths::GetBaseFilename(Anim))
@@ -305,7 +321,11 @@ int32 UMotionClipsCommandlet::Main(const FString& Params)
 		FString Root;
 		for (int32 i = First; i <= Last; ++i)
 		{
-			const FVector2D T = Path.Travel[i] - Path.Travel[First];
+			FVector2D T = Path.Travel[i] - Path.Travel[First];
+			if (bStraight)
+			{
+				T.Y = 0.0;
+			}
 			Root += FString::Printf(TEXT("%s[%s,%s,%s]"), i > First ? TEXT(",") : TEXT(""), *MotionClipsNumber(T.X), *MotionClipsNumber(T.Y),
 				*MotionClipsNumber(Path.Yaw[i] - Path.Yaw[First]));
 		}

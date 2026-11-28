@@ -121,6 +121,13 @@ struct Melee {
     int64_t attackAfter = 0;
     bool mistimed = false;
     int64_t critImmuneUntil = 0;
+    // Run through by an impale (a riposte): at this step it comes off the blade and staggers back from where the blow came.
+    int64_t impaleStaggerAt = 0;
+    float impaleFromX = 0.0f;
+    float impaleFromY = 0.0f;
+    // The impaler: its thrust held in the body until this step (its clip stopped at the blow), then drawn back at impaleRate.
+    int64_t impaleResumeAt = 0;
+    float impaleRate = 1.0f;
 };
 
 // A press of the attack buttons (MeleeCommand), Elden Ring style.

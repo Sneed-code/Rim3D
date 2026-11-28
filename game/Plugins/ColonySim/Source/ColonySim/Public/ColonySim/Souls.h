@@ -160,6 +160,10 @@ struct SoulsRules {
     float backstabRange = 1.5f;
     float backstabCos = -0.6f;        // about 53 degrees either side of straight behind
     int criticalHoldSteps = 12;
+    // The impale (a riposte, sneed 2026-11-28 "the target stunned as you do it, then staggering"): run through, the victim
+    // stands stunned on the blade this long (a recoil), and only then reels back off it.
+    int impaleHoldSteps = 12;
+    float impaleStandOff = 0.65f;  // the impaler is carried in to this far off the victim at the blow, centre to centre
     float criticalKnockdown = 6.0f;   // the knockdown's force (CombatSystem::knockDown's push)
     float guardBreakPoise = 2.0f;     // a guard break takes this share of the blocker's poise on top
     // Lining up the blow (Elden Ring's tracking): the attacker turns to its target until `trackShare` of the wind-up,

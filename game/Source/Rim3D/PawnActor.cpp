@@ -729,17 +729,72 @@ void ASimPawnActor::CancelJump()
 	}
 	JumpCancelHeight = GetJumpHeight();
 	JumpCancelAge = 0.0f;
+	JumpCancelSeconds = kJumpCancelSeconds;
+	bJumpEasedToLanding = false;
+	bJumpAttackPending = true;
 	JumpAge = -1.0f;
 	bJumpFalling = false;
+}
+
+namespace
+{
+	FVector PawnMotionBoneAt(const UAnimSequence& Clip, int32 Bone, double Time);
+}
+
+void ASimPawnActor::JumpFitsClip(const UAnimSequence& Clip, float From, float Rate)
+{
+	// sneed 2026-11-28 ("the jump attack is bad"): the attack's clip has its own jump in it (the mid-air slam starts with
+	// the hips 1.6 m up), and the jump's height on top of it threw the body 70 cm higher at once. The height left from the
+	// jump is set so the hips go on from where they are, then eased out by the moment the clip's feet come down.
+	bJumpAttackPending = false;
+	const USkeletalMeshComponent* Mesh = Body;
+	const USkeleton* Skeleton = Clip.GetSkeleton();
+	if (!Mesh || !Skeleton || Mesh->GetBoneIndex(TEXT("pelvis")) == INDEX_NONE)
+	{
+		return;
+	}
+	const FReferenceSkeleton& Ref = Skeleton->GetReferenceSkeleton();
+	const int32 Pelvis = Ref.FindBoneIndex(TEXT("pelvis"));
+	const int32 FootL = Ref.FindBoneIndex(TEXT("foot_l"));
+	const int32 FootR = Ref.FindBoneIndex(TEXT("foot_r"));
+	if (Pelvis == INDEX_NONE || FootL == INDEX_NONE || FootR == INDEX_NONE)
+	{
+		return;
+	}
+	const double Scale = Mesh->GetComponentScale().Z;
+	const double Now = GetJumpHeight();
+	// Where the hips are drawn now, and where the clip's first frame would draw them with no height added.
+	const double HipsNow = Mesh->GetSocketLocation(TEXT("pelvis")).Z;
+	const double HipsClip = Mesh->GetComponentLocation().Z - Now + PawnMotionBoneAt(Clip, Pelvis, From).Z * Scale;
+	// The clip's feet come down: the first moment its lower foot is back within 4 cm of where it ends.
+	const double End = FMath::Max(static_cast<double>(From), static_cast<double>(Clip.GetPlayLength()) - 0.02);
+	const double Ground = FMath::Min(PawnMotionBoneAt(Clip, FootL, End).Z, PawnMotionBoneAt(Clip, FootR, End).Z);
+	double Land = End;
+	for (double T = From; T <= End; T += 1.0 / 30.0)
+	{
+		if (FMath::Min(PawnMotionBoneAt(Clip, FootL, T).Z, PawnMotionBoneAt(Clip, FootR, T).Z) <= Ground + 4.0)
+		{
+			Land = T;
+			break;
+		}
+	}
+	JumpCancelHeight = static_cast<float>(HipsNow - HipsClip);
+	JumpCancelAge = 0.0f;
+	JumpCancelSeconds = FMath::Max(0.12f, static_cast<float>(Land - From) / FMath::Max(0.05f, Rate));
+	bJumpEasedToLanding = true;
+	++JumpsFitted;
+	LastJumpFit = FString::Printf(TEXT("%s from %.2f: height %.0f cm eased out over %.2f s"), *Clip.GetName(), From, JumpCancelHeight, JumpCancelSeconds);
 }
 
 float ASimPawnActor::GetJumpHeight() const
 {
 	if (!IsJumping())
 	{
-		// A jump cut short by a jump attack comes down smoothly (an ease out over kJumpCancelSeconds).
-		const float T = FMath::Clamp(JumpCancelAge / kJumpCancelSeconds, 0.0f, 1.0f);
-		return JumpCancelHeight * (1.0f - T) * (1.0f - T);
+		// A jump cut short by a jump attack comes down smoothly (an ease out over kJumpCancelSeconds), or, fitted to the
+		// attack's clip, eased in and out until the clip's feet land (it may start below nought: a clip that starts higher
+		// in the air than the jump was).
+		const float T = FMath::Clamp(JumpCancelAge / FMath::Max(0.05f, JumpCancelSeconds), 0.0f, 1.0f);
+		return bJumpEasedToLanding ? JumpCancelHeight * (1.0f - T * T * (3.0f - 2.0f * T)) : JumpCancelHeight * (1.0f - T) * (1.0f - T);
 	}
 	// A thrown body: up at the speed that reaches kJumpHeight halfway through, back down by kJumpSeconds. A higher jump
 	// (the lineage's factor) takes longer by its square root, as a thrown body does.
@@ -752,9 +807,14 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 	if (!IsJumping())
 	{
 		JumpCancelAge += GameDelta;
-		if (JumpCancelAge >= kJumpCancelSeconds)
+		if (JumpCancelAge >= JumpCancelSeconds)
 		{
 			JumpCancelHeight = 0.0f;
+			bJumpEasedToLanding = false;
+		}
+		if (JumpCancelAge > 0.3f)
+		{
+			bJumpAttackPending = false;  // no clip came
 		}
 		return;
 	}
@@ -2292,6 +2352,12 @@ void ASimPawnActor::RefreshMotionSetBack()
 	}
 }
 
+namespace
+{
+	/** Hips lower than this (cm, mesh space) at a clip's first frame: the clip starts lying. */
+	constexpr double PawnMotionLyingHipsCm = 40.0;
+}
+
 /**
  * Plays the clip the sim is moving this body along (docs/design/body-motion.md), at the sim's own moment of it. The
  * clip's travel is in its hips, and the sim has already put that travel into the pawn's position, so the visible body
@@ -2385,6 +2451,19 @@ bool ASimPawnActor::UpdateMotionClip(const USimSubsystem& Bridge, const colony::
 			const USkeleton* Skeleton = Asset->GetSkeleton();
 			MotionPelvisBone = Skeleton ? Skeleton->GetReferenceSkeleton().FindBoneIndex(FName(TEXT("pelvis"))) : INDEX_NONE;
 			MotionPelvisStart = MotionPelvisBone != INDEX_NONE ? PawnMotionBoneAt(*Asset, MotionPelvisBone, 0.0) : FVector::ZeroVector;
+			if (bJumpAttackPending && !bMotionUpper)
+			{
+				JumpFitsClip(*Asset, Want, Rate);
+			}
+			// A clip that starts lying (a get-up: the hips 11 cm up, 35 cm behind its root in the Game Animation Sample's
+			// up-from-the-back) is set back by all of its hips' offset, not only their travel, so the hips stay on the sim's
+			// place from the first frame: exactly where the fall left them (it ended with the hips over the place), and the
+			// body ends standing on the place instead of sliding 35 cm as the clip blends out (sneed 2026-11-28: never pop).
+			if (MotionPelvisStart.Z < PawnMotionLyingHipsCm)
+			{
+				MotionPelvisStart.X = 0.0;
+				MotionPelvisStart.Y = 0.0;
+			}
 		}
 		else if (!bHeldAtEnd)
 		{
@@ -2891,7 +2970,7 @@ void ASimPawnActor::ApplyBodyPose(float GameDelta, bool bBlocking)
 	AdvanceJump(GameDelta);
 	const float JumpHeight = GetJumpHeight();
 	const bool bMotion = !MotionOffset.IsNearlyZero(0.01) || !CrawlOffset.IsNearlyZero(0.01) || !WallClimbOffset.IsNearlyZero(0.01);
-	if (!bReacting && !bMelee && !bRolling && !bMotion && JumpHeight <= 0.0f)
+	if (!bReacting && !bMelee && !bRolling && !bMotion && FMath::IsNearlyZero(JumpHeight, 0.01f))
 	{
 		if (bBodyPosed)
 		{

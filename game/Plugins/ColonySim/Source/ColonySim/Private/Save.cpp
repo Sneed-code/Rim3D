@@ -2818,6 +2818,11 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("attackAfter", m.attackAfter);
         ar.value("mistimed", m.mistimed);
         ar.value("critImmuneUntil", m.critImmuneUntil);
+        ar.value("impaleStaggerAt", m.impaleStaggerAt);
+        ar.value("impaleFromX", m.impaleFromX);
+        ar.value("impaleFromY", m.impaleFromY);
+        ar.value("impaleResumeAt", m.impaleResumeAt);
+        ar.value("impaleRate", m.impaleRate);
     }
 }
 
