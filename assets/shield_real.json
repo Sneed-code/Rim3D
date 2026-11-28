@@ -1,0 +1,21 @@
+{
+  "about": "Downloaded shield models that take the place of a Codex-made one (sneed 2026-11-28: 'use an actual shield model if there are any, to see how it looks'). tools/shield_download.py fetches each zip into assets/raw/<raw>/ and packs the textures; tools/shield_real.py (Blender) writes game/Content/ThirdParty/Shields/<id>.glb over the Codex one in the same frame (centred, face to +x, straps behind, up +z), sized to `diameter` metres; the ShieldArt commandlet imports it. Licences in assets/manifest.json.",
+  "models": [
+    {
+      "id": "SM_Shield_Steel_Medium",
+      "name": "Round Shield 2 (Lucian Pavel, OpenGameArt)",
+      "page": "https://opengameart.org/content/round-shield-2",
+      "url": "https://opengameart.org/sites/default/files/Round%20Shield%202.zip",
+      "licence": "CC0",
+      "raw": "opengameart/round-shield-2",
+      "fbx": "Round Shield 2.fbx",
+      "front": "-y",
+      "textures": "Round Shield 2/Textures 1",
+      "color": "Round Shield 2.png",
+      "normal": "Round Shield 2_NRM.png",
+      "ao": "Round Shield 2_AO.png",
+      "metal": "Round Shield 2_MET.png",
+      "diameter": 0.68
+    }
+  ]
+}

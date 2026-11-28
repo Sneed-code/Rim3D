@@ -208,6 +208,15 @@
       "reinstall": "blender -b --python tools/shield_models.py -- game/Content/ThirdParty/Shields, then UnrealEditor-Cmd game/Rim3D.uproject -run=ShieldArt -unattended -nosplash -AllowCommandletRendering"
     },
     {
+      "name": "Round Shield 2 (Lucian Pavel, OpenGameArt)",
+      "source": "https://opengameart.org/content/round-shield-2, Round Shield 2.zip (FBX, 580 triangles, two 2048 texture sets: colour, normal, AO, Unity-style metallic/smoothness), downloaded 2026-11-28 by tools/shield_download.py",
+      "licence": "CC0 (no attribution needed)",
+      "version": "as downloaded 2026-11-28; texture set 1 (the pale steel face with the steel cross bands)",
+      "installedTo": "assets/raw/opengameart/round-shield-2/ (not in Git); tools/shield_real.py (Blender) writes game/Content/ThirdParty/Shields/SM_Shield_Steel_Medium.glb over the Codex one (68 cm across, face to +x), the ShieldArt commandlet imports it",
+      "usedFor": "the steel medium shield (Apparel_ShieldMedium in Steel, the sword-and-shield duel's shield; sneed 2026-11-28: 'use an actual shield model')",
+      "reinstall": "tools/update.py runs the shield-download, shield-real and shield-art steps (assets/shield_real.json)"
+    },
+    {
       "name": "Codex models (ours): launchers, molotov, turrets, mortar, machines, component",
       "source": "tools/codex_assets/ briefs run by the Codex CLI (GPT 6.2 Sol, sneed's ChatGPT plan, 2026-11-19); tools/codex_prep.py makes the game files",
       "licence": "ours",

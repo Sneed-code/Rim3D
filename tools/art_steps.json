@@ -81,6 +81,21 @@
       "run": [{"blender": ["-b", "--python", "tools/shield_models.py", "--", "game/Content/ThirdParty/Shields"]}]
     },
     {
+      "name": "shield-download",
+      "what": "Download the real shield models (CC0, assets/shield_real.json)",
+      "inputs": ["tools/shield_download.py", "assets/shield_real.json"],
+      "needs": ["internet"],
+      "run": [{"python": ["tools/shield_download.py"]}]
+    },
+    {
+      "name": "shield-real",
+      "what": "Put the downloaded shields in place of the Codex ones they replace (Blender)",
+      "after": ["shield-models", "shield-download"],
+      "inputs": ["tools/shield_real.py", "assets/shield_real.json"],
+      "needs": ["blender"],
+      "run": [{"blender": ["-b", "--factory-startup", "-P", "tools/shield_real.py", "--", "game/Content/ThirdParty/Shields"]}]
+    },
+    {
       "name": "codex-models",
       "what": "Turn the Codex models into game files in Blender",
       "inputs": ["tools/codex_prep.py", "assets/codex_art.json"],
@@ -153,7 +168,7 @@
     {
       "name": "shield-art",
       "what": "Shields",
-      "after": ["shield-models"],
+      "after": ["shield-models", "shield-real"],
       "raw": ["game/Content/ThirdParty/Shields"],
       "run": [{"commandlet": "ShieldArt", "args": ["-AllowCommandletRendering"]}]
     },

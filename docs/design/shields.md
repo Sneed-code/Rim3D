@@ -122,6 +122,13 @@ and cyan light lines. Each is 60 to 400 KB, under 3000 / 4000 / 6000 triangles.
     blender -b --python tools/shield_models.py -- game/Content/ThirdParty/Shields
     UnrealEditor-Cmd game/Rim3D.uproject -run=ShieldArt -unattended -nosplash -AllowCommandletRendering
 
+The **steel medium** shield is a real downloaded model since 2026-11-28 (sneed: "use an actual shield model if there are
+any, to see how it looks"): Lucian Pavel's CC0 *Round Shield 2* from OpenGameArt, a 68 cm round shield with a steel
+face, cross bands and boss and a centre grip (assets/shield_real.json, assets/manifest.json). The `shield-download` art
+step fetches it, `shield-real` (Blender, `tools/shield_real.py`) writes it over the Codex GLB in the same frame (centred,
+face to +x, the list says which way the file's face points), and `shield-art` imports it. More downloaded shields go in
+the same list.
+
 The commandlet (`game/Source/Rim3DEditor/ShieldArtCommandlet.cpp`) imports each with its own materials into
 `/Game/Rim3D/Generated/Shields/<name>/<name>` (not in Git). The smoke test `melee` (phase `shield`) checks the model
 is drawn and stands the right way up (thin along x, about 60 x 75 cm for the medium).
