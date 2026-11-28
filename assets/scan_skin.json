@@ -1,0 +1,25 @@
+{
+  "comment": "Scanned skin (docs/design/scanned-skin.md): the MetaHuman Creator's free scanned skin moved onto the MakeHuman creator bodies. The ScanSkin commandlet writes the meshes, textures and synthesized faces below to game/Saved/ScanSkin; tools/makehuman/scan_skin.py lines each MetaHuman part up with a base body in Blender and bakes its maps onto the base's texture layout (skin_scan*.png beside its FBX), which MakeHumanArt uses for the 4K skin.",
+  "meshes": [
+    {"name": "body", "asset": "/MetaHumanCharacter/Body/IdentityTemplate/SKM_Body.SKM_Body"},
+    {"name": "face", "asset": "/Game/MetaHumans/Kellan/Face/Kellan_FaceMesh.Kellan_FaceMesh"}
+  ],
+  "textureFolders": ["/MetaHumanCharacter/Optional/BodyTextures", "/Game/MetaHumans/Kellan/Face"],
+  "listFolders": ["/MetaHumanCharacter", "/Game/MetaHumans"],
+  "faceSynth": ["Ada", "Grace", "Mateo", "Lorenzo"],
+  "bases": {
+    "CreatorFemale": {
+      "body": {"color": "T_Skin_V1_Body_BC", "normal": "T_Chr0005_Body_N", "rough": "", "cavity": ""},
+      "head": {"color": "synth:Ada:albedo", "normal": "synth:Ada:normal", "rough": "", "cavity": ""}
+    },
+    "CreatorMale": {
+      "body": {"color": "T_Skin_V1_Body_BC", "normal": "T_Chr0005_Body_N", "rough": "", "cavity": ""},
+      "head": {"color": "synth:Mateo:albedo", "normal": "synth:Mateo:normal", "rough": "", "cavity": ""}
+    }
+  },
+  "headSlot": "head",
+  "eyeSlots": ["eyeLeft", "eyeRight"],
+  "size": 4096,
+  "colour": "scan",
+  "rayCm": 2.5
+}

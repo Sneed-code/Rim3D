@@ -251,7 +251,8 @@ checkerboard: `r.SSS.*` in DefaultEngine.ini); per person a sheen that follows t
 tighter specular, as melanin-rich skin has), its own oiliness, and older skin shows its pores more (`MicroStrength`).
 The big step would be scanned skin: project a free photoscanned head and body's colour, normal and specular maps onto
 MakeHuman's texture layout in Blender (a few sittings), with separate textures per skin tone, plus a cavity map and
-peach fuzz; MetaHuman level everywhere is beyond what MakeHuman's mesh and UVs allow.
+peach fuzz; MetaHuman level everywhere is beyond what MakeHuman's mesh and UVs allow. Started 2026-11-28 with the
+MetaHuman Creator's own scans: `scanned-skin.md`.
 
 ## Eyes, wrinkles, brows and lashes
 

@@ -1835,15 +1835,22 @@ namespace
 						Material.MaterialInterface = SkinInstance;
 						// The 4K skin (tools/makehuman/skin_4k.py: skin_4k.png, skin_normal_4k.png, skin_rough_4k.png beside the
 						// FBX): a second instance, MI_MH_<name>_Skin4K, the creator's switch. The 2K one stays the mesh's own.
+						// The scanned skin (tools/makehuman/scan_skin.py: skin_scan*.png, the MetaHuman Creator's scans baked
+						// onto this layout; docs/design/scanned-skin.md) takes the 4K skin's place when it is there.
 						const FString Dir = FPaths::GetPath(Files.Fbx);
-						if (FPaths::FileExists(Dir / TEXT("skin_4k.png")))
+						const bool bScan = FPaths::FileExists(Dir / TEXT("skin_scan.png"));
+						const FString ColorFile = Dir / (bScan ? TEXT("skin_scan.png") : TEXT("skin_4k.png"));
+						const FString NormalFile = Dir / (bScan ? TEXT("skin_scan_normal.png") : TEXT("skin_normal_4k.png"));
+						const FString RoughFile = Dir / (bScan ? TEXT("skin_scan_rough.png") : TEXT("skin_rough_4k.png"));
+						if (FPaths::FileExists(ColorFile))
 						{
 							auto* Factory4K = NewObject<UMaterialInstanceConstantFactoryNew>();
 							Factory4K->InitialParent = SkinBase;
 							auto* Skin4K = Cast<UMaterialInstanceConstant>(Tools.CreateAsset(MakeHumanSkinName(Files.Name) + TEXT("4K"), Folder, UMaterialInstanceConstant::StaticClass(), Factory4K));
-							UTexture2D* Color4K = MhImportTexture(Dir / TEXT("skin_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_Skin4K"), true);
-							UTexture2D* Normal4K = FPaths::FileExists(Dir / TEXT("skin_normal_4k.png")) ? MhImportTexture(Dir / TEXT("skin_normal_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_SkinNormal4K"), false) : nullptr;
-							UTexture2D* Rough4K = FPaths::FileExists(Dir / TEXT("skin_rough_4k.png")) ? MhImportTexture(Dir / TEXT("skin_rough_4k.png"), Folder, TEXT("T_") + Files.Name + TEXT("_SkinRough4K"), true) : nullptr;
+							UTexture2D* Color4K = MhImportTexture(ColorFile, Folder, TEXT("T_") + Files.Name + TEXT("_Skin4K"), true);
+							UTexture2D* Normal4K = FPaths::FileExists(NormalFile) ? MhImportTexture(NormalFile, Folder, TEXT("T_") + Files.Name + TEXT("_SkinNormal4K"), false) : nullptr;
+							UTexture2D* Rough4K = FPaths::FileExists(RoughFile) ? MhImportTexture(RoughFile, Folder, TEXT("T_") + Files.Name + TEXT("_SkinRough4K"), true) : nullptr;
+							UE_LOG(LogMakeHumanArt, Display, TEXT("  4K skin from %s"), bScan ? TEXT("the scanned skin (skin_scan*.png)") : TEXT("skin_4k.png"));
 							if (Skin4K && Color4K)
 							{
 								for (UTexture2D* T : {Color4K, Normal4K, Rough4K})

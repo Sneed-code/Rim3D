@@ -223,10 +223,26 @@
       "run": [{"commandlet": "ClothesArt", "args": ["-nullrhi"]}]
     },
     {
+      "name": "scan-skin-export",
+      "what": "Write the MetaHuman body and face, the Creator's scanned skin textures and synthesized faces to game/Saved/ScanSkin (for scan-skin-bake)",
+      "inputs": ["assets/scan_skin.json"],
+      "makes": ["game/Saved/ScanSkin/mesh_body.json", "game/Saved/ScanSkin/mesh_face.json", "game/Saved/ScanSkin/textures.json"],
+      "run": [{"commandlet": "ScanSkin", "args": ["-nullrhi"]}]
+    },
+    {
+      "name": "scan-skin-bake",
+      "what": "Bake the MetaHuman scanned skin onto the creator's bodies in Blender (lined up by skeleton and face landmarks; skin_scan*.png beside each FBX; a few minutes)",
+      "inputs": ["tools/makehuman/scan_skin.py", "tools/makehuman/scan_skin_blend.py", "assets/scan_skin.json"],
+      "after": ["creator-bodies", "scan-skin-export"],
+      "needs": ["blender", "internet"],
+      "makes": ["game/Saved/MakeHuman/CreatorFemale/skin_scan.png", "game/Saved/MakeHuman/CreatorMale/skin_scan.png"],
+      "run": [{"python": ["tools/makehuman/scan_skin.py"]}]
+    },
+    {
       "name": "makehuman-bodies",
       "what": "Bring the creator's bodies and their clothes into the game",
       "inputs": ["assets/makehuman.json"],
-      "after": ["creator-bodies"],
+      "after": ["creator-bodies", "scan-skin-bake"],
       "raw": ["game/Saved/MakeHuman"],
       "makes": ["game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorFemale.uasset", "game/Content/Rim3D/Generated/MakeHuman/SK_MH_CreatorMale.uasset", "game/Content/Rim3D/Generated/MakeHuman/Garments"],
       "run": [{"commandlet": "MakeHumanArt", "args": ["-nullrhi"]}]

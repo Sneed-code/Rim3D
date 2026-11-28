@@ -2,6 +2,15 @@
 
 Updated 2026-11-28.
 
+Scanned skin, cloud part (sneed, 2026-11-28; art steps and editor tools, `docs/design/scanned-skin.md`): the MetaHuman
+Creator's free scanned skin (body colour and detail maps, synthesized faces) baked onto the MakeHuman creator bases'
+own texture layout, so skin colour, pigment, wrinkles, blood and clothes keep working. New `ScanSkin` commandlet
+(`scan-skin-export`) writes the MetaHuman body and face and the textures; `tools/makehuman/scan_skin.py`
+(`scan-skin-bake`) lines them up in Blender by skeleton and by 68 face landmarks (OpenCV LBF), settles them onto the
+skin and bakes colour, normal, roughness and cavity (`skin_scan*.png`); MakeHumanArt uses them for the 4K skin.
+Tried end to end on a stand-in body in the cloud. Still to do on the PC: pick the exact textures from
+`game/Saved/ScanSkin/textures.json`, bake, look at pictures.
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then

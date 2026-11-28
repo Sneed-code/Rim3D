@@ -110,7 +110,6 @@ Ideas parked for later. Newest first. Move an item into a stage plan when it's p
   clips are imported but unused. The new moving-parts system (`visual.moving`) could now move the Codex models' parts
   too (telescope tube, turret heads).
 - Codex recurve bow and vent (2026-11-22): models made (Rim3D_Codex), not wired in: guns.json has no bow handling yet (draw and string pull, StringTop/StringBottom sockets in the GLB), and the vent def is a wall-height block like the cooler.
-- Scanned skin (sneed 2026-11-26 asked how far skin realism can go): project a free photoscanned head and body's colour,
-  normal and specular maps onto MakeHuman's texture layout in Blender, a texture per skin tone (light, medium, deep), a
-  cavity map and peach fuzz. A few sittings; the biggest step left for photoreal skin (docs/design/makehuman.md "Skin realism").
+- Scanned skin follow-ups (docs/design/scanned-skin.md "Next"): light, medium and deep texture sets, nipple landmarks,
+  peach fuzz.
 - Live faces next: lip sync from audio, eye bones for the capture's eye look curves (docs/design/faces-mocap.md "Next").
