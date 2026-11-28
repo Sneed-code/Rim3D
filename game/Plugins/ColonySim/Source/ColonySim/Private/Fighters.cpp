@@ -1799,7 +1799,9 @@ void FighterSystem::act(Entity pawn, Fighter& f) {
         }
         return;
     }
-    combat_.setStance(pawn, f.known.empty() ? Stance::Standing : Stance::Crouching);
+    // Crouched behind cover with a gun; a blade (or bare hands) waits on its feet, its guard and stance up (PC 2026-11-28:
+    // a drafted swordsman between blows crouched like a rifleman, and the drawn guard and ready stance went with it).
+    combat_.setStance(pawn, f.known.empty() || weaponRange(pawn) <= 0.0f ? Stance::Standing : Stance::Crouching);
     if (phase == ShotPhase::Ready) {
         tacticalReload(pawn, f, canShoot);
     }

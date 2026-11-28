@@ -92,6 +92,9 @@ struct WeaponHold {
     // Where the weapon is held (the style's `places`, a weapon's own `hold.places` over them): third person ready
     // (drafted, in a fight, the player's own), aimed (guns), blocking (melee); first person the same with `fp`.
     HoldPlace ready, aim, block, fpReady, fpAim, fpBlock;
+    // With a shield on the other arm (sneed 2026-11-28): the blade ready beside the shield, not across it, and held up at
+    // the right side behind the raised shield's edge while guarding (Elden Ring), instead of across the body.
+    HoldPlace shieldReady, shieldBlock;
 };
 
 // The hold of a weapon def; `weapon` invalid (or not a weapon) gives the bare-hands style. A def without its own
@@ -105,7 +108,8 @@ COLONY_API bool shieldHoldFor(const DefDatabase& defs, DefId shield, WeaponHold&
 COLONY_API const char* holdGripName(HoldGrip grip);
 
 // The place for a hold's state: `aimed` (guns) or `blocking` (melee) over ready, in first person or third; falls back
-// to ready, and from first person to third. Null if the style gives none (the weapon then follows the hand).
-COLONY_API const HoldPlace* holdPlaceFor(const WeaponHold& hold, bool firstPerson, bool aimed, bool blocking);
+// to ready, and from first person to third. With `shield` (one on the other arm), third person, the style's
+// shieldBlock and shieldReady come first. Null if the style gives none (the weapon then follows the hand).
+COLONY_API const HoldPlace* holdPlaceFor(const WeaponHold& hold, bool firstPerson, bool aimed, bool blocking, bool shield = false);
 
 }  // namespace colony

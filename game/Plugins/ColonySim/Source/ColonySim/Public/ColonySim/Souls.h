@@ -34,6 +34,8 @@ struct PoiseMeter {
     int64_t lastHit = 0;            // step it last took poise damage
     int64_t lastBreak = -1000000;   // step its poise last broke
     int64_t knockdownImmuneUntil = 0;
+    // sneed 2026-11-28: "when it's 0 it resets and can't drop again for 10 sec": no poise damage before this step.
+    int64_t immuneUntil = 0;
 };
 
 // The kinds of attack (Elden Ring's R1, R2, charged R2, running R1/R2, jumping R1/R2, rolling R1, guard counter), and
@@ -107,7 +109,11 @@ struct SoulsRules {
     int poiseRegenSteps = 900;        // Elden Ring: poise refills 30 s after the last hit
     int knockdownImmuneSteps = 300;   // no second knockdown sooner (sneed: knockdowns can't be chained)
     int doubleBreakSteps = 150;       // a second break this soon after the first knocks down
-    int staggerSteps = 30;            // a poise break's stagger: no attacking, guarding or rolling
+    int staggerSteps = 30;            // a stagger (after a riposte, a guard break's own reel is guardBreakSteps)
+    // sneed 2026-11-28: a poise break leaves the victim reeling this long (open to a riposte: the impale), and its poise
+    // can't be broken again for poiseImmuneSteps (10 s).
+    int postureBreakSteps = 60;
+    int poiseImmuneSteps = 300;
     float hyperArmorTaken = 0.5f;     // poise damage taken while a hyper-armoured attack winds up
     float animalPoisePerPower = 0.8f;  // a creature's poise damage per point of its tool's power (no moveset)
     // Combos and canceling, as shares of the attack's recovery (the part of its clip after the blow).
@@ -119,6 +125,17 @@ struct SoulsRules {
     // gives an opening"): when an attack's recovery runs out and no next blow was pressed, the attacker is still
     // committed this many steps (no attack, roll or guard).
     int openingSteps = 10;
+    // sneed 2026-11-28: "if an enemy hits a block (or I do) it adds .15 sec delay to the next attack", both sides.
+    int blockedDelaySteps = 5;
+    // sneed 2026-11-28: "combat has to be more tactical where I time attacks right than spam click". A press during an
+    // attack's wind-up is too early: it is dropped, and the attack won't chain (its recovery plays out, then the opening).
+    // A press from the blow on is kept and chains.
+    bool earlyPressBreaksChain = true;
+    // The shield's room (sneed 2026-11-28: "the shield can clip the enemy, make sure there's a barrier when you hold it
+    // up"): a raised shield keeps any other body in front of it this many metres off, centre to centre (plus a big body's
+    // extra girth), pushing the two apart by at most shieldPushPerStep metres a step so nothing jumps.
+    float shieldRoom = 0.8f;
+    float shieldPushPerStep = 0.03f;
     // Charging a heavy (holding the button): it holds at chargeShare of its wind-up, for up to maxChargeSteps; held
     // at least minChargeSteps it is a charged heavy.
     float chargeShare = 0.55f;
@@ -143,6 +160,10 @@ struct SoulsRules {
     float backstabRange = 1.5f;
     float backstabCos = -0.6f;        // about 53 degrees either side of straight behind
     int criticalHoldSteps = 12;
+    // The impale (a riposte, sneed 2026-11-28 "the target stunned as you do it, then staggering"): run through, the victim
+    // stands stunned on the blade this long (a recoil), and only then reels back off it.
+    int impaleHoldSteps = 12;
+    float impaleStandOff = 0.65f;  // the impaler is carried in to this far off the victim at the blow, centre to centre
     float criticalKnockdown = 6.0f;   // the knockdown's force (CombatSystem::knockDown's push)
     float guardBreakPoise = 2.0f;     // a guard break takes this share of the blocker's poise on top
     // Lining up the blow (Elden Ring's tracking): the attacker turns to its target until `trackShare` of the wind-up,

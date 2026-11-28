@@ -32,7 +32,9 @@
       "ready": {"anchor": "Chest", "at": [24, 14, -30], "turn": [45, -10, 180]},
       "block": {"anchor": "Chest", "at": [32, 14, 0], "turn": [12, -80, 90]},
       "fpReady": {"anchor": "View", "at": [34, 15, -24], "turn": [55, -12, 180]},
-      "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [12, -80, 90]}
+      "fpBlock": {"anchor": "View", "at": [40, 12, -8], "turn": [12, -80, 90]},
+      "shieldReady": {"anchor": "Chest", "at": [22, 25, -28], "turn": [38, 20, 180]},
+      "shieldBlock": {"anchor": "Chest", "at": [12, 32, -4], "turn": [50, 4, 180]}
     }
   },
   {

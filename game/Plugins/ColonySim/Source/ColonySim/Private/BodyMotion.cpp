@@ -101,6 +101,9 @@ BodyMotionSystem::BodyMotionSystem(Things& things, Map& map) : things_(things), 
         rules_.getUpSeconds = std::max(0.1f, static_cast<float>(r->number("getUpSeconds", rules_.getUpSeconds)));
         for (int i = 0; i < 4; ++i) {
             rules_.getUpTurn[i] = static_cast<float>(r->number((std::string("getUpTurn.") + sides[i]).c_str(), rules_.getUpTurn[i]));
+            rules_.getUpClips[i] = r->text((std::string("getUpClips.") + sides[i]).c_str(), rules_.getUpClips[i]);
+            rules_.getUpClipSeconds[i] =
+                std::max(0.0f, static_cast<float>(r->number((std::string("getUpClipSeconds.") + sides[i]).c_str(), rules_.getUpClipSeconds[i])));
         }
         rules_.staggerMetres = std::max(0.0f, static_cast<float>(r->number("staggerMetres", rules_.staggerMetres)));
         rules_.staggerSteps = std::max(1, static_cast<int>(r->integer("staggerSteps", rules_.staggerSteps)));
@@ -314,7 +317,16 @@ int BodyMotionSystem::knockdownSide(Entity pawn) const {
 
 int BodyMotionSystem::getUp(Entity pawn, int side) {
     entt::registry& reg = things_.registry();
-    const DefId id = clipId(rules_.getUpClip);
+    DefId id = clipId(rules_.getUpClip);
+    float seconds = rules_.getUpSeconds;
+    // Its own get-up for the way it fell (up from the back, sneed 2026-11-28), when the data has one.
+    if (side >= 0 && side < 4 && !rules_.getUpClips[side].empty()) {
+        const DefId own = clipId(rules_.getUpClips[side]);
+        if (const MotionClip* c = own.valid() ? clip(own) : nullptr; c != nullptr) {
+            id = own;
+            seconds = rules_.getUpClipSeconds[side] > 0.0f ? rules_.getUpClipSeconds[side] : c->seconds;
+        }
+    }
     if (!id.valid() || !hasClips(pawn) || !reg.valid(pawn) || !reg.all_of<Position, Posture>(pawn)) {
         return 0;
     }
@@ -331,7 +343,7 @@ int BodyMotionSystem::getUp(Entity pawn, int side) {
         fx = tx;
         fy = ty;
     }
-    const int steps = std::max(1, static_cast<int>(std::lround(rules_.getUpSeconds / kMotionStepSeconds)));
+    const int steps = std::max(1, static_cast<int>(std::lround(seconds / kMotionStepSeconds)));
     if (!play(pawn, id, fx, fy, steps, true)) {
         return 0;
     }

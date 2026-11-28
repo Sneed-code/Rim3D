@@ -207,6 +207,13 @@ the feet now turn with the body through a swing (`bTurnFeet`), so a turning mace
 
 ## Shoulder anchor (sneed, 2026-11-23)
 
+**With a shield on the arm** (sneed 2026-11-28) a style's `shieldReady` and `shieldBlock` places come first in third
+person (`colony::holdPlaceFor(..., shield)`): the one-handed blade is held beside the shield (point forward and a little
+out, not across it, so it never goes through the shield) and, guarding, raised at the right side with the blade up
+behind the shield's edge (Elden Ring), instead of the no-shield guard across the body (`places.block`, which still
+serves a sword alone). Neither shows while the body is crouched (only standing bodies are pinned): a drafted swordsman
+no longer crouches in cover between blows like a rifleman (`FighterSystem::act`), which had hidden both guards.
+
 `"anchor": "Shoulder"` places a point at the right upper arm with the aim frame (as `Head`). Rifles (Hold_Rifle,
 sniper, bolt action) put the stock there, cheek on it (sneed's reference picture); the LMG, heavy SMG, minigun and both
 shotguns override their `places.aim` with the stock lower on the shoulder, clear of the face.

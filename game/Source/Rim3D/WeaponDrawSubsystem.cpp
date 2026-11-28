@@ -697,6 +697,7 @@ void UWeaponDrawSubsystem::Tick(float DeltaTime)
 void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingView& View)
 {
 	FPawnWeapons& Pawn = Weapons.FindOrAdd(entt::to_integral(View.id));
+	Pawn.Debug.Reset();
 	const bool bShow = !View.downed && !View.dead && !Actor.IsRagdoll();
 	const float Height = Actor.GetStanceHeight();
 	// The body's own height (docs/design/gear-size.md): every place below was measured on the 1.80 m man, so it is
@@ -901,9 +902,15 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			PinDebug = FString::Printf(TEXT("show %d hands %d standing %d hold %d inhand %.2f places %d force %.2f finisher %d"), bShow ? 1 : 0, bHands ? 1 : 0,
 				bStanding ? 1 : 0, bHold ? 1 : 0, InHand, GWeaponPlaces.GetValueOnGameThread(), Pawn.ForceHandSeconds, static_cast<int32>(View.meleeFinisher));
 		}
+		if (bPinSlot)
+		{
+			Pawn.Debug += FString::Printf(TEXT("show %d hands %d standing %d (%.2f) hold %d inhand %.2f ready %.2f force %.2f"), bShow ? 1 : 0, bHands ? 1 : 0,
+				bStanding ? 1 : 0, Height, bHold ? 1 : 0, InHand, Pawn.Ready, Pawn.ForceHandSeconds);
+		}
 		if (bShow && bHands && (bStanding || bFinisherNow) && bHold && bPinSlot && InHand > 0.0f && GWeaponPlaces.GetValueOnGameThread() != 0 &&
 			(Pawn.ForceHandSeconds <= 0.0f || bFinisherNow))
 		{
+			PinFailReason = TEXT("");
 			HoldDraw::FPoints Points = HoldDraw::PointsOf(Hold, HasShieldOnArm(View));
 			// A one-handed club or hammer held up to block takes the other hand on its haft (the style's `blockOff`),
 			// eased in with the block (sneed 2026-11-24: the mace's and zeushammer's left hand stayed up in the air).
@@ -925,6 +932,10 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			}
 			bPinned = PinWeapon(Actor, View, Pawn, Hold, Points, Size, static_cast<float>(Place), bControlled, InHand, WeaponInHand, WeaponPlaced);
 			bAnyPinned = bAnyPinned || bPinned;
+			Pawn.PinMain = Points.Main * Size;
+			Pawn.PinTip = Points.Tip * Size;
+			Pawn.Debug += FString::Printf(TEXT(", pinned %d %s, block %.2f, hand free %.2f, ride %.2f"), bPinned ? 1 : 0, PinFailReason, Pawn.BlockBlend,
+				Pawn.HandFree, Pawn.ClipRide);
 			if (bControlled)
 			{
 				PinDebug += FString::Printf(TEXT(", pinned %d%s%s, aim %.2f, hand free %.2f, finisher blend %.2f"), bPinned ? 1 : 0, PinFailReason[0] != 0 ? TEXT(" because ") : TEXT(""),
@@ -946,6 +957,7 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 			const float Free = MeleePose::EaseInOut(FMath::Clamp(FMath::Max(Pawn.HandFree, Pawn.ClipRide), 0.0f, 1.0f));
 			Hands = FTransform(FQuat::Slerp(WeaponPlaced.GetRotation(), InHandWorld.GetRotation(), Free),
 				FMath::Lerp(WeaponPlaced.GetLocation(), InHandWorld.GetLocation(), static_cast<double>(Free)));
+			Hands = ImpaleAim(View, Pawn, Hands);
 		}
 		else if (bInHandFrame)
 		{
@@ -1094,14 +1106,16 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 		PinFailReason = !Mesh ? TEXT("no mesh") : !Cast<UMakeHumanAnimInstance>(Mesh->GetAnimInstance()) ? TEXT("not a MakeHuman body") : TEXT("missing hand/arm bones");
 		return false;
 	}
-	const colony::HoldPlace* Ready = colony::holdPlaceFor(Hold, false, false, false);
+	// A shield on the other arm has the blade held beside it (and up behind its edge in a guard), not across it.
+	const bool bShieldArm = HasShieldOnArm(View);
+	const colony::HoldPlace* Ready = colony::holdPlaceFor(Hold, false, false, false, bShieldArm);
 	if (!Ready || Hold.grip == colony::HoldGrip::None || Hold.grip == colony::HoldGrip::Shield || Hold.grip == colony::HoldGrip::Bow)
 	{
 		PinFailReason = TEXT("no ready place for this grip");
 		return false;
 	}
 	const colony::HoldPlace* Aim = colony::holdPlaceFor(Hold, false, true, false);
-	const colony::HoldPlace* Block = colony::holdPlaceFor(Hold, false, false, true);
+	const colony::HoldPlace* Block = colony::holdPlaceFor(Hold, false, false, true, bShieldArm);
 	const bool bGun = Hold.grip == colony::HoldGrip::Gun;
 	const UProtagonistSubsystem* Protagonist = GetWorld()->GetSubsystem<UProtagonistSubsystem>();
 	const AProtagonistPawn* Body = bControlled && Protagonist ? Protagonist->GetBody() : nullptr;
@@ -1691,6 +1705,8 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	}
 	Anim->SetUpperUpright(Upright);
 	Anim->SetUpperStance(Clip, Clip ? Weight : 0.0f, 0.2f, HoldAt >= 0.0f ? 3.5f : 5.0f, HoldAt);
+	Pawn.Debug += FString::Printf(TEXT(", stance %s want %.2f shown %s %.2f"), Clip ? *Clip->GetName() : TEXT("none"), Weight,
+		Anim->GetUpperStance() ? *Anim->GetUpperStance()->GetName() : TEXT("none"), Anim->GetUpperWeight());
 	// A body on the back: bent forward under it (docs/design/weapon-hold.md, "Carrying a body").
 	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;
 	// Through a finisher: bent over the body on the ground, most at the blow (sneed 2026-11-20).
@@ -1849,6 +1865,74 @@ UStaticMeshComponent* UWeaponDrawSubsystem::GetShieldComponent(colony::Entity Pa
 {
 	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
 	return Found && Found->Shield.IsValid() ? Found->Shield.Get() : nullptr;
+}
+
+// The impale (souls-combat.md, sneed 2026-11-28: "make it look like a real impale through the chest"): through a riposte's
+// thrust the blade in the hand turns about its grip so its line runs through the victim's chest (spine_03), in over the
+// thrust's second half, held while the victim stands on it (criticalHold, impaleHold), out as it is pulled free. The hand
+// keeps the clip's place; only the blade's angle changes, eased, never snapped.
+FTransform UWeaponDrawSubsystem::ImpaleAim(const colony::ThingView& View, FPawnWeapons& Pawn, const FTransform& Weapon)
+{
+	const USimSubsystem* Bridge = BridgeSource.Get();
+	const colony::Sim* Sim = Bridge ? Bridge->GetSim() : nullptr;
+	float Want = 0.0f;
+	FVector Chest = FVector::ZeroVector;
+	const bool bImpale = View.meleeKind == static_cast<uint8>(colony::SoulsAttack::Riposte) && View.meleePhase != colony::MeleePhase::Ready;
+	if (!bImpale)
+	{
+		Pawn.ImpaleTarget = colony::kNoEntity;
+	}
+	else if (View.meleeTarget != colony::kNoEntity)
+	{
+		Pawn.ImpaleTarget = View.meleeTarget;
+	}
+	if (Sim && bImpale && Pawn.ImpaleTarget != colony::kNoEntity && View.motionClip.valid() && !Pawn.PinTip.IsNearlyZero())
+	{
+		const colony::MotionClip* Clip = Sim->combat().motion().clip(View.motionClip);
+		const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
+		const ASimPawnActor* Victim = Pawns ? Pawns->FindPawn(Pawn.ImpaleTarget) : nullptr;
+		const USkeletalMeshComponent* VictimMesh = Victim ? HoldDraw::VisibleMesh(*Victim) : nullptr;
+		if (Clip && Clip->hitSeconds > 0.05f && VictimMesh && VictimMesh->GetBoneIndex(TEXT("spine_03")) != INDEX_NONE)
+		{
+			Chest = VictimMesh->GetSocketLocation(TEXT("spine_03"));
+			const float Hit = Clip->hitSeconds;
+			const float T = View.motionTime;
+			const float Rate = FMath::Max(0.05f, View.motionRate);
+			const colony::SoulsRules& Rules = Sim->melee().souls();
+			const float Held = static_cast<float>(Rules.criticalHoldSteps + Rules.impaleHoldSteps) / static_cast<float>(colony::kStepsPerRealSecondAt1x) * Rate;
+			const float In = MeleePose::EaseInOut(FMath::Clamp((T - 0.45f * Hit) / (0.55f * Hit), 0.0f, 1.0f));
+			const float Out = 1.0f - MeleePose::EaseInOut(FMath::Clamp((T - Hit - Held) / (0.3f * Rate), 0.0f, 1.0f));
+			Want = In * Out;
+		}
+	}
+	Pawn.ImpaleBlend = FMath::FInterpConstantTo(Pawn.ImpaleBlend, Want, FrameDelta, 8.0f);
+	if (Pawn.ImpaleBlend <= 0.001f || Chest.IsZero())
+	{
+		return Weapon;
+	}
+	const FVector Grip = Weapon.TransformPosition(Pawn.PinMain);
+	const FVector Tip = Weapon.TransformPosition(Pawn.PinTip);
+	const FVector Now = (Tip - Grip).GetSafeNormal();
+	const FVector Goal = (Chest - Grip).GetSafeNormal();
+	if (Now.IsNearlyZero() || Goal.IsNearlyZero())
+	{
+		return Weapon;
+	}
+	const FQuat Turn = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(Now, Goal), MeleePose::EaseInOut(FMath::Clamp(Pawn.ImpaleBlend, 0.0f, 1.0f)));
+	const FTransform Turned = Weapon * (FTransform(-Grip) * FTransform(Turn) * FTransform(Grip));
+	if (Pawn.ImpaleBlend > 0.95f)
+	{
+		++ImpaleFrames;
+		const FVector TipNow = Turned.TransformPosition(Pawn.PinTip);
+		ImpaleMiss = static_cast<float>(FMath::PointDistToSegment(Chest, Grip, TipNow));
+	}
+	return Turned;
+}
+
+FString UWeaponDrawSubsystem::DescribePawn(colony::Entity Pawn) const
+{
+	const FPawnWeapons* Found = Weapons.Find(entt::to_integral(Pawn));
+	return Found ? Found->Debug : FString(TEXT("not drawn"));
 }
 
 float UWeaponDrawSubsystem::GetShieldRaise(colony::Entity Pawn) const

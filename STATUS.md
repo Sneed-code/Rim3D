@@ -2,6 +2,29 @@
 
 Updated 2026-11-28.
 
+Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
+`lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
+can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then
+staggering, not knocked down). **Swings 25% slower**, real recovery, and a press during the wind-up of the current blow
+is too early: it is dropped and that blow doesn't chain, so spamming no longer works. **A blow on a guard adds 0.15 s**
+before that attacker's next attack (both sides). **Shield barrier**: a fighter facing a raised shield keeps 0.8 m off
+and is eased back. **Shield blocks knock** (new `Block_Shield` cue; the ringing was the 1.2 s sword clash). **Lock-on**
+breaks only on distance or lost sight (Elden Ring), locked melee ignores the sprint toggle (hold sprint to run), and
+Auto focus also locks on to a melee enemy within 5 m who locks on to you while you hold a melee weapon. Duel rematch
+waits 10 s. Practice-duel AI never impales the player.
+
+Sword and shield, PC round (sneed, 2026-11-28; sim, data, art steps and Unreal; `docs/design/souls-combat.md` "PC
+round"): checked with the new close looks (smoke `duel -DuelLooks`). **Guard** poses are back (a drafted swordsman
+crouched in cover like a rifleman between blows, which hid the stance and the held sword): with a shield the sword is
+raised at the right side behind its edge, alone it is held across the body, and in the stance it sits beside the shield
+instead of through it (HoldStyles `shieldReady`, `shieldBlock`). **Get-ups** start lying exactly as each fall ends (the
+Game Animation Sample's up-from-the-back and up-from-the-front, turned per side, cut to 3 s; no slide at the end).
+**Jump attacks** no longer pop 70 cm up when the attack's clip takes over the jump. **The impale** goes straight in (its
+lunge stepped sideways and missed), the victim turns to the blade, stands on it doubled over for 0.4 s with the blade held
+in its chest, then staggers back. **Real shield**: the steel medium shield is a CC0 round shield from OpenGameArt (new
+`shield-download` and `shield-real` art steps). Smoke `finishers`: the downed impale passes (point 15 cm from the chest's
+centre); `tab_run` still fails as before (not this change).
+
 Sword and shield refined (sneed, 2026-11-28; sim, data and Unreal; `docs/design/souls-combat.md`): **quick follow-ups**
 (the next blow of a combo starts 0.15 into the recovery, lights a little faster) and **an opening** after a chain ends:
 a third of a second where the attacker can't attack, roll or guard (a press is kept for after; the AI sees it as open).

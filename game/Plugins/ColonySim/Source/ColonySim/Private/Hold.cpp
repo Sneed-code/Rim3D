@@ -53,6 +53,8 @@ void holdPlacesFrom(const Def& def, const std::string& prefix, WeaponHold& out) 
     out.fpReady = holdPlaceAt(def, prefix + "fpReady", out.fpReady);
     out.fpAim = holdPlaceAt(def, prefix + "fpAim", out.fpAim);
     out.fpBlock = holdPlaceAt(def, prefix + "fpBlock", out.fpBlock);
+    out.shieldReady = holdPlaceAt(def, prefix + "shieldReady", out.shieldReady);
+    out.shieldBlock = holdPlaceAt(def, prefix + "shieldBlock", out.shieldBlock);
 }
 
 void holdOffTurnFrom(const Def& def, const std::string& path, WeaponHold& out) {
@@ -153,9 +155,13 @@ bool shieldHoldFor(const DefDatabase& defs, DefId shield, WeaponHold& out) {
     return true;
 }
 
-const HoldPlace* holdPlaceFor(const WeaponHold& hold, bool firstPerson, bool aimed, bool blocking) {
-    const HoldPlace* wants[6] = {};
+const HoldPlace* holdPlaceFor(const WeaponHold& hold, bool firstPerson, bool aimed, bool blocking, bool shield) {
+    const HoldPlace* wants[8] = {};
     int n = 0;
+    if (shield && !firstPerson && !aimed) {
+        if (blocking) wants[n++] = &hold.shieldBlock;
+        else wants[n++] = &hold.shieldReady;
+    }
     if (firstPerson) {
         if (aimed) wants[n++] = &hold.fpAim;
         if (blocking) wants[n++] = &hold.fpBlock;

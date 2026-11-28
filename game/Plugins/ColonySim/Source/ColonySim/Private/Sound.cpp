@@ -194,6 +194,14 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
         if (!slot.empty()) return slot;
         return weaponDef != nullptr && weaponDef->text("race.intelligence") == "Humanlike" ? "Punch" : "Flesh_Bite";
     }
+    // A blow taken on a raised shield (sneed 2026-11-28: "get rid of the ringing noise in the duel"): a short dull knock on
+    // the boards or the plate, not the long ring of two blades meeting.
+    if (m == "blocked") {
+        const Def* struck = soundDef(db, e.struckDef);
+        if (struck != nullptr && struck->has("gear.shield")) {
+            if (std::string knock = soundFirstCue(db, {"Block_Shield"}); !knock.empty()) return knock;
+        }
+    }
     // Struck something else: the parrying weapon, a shield, armour, a wall, or rock.
     std::string surface = soundMaterialOf(db, e.struckStuff);
     if (surface.empty()) surface = soundMaterialOf(db, e.struckDef);

@@ -11,12 +11,14 @@
     "flinchClip": {"back": "Motion_FlinchBack", "forward": "Motion_FlinchForward", "left": "Motion_FlinchLeft", "right": "Motion_FlinchRight"},
     "knockdownClip": {"back": "Motion_KnockdownBack", "forward": "Motion_KnockdownForward", "left": "Motion_KnockdownLeft", "right": "Motion_KnockdownRight"},
     "getUpClip": "Motion_GetUp", "getUpSeconds": 4.2,
-    "getUpTurn": {"back": 180, "forward": 0, "left": -90, "right": 90},
+    "getUpTurn": {"back": 25, "forward": 5, "left": 106, "right": 101},
+    "getUpClips": {"back": "Motion_GetUpBack", "forward": "Motion_GetUpFront", "left": "Motion_GetUpBack", "right": "Motion_GetUpFront"},
     "staggerMetres": 0.5, "staggerSteps": 12,
     "knockdownMetres": 1.0, "knockdownSteps": 20,
     "sidestepMetres": 0.7, "sidestepSteps": 9,
     "blastSteps": 12,
     "ours": ["stepMetres", "bodyRadius", "minBodyRadius", "maxBodyRadius", "heightFollow", "animalScalePerRoot", "staggerMetres", "staggerSteps",
-             "knockdownMetres", "knockdownSteps", "sidestepMetres", "sidestepSteps", "blastSteps", "getUpSeconds", "getUpTurn"]
+             "knockdownMetres", "knockdownSteps", "sidestepMetres", "sidestepSteps", "blastSteps", "getUpSeconds", "getUpTurn", "getUpClips"],
+    "getUpNote": "Each fall gets up from the pose it ends in (PC 2026-11-28, -run=MotionClips POSE lines): the back fall ends on the back, head 158 degrees round from the facing, the Game Animation Sample's up-from-the-back starts head 178 round, so it is turned 25 right; the forward fall and up-from-the-front both lie face down, head ahead (5); the left fall ends on the back, head to the left (up-from-the-back turned 106); the right fall face down, head to the right (up-from-the-front turned 101). The sample's left and right get-ups start on the side, which no fall ends in. The clips are cut at 3 s (standing by 2.75 s)"
   }
 ]

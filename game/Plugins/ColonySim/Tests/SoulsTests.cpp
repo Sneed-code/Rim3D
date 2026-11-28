@@ -215,9 +215,10 @@ TEST_CASE("Souls: presses during a light attack chain the combo, each blow the n
             combos.push_back(sim->things().registry().get<Melee>(hero).combo);
         }
     };
-    for (int s = 0; s < 200 && combos.size() < 3; ++s) {
-        // The button pressed again every few steps, as a player mashing it does: kept until the chain opens.
-        if (s % 5 == 0) {
+    for (int s = 0; s < 300 && combos.size() < 3; ++s) {
+        // Pressed again every few steps once the blow has landed (in the wind-up a press is too early, sneed 2026-11-28):
+        // kept until the chain opens.
+        if (s % 5 == 0 && sim->things().registry().get<Melee>(hero).phase == MeleePhase::Recovery) {
             CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
             note();
         }
@@ -350,7 +351,7 @@ TEST_CASE("Souls: a raised shield takes a blow for half its stamina cost, and br
     CHECK_FALSE(sim->combat().shieldUp(hero));
 }
 
-TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops his swing; knockdowns can't be chained") {
+TEST_CASE("Souls: five light hits break a man's poise into a stagger that stops his swing; knockdowns can't be chained") {
     auto sim = soulsTestSim(8);
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
@@ -360,7 +361,7 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     std::string why;
     int hits = 0;
     bool staggered = false;
-    for (int i = 0; i < 6 && !staggered; ++i) {
+    for (int i = 0; i < 10 && !staggered; ++i) {
         reg.get<Position>(hero).x = 30.5f;
         reg.get<Position>(hero).y = 30.5f;
         reg.get<Position>(foe).x = 31.5f;
@@ -382,13 +383,14 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     }
     MESSAGE(hits << " hits to the stagger");
     CHECK(staggered);
-    CHECK(hits == 3);  // 12 poise a light hit against a man's 30
+    CHECK(hits == 5);  // 2 poise a light hit against a man's 10 (sneed 2026-11-28)
     CHECK(sim->melee().soulsStunned(foe));
     CHECK_FALSE(sim->melee().ready(foe));
     CHECK(sim->melee().poiseShare(foe) == doctest::Approx(1.0f));  // a break refills it
     // A second break soon after the first knocks down; a third right after can't (knockdown immunity). The stagger is
     // cut short first: a light press at a reeling man is a riposte, not a poise blow.
     reg.get<PoiseMeter>(foe).value = 1.0f;
+    reg.get<PoiseMeter>(foe).immuneUntil = 0;  // past its 10 s of no breaks (tested on its own)
     reg.get<Melee>(foe).stunUntil = 0;
     for (int i = 0; i < 40 && !reg.all_of<KnockedDown>(foe); ++i) {
         reg.remove<Stamina>(hero);
@@ -414,6 +416,7 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     reg.get<Posture>(foe).stance = Stance::Standing;
     reg.get<PoiseMeter>(foe).value = 1.0f;
     reg.get<PoiseMeter>(foe).lastBreak = sim->time().steps;
+    reg.get<PoiseMeter>(foe).immuneUntil = 0;
     Melee& fm = reg.get<Melee>(foe);
     fm.stunUntil = 0;
     bool knocked = false;
@@ -442,7 +445,7 @@ TEST_CASE("Souls: three light hits break a man's poise into a stagger that stops
     CHECK_FALSE(knocked);
 }
 
-TEST_CASE("Souls: a light press at a man reeling from a broken guard is a riposte: unblockable, heavy, and it throws him down") {
+TEST_CASE("Souls: a light press at a man reeling from a broken guard is a riposte: unblockable, heavy, then he staggers") {
     auto sim = soulsTestSim(21);
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
@@ -482,7 +485,12 @@ TEST_CASE("Souls: a light press at a man reeling from a broken guard is a ripost
     }
     CHECK(hit);
     MESSAGE("riposte took " << amount);
-    CHECK(reg.all_of<KnockedDown>(foe));  // thrown to the ground
+    // sneed 2026-11-28: held through the impale, then it staggers on its feet (not thrown down), and can't be riposted
+    // again while it reels.
+    CHECK_FALSE(reg.all_of<KnockedDown>(foe));
+    CHECK(sim->melee().soulsStunned(foe));
+    CHECK_FALSE(sim->melee().exposed(foe));
+    CHECK(sim->melee().criticalFor(hero, foe) != SoulsAttack::Riposte);
 }
 
 TEST_CASE("Souls: from behind a turned back, a light press is a backstab that always lands and knocks down") {
@@ -561,6 +569,29 @@ TEST_CASE("Souls: a man knocked down but still in the fight takes a stab on the 
     CHECK(sim->melee().criticalFor(hero, hero) == SoulsAttack::None);
 }
 
+TEST_CASE("Souls: a drafted swordsman waiting for a foe stays on its feet, not crouched in cover like a rifleman") {
+    auto sim = soulsTestSim(5);
+    const Entity a = soulsTestPawn(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity b = soulsTestPawn(*sim, 42.5f, 30.5f, "Melee_Gladius");
+    soulsTestShield(*sim, a);
+    sim->submit(DraftCommand{a, true});
+    sim->submit(SetFactionCommand{b, 2});
+    const entt::registry& reg = sim->things().registry();
+    int waiting = 0;
+    int crouched = 0;
+    for (int s = 0; s < 600; ++s) {
+        sim->step();
+        const Position& pa = reg.get<Position>(a);
+        const Position& pb = reg.get<Position>(b);
+        if (std::hypot(pa.x - pb.x, pa.y - pb.y) > 3.0f) {
+            ++waiting;
+            crouched += reg.get<Posture>(a).stance == Stance::Crouching ? 1 : 0;
+        }
+    }
+    CHECK(waiting > 30);
+    CHECK(crouched == 0);
+}
+
 TEST_CASE("Souls: two sword-and-shield fighters duel it out with combos, heavies and blocks, the same way every run") {
     const auto duel = [](uint64_t seed, int& swings, int& heavies, int& blocks, int& staggers, bool& over) {
         auto sim = soulsTestSim(seed);
@@ -615,9 +646,11 @@ TEST_CASE("Souls: an attack, its combo press and the stamina and poise bars come
     soulsTestFace(*sim, foe, -1.0f, 0.0f);  // face to face (a turned back would be a backstab)
     std::string why;
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
-    sim->step();
+    for (int s = 0; s < 60 && sim->things().registry().get<Melee>(hero).phase != MeleePhase::Recovery; ++s) {
+        sim->step();  // a press is kept once the blow has landed (in the wind-up it is too early)
+    }
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));  // kept for the chain
-    sim->things().registry().emplace_or_replace<PoiseMeter>(foe, PoiseMeter{12.0f, sim->time().steps, -1000000, 0});
+    sim->things().registry().emplace_or_replace<PoiseMeter>(foe, PoiseMeter{6.0f, sim->time().steps, -1000000, 0, sim->time().steps + 40});
     const Melee before = sim->things().registry().get<Melee>(hero);
     CHECK(before.buffered == SoulsAttack::Light);
     SaveLoadResult result = loadSim(saveSim(*sim), soulsTestDefs());
@@ -653,27 +686,52 @@ TEST_CASE("Souls: switched off, a sword swings as before and nothing costs stami
 
 // sneed 2026-11-28: "elden ring combat has fast attacks and quick follow ups ... but there's a slight delay after you
 // stop attacking that gives an opening".
-TEST_CASE("Souls: a follow-up press plays early in the recovery, but a chain that ends leaves an opening") {
+TEST_CASE("Souls: a follow-up press chains after a real recovery, one in the wind-up is too early, and a chain that ends leaves an opening") {
     auto sim = soulsTestSim(31);
     const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
     soulsTestFace(*sim, hero, 1.0f, 0.0f);
     entt::registry& reg = sim->things().registry();
     std::string why;
+    // Pressed again at once, in the wind-up: too early (sneed 2026-11-28, "time attacks right, not spam click"). The
+    // attack doesn't chain, even with more presses after the blow.
     SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
-    // Pressed again at once: kept, and played as soon as the chain opens, early in the recovery.
     CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    CHECK(reg.get<Melee>(hero).mistimed);
+    const uint64_t spam = sim->melee().swings();
+    for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
+        if (s % 3 == 0) {
+            sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why);
+        }
+        sim->step();
+    }
+    CHECK(sim->melee().swings() == spam);  // no second blow out of the mashing
+    soulsTestRunOut(*sim, hero);
+    for (int s = 0; s < 20; ++s) {
+        sim->step();
+    }
+    // Pressed once the blow has landed: kept, and played once the recovery has run chainShare (a real pause).
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    for (int s = 0; s < 120 && reg.get<Melee>(hero).phase != MeleePhase::Recovery; ++s) {
+        sim->step();
+    }
+    SOULS_REQUIRE(reg.get<Melee>(hero).phase == MeleePhase::Recovery);
+    CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    CHECK_FALSE(reg.get<Melee>(hero).mistimed);
     const uint64_t swings = sim->melee().swings();
     int intoRecovery = -1;
+    int recovery = 0;
     for (int s = 0; s < 120 && sim->melee().swings() == swings; ++s) {
-        sim->step();
         const Melee& m = reg.get<Melee>(hero);
         if (m.phase == MeleePhase::Recovery) {
             intoRecovery = m.recoverySteps - m.stepsLeft;
+            recovery = m.recoverySteps;
         }
+        sim->step();
     }
     SOULS_REQUIRE(sim->melee().swings() == swings + 1);
-    const int firstRecovery = static_cast<int>(std::lround(0.2f * 30.0f));  // well before 0.2 s into it
-    CHECK(intoRecovery <= firstRecovery);
+    MESSAGE("chained " << intoRecovery << " steps into a " << recovery << " step recovery");
+    CHECK(intoRecovery >= static_cast<int>(std::lround(static_cast<float>(recovery) * sim->melee().souls().chainShare)) - 1);
+    CHECK(intoRecovery >= 6);  // at least 0.2 s of recovery between the blows
     // Now let the chain end: the opening holds the attacker for openingSteps once the recovery runs out.
     for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
         sim->step();
@@ -730,4 +788,220 @@ TEST_CASE("Souls: the heavy is a grounded overhead and the running heavy a strai
     for (const SoulsAttack kind : {SoulsAttack::Light, SoulsAttack::Heavy, SoulsAttack::Charged}) {
         CHECK(sim->melee().souls().kinds[static_cast<size_t>(kind)].maxWarp <= 0.5f);
     }
+}
+
+// ---- sneed 2026-11-28: tactical sword and shield --------------------------------------------------------------------
+
+TEST_CASE("Souls (tactical): poise 10, a weak hit takes 2 and a strong one 6; broken, it can't break again for 10 s") {
+    auto sim = soulsTestSim(41);
+    const SoulsRules& r = sim->melee().souls();
+    const SoulsMoveset* sword = nullptr;
+    for (const SoulsMoveset& ms : r.movesets) {
+        sword = ms.key == "OneHandSword" ? &ms : sword;
+    }
+    SOULS_REQUIRE(sword != nullptr);
+    CHECK(r.personPoise == doctest::Approx(10.0f));
+    CHECK(sword->weaponPoise * r.kinds[static_cast<size_t>(SoulsAttack::Light)].poise == doctest::Approx(2.0f));
+    CHECK(sword->weaponPoise * r.kinds[static_cast<size_t>(SoulsAttack::Heavy)].poise == doctest::Approx(6.0f));
+    CHECK(sword->weaponPoise * r.kinds[static_cast<size_t>(SoulsAttack::Charged)].poise == doctest::Approx(6.0f));
+    CHECK(r.poiseImmuneSteps == 300);
+    CHECK(sword->speed == doctest::Approx(0.75f));  // swings 25% slower
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity foe = soulsTestPawn(*sim, 31.5f, 30.5f, "Melee_Gladius");
+    entt::registry& reg = sim->things().registry();
+    std::string why;
+    // Strikes until the foe's poise breaks, then as many more: none of them break it again inside the 10 s.
+    int breaks = 0;
+    int afterBreak = 0;
+    int64_t brokeAt = -1;
+    for (int i = 0; i < 14; ++i) {
+        reg.get<Position>(hero).x = 30.5f;
+        reg.get<Position>(hero).y = 30.5f;
+        reg.get<Position>(foe).x = 31.5f;
+        reg.get<Position>(foe).y = 30.5f;
+        soulsTestFace(*sim, hero, 1.0f, 0.0f);
+        soulsTestFace(*sim, foe, -1.0f, 0.0f);
+        soulsTestHeal(*sim, foe);
+        reg.remove<Stamina>(hero);
+        soulsTestRunOut(*sim, hero);
+        reg.get_or_emplace<Melee>(foe).stunUntil = 0;  // a poise blow each time, not a riposte
+        if (!sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why)) {
+            continue;
+        }
+        bool landed = false;
+        for (int s = 0; s < 60 && !landed; ++s) {
+            sim->step();
+            for (const Event& e : sim->events()) {
+                landed = landed || (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit");
+                if (e.type == EventType::PawnStaggered && e.thing == foe) {
+                    ++breaks;
+                    brokeAt = brokeAt < 0 ? sim->time().steps - 1 : brokeAt;  // events are of the step just run
+                }
+            }
+        }
+        afterBreak += landed && brokeAt >= 0 && sim->time().steps - 1 > brokeAt && sim->time().steps - 1 < brokeAt + 300 ? 1 : 0;
+    }
+    CHECK(breaks == 1);
+    CHECK(afterBreak >= 5);  // enough hits inside the 10 s to break it twice over
+    CHECK(reg.get<PoiseMeter>(foe).immuneUntil == brokeAt + 300);
+}
+
+TEST_CASE("Souls (tactical): any hit at a foe whose poise broke is the impale riposte; held through it, then it staggers") {
+    auto sim = soulsTestSim(42);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.6f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    // Poise broken a moment ago: reeling for postureBreakSteps.
+    Melee& fm = reg.get_or_emplace<Melee>(foe);
+    fm.stunUntil = sim->time().steps + sim->melee().souls().postureBreakSteps;
+    fm.guardStun = false;
+    CHECK(sim->melee().souls().postureBreakSteps >= 45);  // long enough to see it and strike
+    SoulsPress heavy;
+    heavy.heavy = true;
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, heavy, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Riposte);  // a heavy press too (sneed: "an open hit")
+    CHECK(sim->melee().ripostes() == 1);
+    // Fast: the impale lands sooner than a light blow would.
+    const int windup = reg.get<Melee>(hero).windupSteps;
+    MESSAGE("impale wind-up " << windup << " steps");
+    bool hit = false;
+    bool heldThrough = true;
+    for (int s = 0; s < 90 && !hit; ++s) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            hit = hit || (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit");
+        }
+        heldThrough = heldThrough && (hit || sim->melee().soulsStunned(foe));
+    }
+    CHECK(hit);
+    CHECK(heldThrough);
+    CHECK_FALSE(reg.all_of<KnockedDown>(foe));
+    CHECK(sim->melee().soulsStunned(foe));
+    CHECK(sim->melee().criticalFor(hero, foe) != SoulsAttack::Riposte);
+}
+
+TEST_CASE("Souls (tactical): the impale turns the victim to meet it, holds it stunned on the blade, then it staggers back") {
+    auto sim = soulsTestSim(42);  // a seed whose impale leaves the victim on its feet (it can kill or down outright)
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.6f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, foe, 0.0f, 1.0f);  // side on, as a stagger can leave it
+    entt::registry& reg = sim->things().registry();
+    Melee& fm = reg.get_or_emplace<Melee>(foe);
+    fm.stunUntil = sim->time().steps + sim->melee().souls().postureBreakSteps;
+    fm.guardStun = false;
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));
+    CHECK(sim->melee().attackKind(hero) == SoulsAttack::Riposte);
+    CHECK(reg.get<Posture>(foe).facingX < -0.9f);  // turned to face the blade
+    int hitAt = -1;
+    int staggerAt = -1;
+    int thrustHeld = 0;
+    for (int s = 0; s < 120 && staggerAt < 0; ++s) {
+        sim->step();
+        if (const BodyMotion* thrust = reg.try_get<BodyMotion>(hero); hitAt >= 0 && thrust != nullptr && thrust->clip.valid() && thrust->rate == 0.0f) {
+            ++thrustHeld;  // the blade stays in while it stands on it
+        }
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == hero && e.message == "hit" && hitAt < 0) {
+                hitAt = s;
+            }
+            if (e.type == EventType::PawnStaggered && e.thing == foe && staggerAt < 0) {
+                staggerAt = s;
+            }
+        }
+    }
+    MESSAGE("hit " << hitAt << " stagger " << staggerAt << " impale at " << reg.get<Melee>(foe).impaleStaggerAt << " now " << sim->time().steps
+            << " downed " << sim->health().incapacitated(foe));
+    SOULS_REQUIRE(hitAt >= 0);
+    SOULS_REQUIRE(staggerAt >= 0);
+    // On the blade impaleHoldSteps, then off it and reeling (stunned all the while).
+    CHECK(staggerAt - hitAt == sim->melee().souls().impaleHoldSteps);
+    CHECK(thrustHeld >= sim->melee().souls().impaleHoldSteps - 1);
+    const BodyMotion* drawn = reg.try_get<BodyMotion>(hero);
+    CHECK((drawn == nullptr || !drawn->clip.valid() || drawn->rate > 0.0f));  // and drawn back out
+    CHECK(sim->melee().soulsStunned(foe));
+    CHECK_FALSE(reg.all_of<KnockedDown>(foe));
+}
+
+TEST_CASE("Souls (tactical): a blow on a guard puts both sides' next attack back 0.15 s") {
+    auto sim = soulsTestSim(43);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestShield(*sim, hero);
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.6f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    CHECK(sim->melee().souls().blockedDelaySteps == 5);
+    sim->submit(ShieldCommand{hero, true, true, 1.0f, 0.0f});
+    sim->step();
+    SOULS_REQUIRE(sim->combat().shieldUp(hero));
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(foe, hero, false, SoulsPress{}, &why));
+    bool blocked = false;
+    for (int s = 0; s < 60 && !blocked; ++s) {
+        sim->submit(ShieldCommand{hero, true, true, 1.0f, 0.0f});
+        sim->step();
+        for (const Event& e : sim->events()) {
+            blocked = blocked || (e.type == EventType::MeleeHit && e.thing == foe && e.message == "blocked");
+        }
+    }
+    SOULS_REQUIRE(blocked);
+    const int64_t now = sim->time().steps - 1;  // the step the blow landed
+    const Melee& am = reg.get<Melee>(foe);
+    const int chainAt = static_cast<int>(std::lround(static_cast<float>(am.recoverySteps) * sim->melee().souls().chainShare));
+    CHECK(am.attackAfter == now + chainAt + 5);
+    CHECK(reg.get<Melee>(hero).attackAfter == now + sim->melee().souls().blockStunSteps + 5);
+    // The blocker lowers its guard and swings back the moment its block stun is over: it waits 5 steps more.
+    sim->submit(ShieldCommand{hero, false, true, 1.0f, 0.0f});
+    for (int s = 0; s < sim->melee().souls().blockStunSteps; ++s) {
+        sim->step();
+    }
+    const uint64_t before = sim->melee().swings();
+    CHECK(sim->melee().soulsAttack(hero, foe, true, SoulsPress{}, &why));  // kept
+    int waited = 0;
+    while (sim->melee().swings() == before && waited < 30) {
+        sim->step();
+        ++waited;
+    }
+    CHECK(sim->melee().swings() == before + 1);
+    CHECK(waited >= 3);
+}
+
+TEST_CASE("Souls (tactical): a raised shield keeps a body 0.8 m off, eased apart, never through a wall") {
+    auto sim = soulsTestSim(44);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestShield(*sim, hero);
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    const Entity foe = soulsTestPawn(*sim, 31.0f, 30.5f, "Melee_Gladius");  // half a metre: inside the shield
+    soulsTestFace(*sim, foe, -1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    sim->submit(ShieldCommand{hero, true, true, 1.0f, 0.0f});
+    float lastGap = 0.5f;
+    float worstJump = 0.0f;
+    for (int s = 0; s < 40; ++s) {
+        sim->submit(ShieldCommand{hero, true, true, 1.0f, 0.0f});
+        sim->step();
+        const Position& a = reg.get<Position>(hero);
+        const Position& b = reg.get<Position>(foe);
+        const float gap = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+        worstJump = std::max(worstJump, gap - lastGap);
+        lastGap = gap;
+    }
+    SOULS_REQUIRE(sim->combat().shieldUp(hero));
+    MESSAGE("gap " << lastGap << " m, biggest widening in a step " << worstJump << " m");
+    CHECK(lastGap >= sim->melee().souls().shieldRoom - 0.02f);
+    CHECK(worstJump <= 2.0f * sim->melee().souls().shieldPushPerStep + 0.05f);  // plus the walkers' own step apart
+    CHECK(sim->melee().shieldPushes() > 0);
+    // Behind the shield bearer nothing is pushed.
+    const Entity friendBehind = soulsTestPawn(*sim, reg.get<Position>(hero).x - 0.55f, 30.5f, nullptr);
+    const float bx = reg.get<Position>(friendBehind).x;
+    for (int s = 0; s < 10; ++s) {
+        sim->submit(ShieldCommand{hero, true, true, 1.0f, 0.0f});
+        sim->step();
+    }
+    CHECK(std::fabs(reg.get<Position>(friendBehind).x - bx) < 0.2f);
 }

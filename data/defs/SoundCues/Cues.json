@@ -23,6 +23,7 @@
   {"defName": "Swing_Blunt", "label": "club swing", "loop": false, "volume": 0.4, "range": 12, "priority": 2, "near": 1, "tone": {"wave": "noise", "hz": 250, "seconds": 0.12}},
   {"defName": "Swing_Spear", "label": "spear thrust", "loop": false, "volume": 0.4, "range": 12, "priority": 2, "near": 1, "tone": {"wave": "noise", "hz": 500, "seconds": 0.12}},
   {"defName": "Melee_Clang", "label": "blow deflected", "loop": false, "volume": 0.6, "range": 150, "priority": 1, "near": 2, "tone": {"wave": "square", "hz": 1500, "seconds": 0.1}},
+  {"defName": "Block_Shield", "label": "blow on a raised shield", "loop": false, "volume": 0.7, "range": 90, "priority": 1, "near": 3, "tone": {"wave": "noise", "hz": 400, "seconds": 0.08}},
   {"defName": "Melee_Block", "label": "blow blocked", "loop": false, "volume": 0.5, "range": 100, "priority": 1, "near": 2, "tone": {"wave": "square", "hz": 1100, "seconds": 0.08}},
   {"defName": "Hit_Wood_Flesh", "label": "wooden club on flesh", "loop": false, "volume": 1.0, "range": 70, "near": 5, "priority": 0, "tone": {"wave": "sine", "hz": 110, "seconds": 0.1}},
   {"defName": "Hit_Wood_Wood", "label": "wood on wood", "loop": false, "volume": 0.65, "range": 90, "near": 2, "priority": 1, "tone": {"wave": "noise", "hz": 500, "seconds": 0.08}},

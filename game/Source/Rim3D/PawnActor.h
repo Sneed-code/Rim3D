@@ -72,6 +72,9 @@ public:
 	/** How high the body is off the ground now, cm. A cat-strain jumps twice as high (and longer, as a thrown body would). */
 	float GetJumpHeight() const;
 	int32 GetJumpsPlayed() const { return JumpsPlayed; }
+	/** Jump attacks whose clip took the jump's height over (JumpFitsClip), and what the last one did (smoke tests). */
+	int32 GetJumpsFitted() const { return JumpsFitted; }
+	const FString& GetLastJumpFit() const { return LastJumpFit; }
 	/** How fast the pawn moves over the ground now (the sim's, blended), cm per second at 1x. */
 	float GetGroundSpeed() const { return GroundSpeed; }
 	static constexpr float kJumpHeight = 45.0f;
@@ -540,6 +543,16 @@ private:
 	/** The height (cm) a cancelled jump was at, eased to nought; and how far into that ease it is (game seconds). */
 	float JumpCancelHeight = 0.0f;
 	float JumpCancelAge = 0.0f;
+	/** How long the cancelled jump's height takes to ease out: kJumpCancelSeconds, or a jump attack's clip until its feet
+	 *  land (the height then fitted so the hips go on from where the jump had them, JumpFitsClip). */
+	float JumpCancelSeconds = kJumpCancelSeconds;
+	bool bJumpEasedToLanding = false;
+	/** A jump attack cut the jump short a moment ago: the next whole-body clip fits its height to it. */
+	bool bJumpAttackPending = false;
+	int32 JumpsFitted = 0;
+	FString LastJumpFit;
+	/** A jump attack's whole-body clip starts at `From` (seconds, played at `Rate`): the jump's height is fitted to it. */
+	void JumpFitsClip(const UAnimSequence& Clip, float From, float Rate);
 	int32 JumpsPlayed = 0;
 	float GroundSpeed = 0.0f;
 	// A clip the sim is moving the body along (docs/design/body-motion.md): the def playing, the montage, and how far

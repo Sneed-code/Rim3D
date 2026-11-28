@@ -96,6 +96,11 @@ public:
 	UStaticMeshComponent* GetShieldComponent(colony::Entity Pawn) const;
 	/** 0 shield lowered to 1 raised, as drawn now. */
 	float GetShieldRaise(colony::Entity Pawn) const;
+	/** Tests: how the weapon and stance were drawn on this pawn last frame (pinned, why not, the stance clip and weights). */
+	FString DescribePawn(colony::Entity Pawn) const;
+	/** Tests: frames an impale's blade was turned fully through a chest, and how far its line passed from the chest's centre (cm). */
+	int32 GetImpaleFrames() const { return ImpaleFrames; }
+	float GetImpaleMiss() const { return ImpaleMiss; }
 	/** Weapons drawn in the hands of pawns now. */
 	int32 CountWeaponsInHands() const;
 	/** How fast a shown spinning gun part (the minigun's barrels) turns, 0 to 1 of its top speed (the motor loop's pitch). */
@@ -183,6 +188,8 @@ private:
 		uint64 ShieldKey = 0;
 		float ShieldRaise = 0.0f;
 		float ShieldSlung = 0.0f;
+		/** What the drawing did with this pawn's weapon last frame (smoke tests, DescribePawn). */
+		FString Debug;
 		/** 0 holstered to 1 drawn (ready), the other hand's grip on a two-handed weapon (0 to 1), and whether this
 		 *  drawing set that grip (so it lets it go once, and leaves other users of the hand IK alone). */
 		float Ready = 0.0f;
@@ -215,6 +222,12 @@ private:
 		bool bFloatLogged = false;
 		/** The finisher's share of the weapon's pose (0 to 1). */
 		float FinisherBlend = 0.0f;
+		/** The impale (a riposte, sneed 2026-11-28): how far the blade is turned to run through the victim's chest (0 to 1),
+		 *  and the grip and point in the weapon's frame (cm) from the last placing. */
+		float ImpaleBlend = 0.0f;
+		colony::Entity ImpaleTarget = colony::kNoEntity;  // the snapshot names the target only through the wind-up
+		FVector PinMain = FVector::ZeroVector;
+		FVector PinTip = FVector::ZeroVector;
 		/** How far the finisher's weapon had to come back to stay in reach (cm), and the extra forward bend that answers it (degrees). */
 		float FinisherShort = 0.0f;
 		float FinisherReachBend = 0.0f;
@@ -241,6 +254,11 @@ private:
 	const TCHAR* PinFailReason = TEXT("");
 	/** The finisher's weapon pose now (docs/design/lock-on.md "Finishers"): drawn, and the one the hands close on (they
 	 *  differ for a reverse grip: the blade comes out under the fist), and how much of it shows. False if none. */
+	/** Through an impale: the weapon in the hand turned about its grip so the blade runs through the victim's chest. */
+	FTransform ImpaleAim(const colony::ThingView& View, FPawnWeapons& Pawn, const FTransform& Weapon);
+	/** Impales drawn into a chest (frames), and how far the last one's blade line passed from the chest's centre (cm). */
+	int32 ImpaleFrames = 0;
+	float ImpaleMiss = -1.0f;
 	bool FinisherPose(const ASimPawnActor& Actor, const colony::ThingView& View, const HoldDraw::FPoints& Points, float Size, FTransform& OutDrawn,
 					  FTransform& OutPinned, float& OutWeight);
 

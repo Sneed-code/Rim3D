@@ -341,4 +341,14 @@ TEST_CASE("Weapon hold: every held weapon has a place on the body, and the hands
     CHECK(holdPlaceFor(sword, false, false, true) == &sword.block);
     CHECK(holdPlaceFor(sword, true, false, true) == &sword.fpBlock);
     CHECK(holdPlaceFor(sword, false, false, false) == &sword.ready);
+    // With a shield on the arm (sneed 2026-11-28): the one-handed blade's own shield places, beside the shield and held up
+    // behind its edge in a guard; a style without them keeps its own; first person keeps its own.
+    const WeaponHold gladius = holdTestOf(*defs, "Melee_Gladius");
+    CHECK(gladius.shieldBlock.set);
+    CHECK(gladius.shieldReady.set);
+    CHECK(holdPlaceFor(gladius, false, false, true, true) == &gladius.shieldBlock);
+    CHECK(holdPlaceFor(gladius, false, false, false, true) == &gladius.shieldReady);
+    CHECK(holdPlaceFor(gladius, false, false, true, false) == &gladius.block);
+    CHECK(holdPlaceFor(gladius, true, false, true, true) == &gladius.fpBlock);
+    CHECK(holdPlaceFor(sword, false, false, true, true) == &sword.block);
 }

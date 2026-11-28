@@ -1297,12 +1297,20 @@ void UProtagonistSubsystem::UpdateFocus(APlayerController& PC, USimSubsystem& Br
 		}
 	}
 	UpdateFlick(PC, Bridge, Focus);
-	UpdateTurnAway(Bridge);
+	// sneed 2026-11-28: the lock no longer lets go when you turn and move away (UpdateTurnAway is no longer called); like
+	// Elden Ring it holds until the enemy is far off (MeleeRules focusBreakRange, 25 m) or out of sight a while (the sim's
+	// own checks), or you let go.
+	TurnAwaySeconds = 0.0f;
 	UpdateAutoFocus(PC, Bridge, Focus);
 }
 
 // sneed 2026-11-27: an enemy who swings at you in melee while you are locked on to nobody and face them gets locked on
 // to by itself (Settings > Controls turns it off). Facing: within ProtagonistAutoFocusCos of the camera's look.
+namespace
+{
+	constexpr float ProtagonistAutoFocusNearMetres = 5.0f;  // a melee enemy locked on to you this near (ours)
+}
+
 void UProtagonistSubsystem::UpdateAutoFocus(APlayerController& PC, USimSubsystem& Bridge, colony::Entity Focus)
 {
 	if (Focus != colony::kNoEntity || !Rim3DKeys::IsAutoFocusAttackerEnabled() || Controlled == colony::kNoEntity)
@@ -1319,8 +1327,34 @@ void UProtagonistSubsystem::UpdateAutoFocus(APlayerController& PC, USimSubsystem
 	const FVector2D Look(FMath::Cos(Yaw), FMath::Sin(Yaw));
 	colony::Entity Best = colony::kNoEntity;
 	float BestDistance = 6.0f;  // metres: a swing from further is a leap that hasn't reached you yet
+	// sneed 2026-11-28 ("for now"): with a melee weapon in hand, a melee enemy near you who is locked on to you gets locked
+	// on to as well, whichever way you face.
+	const colony::Sim* AutoSim = Bridge.GetSim();
+	const auto MeleeHand = [AutoSim](const colony::ThingView& V) { return !V.weapon.valid() || !AutoSim || !AutoSim->combat().isGun(V.weapon); };
+	if (Me->weapon.valid() && MeleeHand(*Me))
+	{
+		float Nearest = ProtagonistAutoFocusNearMetres;
+		for (const colony::ThingView& View : Snapshot.things)
+		{
+			if (View.category != colony::ThingCategory::Pawn || View.dead || View.downed || View.id == Controlled || View.focusTarget != Controlled ||
+				!MeleeHand(View) || View.level != Me->level)
+			{
+				continue;
+			}
+			const float Distance = FVector2D(View.x - Me->x, View.y - Me->y).Size();
+			if (Distance < Nearest)
+			{
+				Nearest = Distance;
+				Best = View.id;
+			}
+		}
+	}
 	for (const colony::ThingView& View : Snapshot.things)
 	{
+		if (Best != colony::kNoEntity)
+		{
+			break;
+		}
 		if (View.category != colony::ThingCategory::Pawn || View.dead || View.downed || View.id == Controlled ||
 			View.meleeTarget != Controlled || View.meleePhase != colony::MeleePhase::Windup)
 		{
