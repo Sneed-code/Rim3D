@@ -38,6 +38,7 @@
 #include "ProtagonistPawn.h"
 #include "ProtagonistSubsystem.h"
 #include "SimSubsystem.h"
+#include "StrandHair.h"
 
 #include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
@@ -895,8 +896,7 @@ void ASimPawnActor::ApplyLooks(USimPawnSubsystem& Pawns, const FSimPawnLooks& In
 		ApplyFace(Pawns);
 	}
 	// Strand hair, eyebrows and beards: the MetaHuman hair material is coloured by melanin and redness.
-	const float Lightness = Looks.Hair.GetLuminance();
-	const float Melanin = FMath::Clamp(1.0f - FMath::Sqrt(Lightness) * 1.6f, 0.0f, 1.0f);
+	const float Melanin = StrandHairMelanin(Looks.Hair.GetLuminance());
 	const float Redness = FMath::Clamp((Looks.Hair.R - Looks.Hair.B) / FMath::Max(Looks.Hair.R, 0.01f), 0.0f, 1.0f) * 0.8f;
 	for (USceneComponent* Groom : Grooms)
 	{

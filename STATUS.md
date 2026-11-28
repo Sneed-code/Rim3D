@@ -2,6 +2,21 @@
 
 Updated 2026-11-28.
 
+Scalp, hair colours and lashes (sneed, 2026-11-28; art steps and Unreal; `docs/design/hair-physics.md` "The scalp
+follows the hair"): **no scalp through the hair on any head shape.** Some sliders (the brow ridge most, with the ethnic
+base shapes) bulged the back of the crown in a way the hair's per-axis fit can't follow: a Melanesian preset showed skin
+10 mm out at the crown while the hair floated 9 mm off elsewhere. New `tools/makehuman/scalp_follow.py` (run by
+`mh_creator.py`) makes every morph change the hair-covered scalp exactly as the game moves the hair (scale per axis and
+move), blended back to the morph's own change below the hairline and off the ears; measured in the cloud on both bases,
+13 slider mixes: skin out at most 1.1 mm (the hair lies 1.2 mm off), hair float about 1 mm. **Long hair through the
+shoulders:** the body sliders moved the skin 1.5 to 7 cm past the hair's collision shapes (broad shoulders, heavy,
+masculine, ethnic shapes); `grow_hair.py` now writes `collision_morphs` and the game moves and grows each shape with the
+person's sliders (cloud: 95% of that skin back inside the barrier). **Blond hair** no longer renders platinum white
+(new melanin curve, `StrandHairMelanin`). **Eyelashes** are tinted: near black with a hint of the hair colour, the hair's
+own colour only on the Drow (they were never tinted: pale for everyone). **Backing out of a new colony** before landing
+returns to the real title screen (was the title menu over that colony's bare map). Needs the `creator-bodies`, `hair-grow`
+and following art steps (update-and-play runs them).
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then
