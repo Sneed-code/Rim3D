@@ -83,8 +83,9 @@ from behind a backstab; 2.5 to 4 times a normal blow, ripostes about 25% above b
   is the hack (the low slash clip). It names its impale in `lethal` (`OneHandImpale`): when the impale's blow (its stab,
   the weapon's quality, skill and traits, times its `damage` 2.0) would take what is left of the torso to 0
   (`MeleeSystem::impaleKills`), the impale plays instead: 0.95 s to the blow against the hack's 0.8, always in the torso,
-  and it kills (armour can't save the body: it was chosen because it kills). Its body plays the low stab clip while
-  Unreal drives the blade point down along the Sword path into `spine_03` (the chest's centre) with the hand on it
+  and it kills (armour can't save the body: it was chosen because it kills). Its body plays the overhead downward chop
+  (`Motion_SS_HeavyDown`, standOff 0.7 m: raised high, bent over the body at the blow; the low stab clip stood upright at
+  arm's length and the point stopped 25 cm short, PC round 1) while Unreal drives the blade point down along the Sword path into `spine_03` (the chest's centre) with the hand on it
   (`drawWeapon`); the path's blow is laid on the clip's. A corpse gets the hack. Smoke `finishers` has an impale phase
   (the point within 15 cm of the chest, the victim dead).
 - The AI gets them the same way (its light press at an open or turned foe).

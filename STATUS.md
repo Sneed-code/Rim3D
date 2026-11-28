@@ -11,7 +11,9 @@ heavy and the AI's leap are the whole sword-and-shield leap from standing (strai
 mid-air slam, and the carry-in to the target is at most 0.5 m, spread over the wind-up. **Downed enemies**: a hack
 that injures, or, when the blow will kill, a slightly slower **impale** with the blade driven point first into the
 chest's centre (always the torso, always kills). Two clips measured in Blender from the FBX (`Motion_SS_HeavyDown`,
-`Motion_SS_Leap`, animations already in the game). Smoke `finishers` has an impale phase.
+`Motion_SS_Leap`, animations already in the game). Smoke `finishers` has an impale phase (PC round 1: the stab clip stood too far off and missed the chest by
+25 cm, so the impale now uses the overhead downward chop from closer in; Tab-run slowing to 3 m/s in that smoke is in
+code this change doesn't touch).
 
 No AI-made animals (sneed, 2026-11-27, standing rule: never make living things with Neon or Codex; data, art steps and
 Unreal): the 21 Neon creatures from batches 7 to 9 and the two chitinids are gone (art table entries, `codex_art.json`

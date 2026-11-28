@@ -29,6 +29,7 @@
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
 
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
