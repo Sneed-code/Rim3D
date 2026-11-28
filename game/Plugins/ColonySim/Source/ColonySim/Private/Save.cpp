@@ -2811,6 +2811,9 @@ void saveMeleePart(Ar& ar, Melee& m) {
         ar.value("guardStun", m.guardStun);
         ar.value("rollEndsAt", m.rollEndsAt);
     }
+    if (ar.sectionVersion() >= 9) {  // the opening after a chain (sneed 2026-11-28)
+        ar.value("openUntil", m.openUntil);
+    }
 }
 
 template <typename Ar>
@@ -3861,7 +3864,7 @@ void saveSections(Ar& ar, SaveData& d) {
             ar.require(c.days >= 0.0f && c.days <= 1000.0f, "the save file has an impossible corpse rot");
         });
     });
-    ar.section("melee", 8, [&] {
+    ar.section("melee", 9, [&] {
         saveParts(ar, "melee", e, &SaveEntity::melee, [&](Melee& m) { saveMeleePart(ar, m); });
         if (ar.sectionVersion() >= 8) {  // Elden Ring style stamina and poise (souls-combat.md)
             saveParts(ar, "stamina", e, &SaveEntity::stamina, [&](Stamina& st) {

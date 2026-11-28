@@ -209,6 +209,10 @@ void meleeReadRules(const DefDatabase& defs, MeleeRules& r) {
         f.standOff = std::max(0.2f, static_cast<float>(def->number((base + "standOff").c_str(), f.standOff)));
         f.kneel = def->flag((base + "kneel").c_str(), f.kneel);
         f.bend = static_cast<float>(def->number((base + "bend").c_str(), f.bend));
+        f.lethal = def->text((base + "lethal").c_str(), f.lethal);
+        f.impale = def->flag((base + "impale").c_str(), f.impale);
+        f.drawWeapon = def->flag((base + "drawWeapon").c_str(), f.drawWeapon);
+        f.damage = std::max(0.0f, static_cast<float>(def->number((base + "damage").c_str(), f.damage)));
         r.finishers.push_back(std::move(f));
     }
     num("finisherStepMetres", r.finisherStepMetres);
@@ -395,6 +399,15 @@ MeleeSystem::MeleeSystem(Things& things, Map& map, CombatSystem& combat, HealthS
                     set.finisher = static_cast<int>(i) + 1;
                 } else if (set.finisher == 0 && rules_.finishers[i].key == style) {
                     set.finisher = static_cast<int>(i) + 1;
+                }
+            }
+            // Its impale, for the blow that kills (sneed 2026-11-28).
+            if (set.finisher > 0 && !rules_.finishers[static_cast<size_t>(set.finisher - 1)].lethal.empty()) {
+                const std::string& lethal = rules_.finishers[static_cast<size_t>(set.finisher - 1)].lethal;
+                for (size_t i = 0; i < rules_.finishers.size(); ++i) {
+                    if (rules_.finishers[i].key == lethal) {
+                        set.finisherLethal = static_cast<int>(i) + 1;
+                    }
                 }
             }
         }
@@ -656,6 +669,56 @@ float MeleeSystem::finisherClipHit(int finisher) const {
     return f.clipHitSeconds > 0.0f ? std::clamp(f.clipHitSeconds, 0.05f, c->seconds - 0.05f) : c->hitSeconds;
 }
 
+bool MeleeSystem::finisherDrawsWeapon(int finisher) const {
+    if (finisher <= 0 || static_cast<size_t>(finisher) > rules_.finishers.size()) {
+        return false;
+    }
+    return rules_.finishers[static_cast<size_t>(finisher - 1)].drawWeapon || !finisherPlaysClip(finisher);
+}
+
+bool MeleeSystem::inOpening(Entity pawn) const {
+    const entt::registry& reg = things_.registry();
+    const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
+    return souls_.enabled && m != nullptr && now() < m->openUntil;
+}
+
+// The impale's blow (sneed 2026-11-28): its stab (else its hardest-hitting tool), with the weapon's quality, the
+// attacker's skill and traits and the impale's own `damage`, against what is left of the downed body's torso.
+bool MeleeSystem::impaleKills(Entity pawn, Entity target) const {
+    const entt::registry& reg = things_.registry();
+    bool weapon = false;
+    const ToolSet* set = reg.valid(pawn) ? toolsOf(pawn, weapon) : nullptr;
+    if (set == nullptr || !weapon || set->finisherLethal <= 0 || set->tools.empty() || !reg.valid(target) || !health_.tracks(target) ||
+        reg.get<Health>(target).dead || !health_.incapacitated(target)) {
+        return false;
+    }
+    const int part = combat_.hitboxPart(target, "torso");
+    const int zone = part >= 0 ? health_.partZone(target, part) : -1;
+    if (zone < 0) {
+        return false;
+    }
+    const Tool& tool = set->tools[impaleTool(*set)];
+    const Gear* held = reg.try_get<Gear>(pawn);
+    const float blow = (held != nullptr ? combat_.meleeDamageFactor(held->weapon, tool.damageType) : 1.0f) * swingDamage(pawn) *
+                       combat_.traitMeleeDamage(pawn) * rules_.finishers[static_cast<size_t>(set->finisherLethal - 1)].damage;
+    const float left = health_.zoneHealth(target, zone) * health_.partZoneHp(target, part);
+    return tool.power * blow >= left;
+}
+
+uint8_t MeleeSystem::impaleTool(const ToolSet& set) const {
+    uint8_t best = 0;
+    float score = -1.0f;
+    for (size_t i = 0; i < set.tools.size(); ++i) {
+        const bool stab = set.tools[i].damageType.valid() && set.tools[i].damageType == defs_.idOf("DamageTypes", "Stab");
+        const float s = set.tools[i].power + (stab ? 1000.0f : 0.0f);
+        if (s > score) {
+            score = s;
+            best = static_cast<uint8_t>(i);
+        }
+    }
+    return best;
+}
+
 const MeleeFinisher* MeleeSystem::finisherOf(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const Melee* m = reg.valid(pawn) ? reg.try_get<Melee>(pawn) : nullptr;
@@ -833,16 +896,22 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     m.finisherSteps = 0;
     // A finisher with a whole-body clip (sneed 2026-11-22) plays it where the attacker stands, so only close enough to
     // the body; further off (or with no clips for this body) the weapon's low blow below.
-    const MeleeFinisher* finisherRule = m.low && lowBody != kNoEntity && weapon && set->finisher > 0 && static_cast<size_t>(set->finisher) <= rules_.finishers.size()
-                                            ? &rules_.finishers[static_cast<size_t>(set->finisher - 1)]
+    // The blow that will kill a downed body is the weapon's impale, when it has one (sneed 2026-11-28): through the chest.
+    int finisherIndex = set->finisher;
+    if (m.low && target != kNoEntity && weapon && set->finisherLethal > 0 && impaleKills(pawn, target)) {
+        finisherIndex = set->finisherLethal;
+        m.tool = impaleTool(*set);
+    }
+    const MeleeFinisher* finisherRule = m.low && lowBody != kNoEntity && weapon && finisherIndex > 0 && static_cast<size_t>(finisherIndex) <= rules_.finishers.size()
+                                            ? &rules_.finishers[static_cast<size_t>(finisherIndex - 1)]
                                             : nullptr;
     const MotionClip* finisherClip = nullptr;
     float clipBlowAt = 0.0f;  // when in the clip its blow lands
     float finisherShift = 0.0f;  // metres it moves in (out, if negative) over the clip to be at standOff at the blow
-    if (finisherRule != nullptr && finisherPlaysClip(set->finisher) && combat_.motion().hasClips(pawn)) {
+    if (finisherRule != nullptr && finisherPlaysClip(finisherIndex) && combat_.motion().hasClips(pawn)) {
         // (A clip not measured yet leaves the old drawn finisher.)
         finisherClip = combat_.motion().clip(finisherRule->clip);
-        clipBlowAt = finisherClipHit(set->finisher);
+        clipBlowAt = finisherClipHit(finisherIndex);
         const Position& a = reg.get<Position>(pawn);
         const Position& b = reg.get<Position>(lowBody);
         const float d = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
@@ -860,7 +929,7 @@ bool MeleeSystem::attack(Entity pawn, Entity target, bool player, std::string* w
     }
     if (finisherRule != nullptr) {
         const MeleeFinisher& f = *finisherRule;
-        m.finisher = static_cast<uint8_t>(set->finisher);
+        m.finisher = static_cast<uint8_t>(finisherIndex);
         m.finisherFrom = now();
         m.finisherSteps = std::max(2, static_cast<int>(std::lround(f.seconds * 30.0f * rules_.attackTimeFactor * rules_.lowTimeFactor)));
         windup = std::clamp(static_cast<int>(std::lround(f.hitSeconds * 30.0f * rules_.attackTimeFactor * rules_.lowTimeFactor)), 1, m.finisherSteps - 1);
@@ -1497,6 +1566,13 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
     if (m.kind != SoulsAttack::None) {
         blow *= souls_.kinds[static_cast<size_t>(m.kind)].damage;  // a heavy, charged or jumping blow (souls-combat.md)
     }
+    // An impale (sneed 2026-11-28) is the blow that kills: through the chest, its own share of the weapon's blow.
+    const MeleeFinisher* impale = m.finisher != 0 && m.finisher <= rules_.finishers.size() && rules_.finishers[m.finisher - 1].impale
+                                      ? &rules_.finishers[m.finisher - 1]
+                                      : nullptr;
+    if (impale != nullptr) {
+        blow *= impale->damage;
+    }
     const float power = tool->power * blow;
     const float penetration = tool->penetration * blow;
     const Position& pos = reg.get<Position>(pawn);
@@ -1592,6 +1668,19 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             hit.x = t.x;
             hit.y = t.y;
             hit.z = oz;
+        }
+    }
+
+    // An impale always meets the body it was struck at, in the torso (the blade through the chest centre).
+    if (impale != nullptr && m.target != kNoEntity && reg.valid(m.target) && things_.spawned(m.target) && reg.all_of<Position>(m.target)) {
+        const Position& t = reg.get<Position>(m.target);
+        if (t.level == pos.level) {
+            hit.kind = ProjectileHitKind::Pawn;
+            hit.thing = m.target;
+            hit.part = combat_.hitboxPart(m.target, "torso");
+            hit.x = t.x;
+            hit.y = t.y;
+            hit.z = map_.heightAt(t.x, t.y) + 0.15f;
         }
     }
 
@@ -1710,6 +1799,18 @@ void MeleeSystem::strike(Entity pawn, Melee& m) {
             if (!result.deflected) {
                 health_.applyHit(victim, result.damageType, result.amount, result.part);
             }
+            // The impale was chosen because it kills: armour or a lucky organ doesn't leave the body breathing.
+            if (impale != nullptr && !corpse && health_.tracks(victim) && !reg.get<Health>(victim).dead) {
+                if (result.deflected) {
+                    health_.applyHit(victim, tool->damageType, power, hit.part);
+                }
+                if (!reg.get<Health>(victim).dead) {
+                    health_.kill(victim, DeathCause::VitalPartLost);
+                }
+                ++impales_;
+            } else if (impale != nullptr) {
+                ++impales_;
+            }
             combat_.wearApparel(victim, result);
             if (!result.deflected && !corpse) {
                 if (souls_.enabled) {
@@ -1780,6 +1881,10 @@ void MeleeSystem::step() {
                     m.phase = MeleePhase::Ready;
                     m.stepsLeft = 0;
                     m.endedAt = now();
+                    // The chain ended with no next blow: the opening (sneed 2026-11-28).
+                    if (souls_.enabled && m.kind != SoulsAttack::None && m.finisher == 0 && now() >= m.stunUntil) {
+                        m.openUntil = now() + souls_.openingSteps;
+                    }
                 }
                 break;
             case MeleePhase::Windup:
@@ -1898,6 +2003,7 @@ void MeleeSystem::hashThing(Entity e, StateHasher& h) const {
     h.add(m->counterUntil);
     h.add(m->guardStun);
     h.add(m->rollEndsAt);
+    h.add(m->openUntil);
 }
 
 // ---- Fight response, focus and footwork (docs/design/focus.md) ----------------------------------

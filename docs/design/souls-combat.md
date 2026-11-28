@@ -49,8 +49,20 @@ attack's clip), Roll (attack within `rollAttackSteps` of a roll ending), GuardCo
   free swing in its direction. The carry is at most the kind's `maxWarp` metres. The player swings at the locked-on
   enemy first, else the one in view; with nobody in reach the swing goes straight ahead at nothing.
 - **Combos**: a press during an attack is kept (input buffer) and plays when the chain opens (`chainShare` into the
-  recovery); after `comboResetSteps` of no attack the combo starts over.
-- **Cancel**: past `cancelShare` of the recovery a roll, a step or the guard ends the attack.
+  recovery, 0.15 since sneed 2026-11-28: quick follow-ups); after `comboResetSteps` of no attack the combo starts over.
+- **The opening** (sneed 2026-11-28: "fast attacks and quick follow ups, but a slight delay after you stop attacking that
+  gives an opening"): when the recovery runs out with no next blow pressed, or a step walks out of it, the attacker is
+  still committed for `openingSteps` (10, a third of a second): no attack, roll or guard. A press then is kept and plays
+  when it is over. The fighter AI reads a foe in its opening as open (it attacks, and charges heavies).
+- **Cancel**: past `cancelShare` (0.75) of the recovery a roll, a step or the guard ends the attack.
+- **Smooth moves** (sneed 2026-11-28: "some attacks still jar and move weird, like the strong attack and the leap
+  attack"): the clips were looked at frame by frame (Blender, the hips' path). The old second heavy began mid-air in a
+  leap (a standing body shot off at 2.2 m/s) and the old leap drifted a metre sideways; now the heavy chain is a grounded
+  overhead (`Motion_SS_HeavyDown`, the hips stay within 0.15 m) then the big slash, the running heavy and the AI's leap is
+  the whole sword-and-shield leap from standing (`Motion_SS_Leap`: a crouch, up and 3 m straight ahead into the blow,
+  from `aiLeapMin`-`aiLeapMax` 3.4-4.3 m), and the jumping heavy is the mid-air slam (it starts in the air, as the player
+  is). The carry-in is at most 0.5 m for lights and heavies (was 0.8-1.2 m), spread over five sixths of the wind-up, so
+  a blow leans in instead of gliding.
 
 ## Critical attacks (sneed 2026-11-27)
 
@@ -65,7 +77,16 @@ from behind a backstab; 2.5 to 4 times a normal blow, ripostes about 25% above b
 - Both: the victim is caught for the wind-up and `criticalHoldSteps` (no guard, roll or swing), the blow can't be blocked or
   dodged and always meets the torso, and the victim is thrown to the ground (a knockdown, no poise needed, no immunity).
 - **Ground stab**: any press at a foe knocked down but still in the fight: a stab down (`Motion_Knife_Stab_Low`), 1.8x.
-  A downed (incapacitated) or dead body keeps the old low blows and finishers.
+- **At the downed: hack or impale** (sneed 2026-11-28: "one is to injure, that's a hack; the impale is when it's
+  calculated the final attack kills them, a bit slower, not much"; "critical that the impale goes through the centre,
+  the chest"). A downed (incapacitated) body gets the weapon's finisher (MeleeRules `finishers`): the sword's `OneHand`
+  is the hack (the low slash clip). It names its impale in `lethal` (`OneHandImpale`): when the impale's blow (its stab,
+  the weapon's quality, skill and traits, times its `damage` 2.0) would take what is left of the torso to 0
+  (`MeleeSystem::impaleKills`), the impale plays instead: 0.95 s to the blow against the hack's 0.8, always in the torso,
+  and it kills (armour can't save the body: it was chosen because it kills). Its body plays the low stab clip while
+  Unreal drives the blade point down along the Sword path into `spine_03` (the chest's centre) with the hand on it
+  (`drawWeapon`); the path's blow is laid on the clip's. A corpse gets the hack. Smoke `finishers` has an impale phase
+  (the point within 15 cm of the chest, the victim dead).
 - The AI gets them the same way (its light press at an open or turned foe).
 
 ## Poise

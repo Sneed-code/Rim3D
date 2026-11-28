@@ -127,6 +127,7 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
     num("cancelShare", r.cancelShare);
     whole("comboResetSteps", r.comboResetSteps);
     whole("rollAttackSteps", r.rollAttackSteps);
+    whole("openingSteps", r.openingSteps);
     num("chargeShare", r.chargeShare);
     whole("minChargeSteps", r.minChargeSteps);
     whole("maxChargeSteps", r.maxChargeSteps);
@@ -451,7 +452,8 @@ bool MeleeSystem::soulsAttack(Entity pawn, Entity target, bool player, const Sou
     // Mid-roll, or mid-attack before its combo opens: kept, it plays as soon as it can (Elden Ring's input buffer).
     const bool chainOpen = m.kind != SoulsAttack::None && m.phase == MeleePhase::Recovery &&
                            m.recoverySteps - m.stepsLeft >= static_cast<int>(std::lround(static_cast<float>(m.recoverySteps) * souls_.chainShare));
-    if (combat_.rollLocked(pawn) || (m.kind != SoulsAttack::None && m.phase != MeleePhase::Ready && m.finisher == 0 && !chainOpen)) {
+    if (combat_.rollLocked(pawn) || now() < m.openUntil ||
+        (m.kind != SoulsAttack::None && m.phase != MeleePhase::Ready && m.finisher == 0 && !chainOpen)) {
         m.buffered = kind;
         m.bufferedTarget = target;
         m.bufferedHold = press.hold;
@@ -599,7 +601,8 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
             const float bodyExtra = std::max(0.0f, motion.bodyRadius(target) - kPawnRadius);
             const float ideal = std::max(0.55f, reach(pawn) - souls_.idealInset) + bodyExtra;
             const float shift = std::clamp(d - clipStep - ideal, -souls_.warpBack, rule.maxWarp);
-            int steps = std::max(3, windup * 2 / 3);
+            // Over most of the wind-up, so the carry is a lean into the blow, not a glide (sneed 2026-11-28: "moves weird").
+            int steps = std::max(3, windup * 5 / 6);
             if (m.holding) {
                 steps = std::min(steps, std::max(2, static_cast<int>(std::lround(static_cast<float>(windup) * souls_.chargeShare)) - 1));
             }
@@ -651,6 +654,9 @@ bool MeleeSystem::soulsRollGate(Entity pawn, std::string* why) {
         if (now() < m->stunUntil) {
             return fail("staggered");
         }
+        if (now() < m->openUntil) {
+            return fail("recovering from the attack");
+        }
         if (m->kind != SoulsAttack::None && m->phase == MeleePhase::Windup) {
             return fail("mid-attack");
         }
@@ -689,6 +695,9 @@ bool MeleeSystem::soulsGuardGate(Entity pawn, std::string* why) {
     if (now() < m->stunUntil && !m->guardStun) {
         return fail("staggered");
     }
+    if (now() < m->openUntil) {
+        return fail("recovering from the attack");
+    }
     if (m->kind != SoulsAttack::None && m->phase == MeleePhase::Windup) {
         return fail("mid-attack");
     }
@@ -714,6 +723,7 @@ bool MeleeSystem::soulsCancel(Entity pawn) {
         return false;  // a press is waiting: the combo goes on
     }
     soulsEnd(pawn, *m);
+    m->openUntil = now() + souls_.openingSteps;  // walking out of it still leaves the opening (sneed 2026-11-28)
     return true;
 }
 
@@ -990,7 +1000,7 @@ void MeleeSystem::soulsStep() {
     std::sort(order_.begin(), order_.end());
     for (const Entity pawn : order_) {
         Melee& m = reg.get<Melee>(pawn);
-        if (m.buffered == SoulsAttack::None || m.phase != MeleePhase::Ready || combat_.rollLocked(pawn)) {
+        if (m.buffered == SoulsAttack::None || m.phase != MeleePhase::Ready || combat_.rollLocked(pawn) || now() < m.openUntil) {
             continue;
         }
         const SoulsAttack next = m.buffered;
@@ -1022,8 +1032,8 @@ bool MeleeSystem::aiSoulsTurn(Entity pawn, Entity victim) {
         return false;
     }
     const Melee* m = reg.try_get<Melee>(pawn);
-    if (m != nullptr && now() < m->stunUntil) {
-        return true;  // reeling (or stunned by a block): nothing to do
+    if (m != nullptr && (now() < m->stunUntil || now() < m->openUntil)) {
+        return true;  // reeling, stunned by a block, or still committed after its chain: nothing to do
     }
     const bool idle = m == nullptr || m->phase == MeleePhase::Ready;
     if (idle && stamina(pawn) < souls_.aiStaminaFloor) {
@@ -1042,7 +1052,7 @@ bool MeleeSystem::aiSoulsTurn(Entity pawn, Entity victim) {
     const bool guarded = reg.all_of<Blocking>(victim) || guardedAgainst(victim, pawn);
     press.heavy = counter || (guarded ? roll < souls_.aiHeavyVsGuard : roll < souls_.aiHeavyChance);
     const Melee* vm = reg.try_get<Melee>(victim);
-    const bool open = vm != nullptr && (vm->phase == MeleePhase::Recovery || now() < vm->stunUntil);
+    const bool open = vm != nullptr && (vm->phase == MeleePhase::Recovery || now() < vm->stunUntil || now() < vm->openUntil);
     press.hold = press.heavy && !counter && open && rng.unit() < souls_.aiChargeChance;
     if (!soulsAttack(pawn, victim, false, press, nullptr)) {
         footwork(pawn, victim, false);

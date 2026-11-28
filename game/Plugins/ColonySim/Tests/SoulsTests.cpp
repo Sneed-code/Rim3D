@@ -100,10 +100,10 @@ void soulsTestHeal(Sim& sim, Entity pawn) {
     sim.health().refresh(pawn);
 }
 
-// Steps until the pawn's attack (and any combo after it) is over, at most `most`.
+// Steps until the pawn's attack (and any combo after it, and the opening after that) is over, at most `most`.
 int soulsTestRunOut(Sim& sim, Entity pawn, int most = 200) {
     int steps = 0;
-    while (steps < most && !sim.melee().ready(pawn)) {
+    while (steps < most && (!sim.melee().ready(pawn) || sim.melee().inOpening(pawn))) {  // and its opening (sneed 2026-11-28)
         sim.step();
         ++steps;
     }
@@ -649,4 +649,85 @@ TEST_CASE("Souls: switched off, a sword swings as before and nothing costs stami
     Snapshot snap;
     sim->writeSnapshot(snap);
     CHECK_FALSE(snap.souls);
+}
+
+// sneed 2026-11-28: "elden ring combat has fast attacks and quick follow ups ... but there's a slight delay after you
+// stop attacking that gives an opening".
+TEST_CASE("Souls: a follow-up press plays early in the recovery, but a chain that ends leaves an opening") {
+    auto sim = soulsTestSim(31);
+    const Entity hero = soulsTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    soulsTestFace(*sim, hero, 1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    std::string why;
+    SOULS_REQUIRE(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    // Pressed again at once: kept, and played as soon as the chain opens, early in the recovery.
+    CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    const uint64_t swings = sim->melee().swings();
+    int intoRecovery = -1;
+    for (int s = 0; s < 120 && sim->melee().swings() == swings; ++s) {
+        sim->step();
+        const Melee& m = reg.get<Melee>(hero);
+        if (m.phase == MeleePhase::Recovery) {
+            intoRecovery = m.recoverySteps - m.stepsLeft;
+        }
+    }
+    SOULS_REQUIRE(sim->melee().swings() == swings + 1);
+    const int firstRecovery = static_cast<int>(std::lround(0.2f * 30.0f));  // well before 0.2 s into it
+    CHECK(intoRecovery <= firstRecovery);
+    // Now let the chain end: the opening holds the attacker for openingSteps once the recovery runs out.
+    for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
+        sim->step();
+    }
+    const int opening = sim->melee().souls().openingSteps;
+    CHECK(opening >= 6);
+    CHECK(sim->melee().inOpening(hero));
+    CHECK_FALSE(sim->combat().dodgeRoll(hero, 0.0f, 1.0f, &why));
+    CHECK(why == "recovering from the attack");
+    // A press in the opening is kept, and plays when it is over (not before).
+    const uint64_t before = sim->melee().swings();
+    CHECK(sim->melee().soulsAttack(hero, kNoEntity, true, SoulsPress{}, &why));
+    int waited = 0;
+    while (sim->melee().swings() == before && waited < 60) {
+        sim->step();
+        ++waited;
+    }
+    CHECK(sim->melee().swings() == before + 1);
+    CHECK(waited >= opening - 2);
+    CHECK(waited <= opening + 2);
+}
+
+TEST_CASE("Souls: the heavy is a grounded overhead and the running heavy a straight leap (no mid-air start, no drift)") {
+    auto sim = soulsTestSim(32);
+    const SoulsMoveset* ms = nullptr;
+    for (const SoulsMoveset& m : sim->melee().souls().movesets) {
+        if (m.key == "OneHandSword") {
+            ms = &m;
+        }
+    }
+    SOULS_REQUIRE(ms != nullptr);
+    const BodyMotionSystem& motion = sim->combat().motion();
+    const auto clipOf = [&](SoulsAttack kind, size_t i = 0) { return motion.clip(ms->clips[static_cast<size_t>(kind)].at(i)); };
+    const MotionClip* heavy = clipOf(SoulsAttack::Heavy);
+    const MotionClip* leap = clipOf(SoulsAttack::RunningHeavy);
+    SOULS_REQUIRE(heavy != nullptr);
+    SOULS_REQUIRE(leap != nullptr);
+    CHECK(heavy->name == "Motion_SS_HeavyDown");
+    CHECK(leap->name == "Motion_SS_Leap");
+    // Each starts from standing: the first tenth of a second moves the body under 0.2 m.
+    for (const MotionClip* c : {heavy, leap}) {
+        float f = 0.0f, r = 0.0f, yaw = 0.0f;
+        c->sample(0.1f, f, r, yaw);
+        CHECK(std::sqrt(f * f + r * r) < 0.2f);
+    }
+    // The heavy stays on its feet's spot; the leap goes far and straight.
+    float f = 0.0f, r = 0.0f, yaw = 0.0f;
+    heavy->sample(heavy->hitSeconds, f, r, yaw);
+    CHECK(std::fabs(f) < 0.3f);
+    leap->sample(leap->hitSeconds, f, r, yaw);
+    CHECK(f > 2.0f);
+    CHECK(std::fabs(r) < 0.2f);
+    // The carry-in stays small, so a blow is a lean, not a glide.
+    for (const SoulsAttack kind : {SoulsAttack::Light, SoulsAttack::Heavy, SoulsAttack::Charged}) {
+        CHECK(sim->melee().souls().kinds[static_cast<size_t>(kind)].maxWarp <= 0.5f);
+    }
 }

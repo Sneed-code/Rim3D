@@ -887,3 +887,68 @@ TEST_CASE("Corpses and the downed: a corpse before the player gets the very fini
     MESSAGE("finisher " << downedSteps << " steps, " << unhurried << " at the old pace");
     CHECK(downedSteps < unhurried);
 }
+
+// sneed 2026-11-28: two blows at the downed, "one is to injure, that's a hack; the impale is when it's calculated the
+// final attack kills them, and it's a bit slower"; "critical that the impale goes through the centre, the chest".
+TEST_CASE("Finishers: the sword hacks a downed enemy it won't kill, and impales, through the torso, one it will") {
+    auto sim = feelTestSim(431);
+    const Entity hero = feelTestHero(*sim, 30.5f, 30.5f, "Melee_Gladius");
+    const Entity enemy = feelTestDowned(*sim, hero, 1.0f);
+    feelTestFace(*sim, hero, 1.0f, 0.0f);
+    entt::registry& reg = sim->things().registry();
+    FEEL_REQUIRE(sim->health().incapacitated(enemy));
+    FEEL_REQUIRE(!reg.get<Health>(enemy).dead);
+    const auto torsoLeft = [&] {
+        const int part = sim->combat().hitboxPart(enemy, "torso");
+        return sim->health().zoneHealth(enemy, sim->health().partZone(enemy, part)) * sim->health().partZoneHp(enemy, part);
+    };
+    // A whole torso: the impale wouldn't kill it, so the blow is the hack.
+    FEEL_REQUIRE(torsoLeft() > 30.0f);
+    CHECK_FALSE(sim->melee().impaleKills(hero, enemy));
+    std::string why;
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    const MeleeFinisher* hack = sim->melee().finisherOf(hero);
+    FEEL_REQUIRE(hack != nullptr);
+    CHECK_FALSE(hack->impale);
+    CHECK(hack->lethal == "OneHandImpale");
+    const int hackWindup = reg.get<Melee>(hero).stepsLeft;
+    for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
+        sim->step();
+    }
+    CHECK_FALSE(reg.get<Health>(enemy).dead);
+    // Wear the torso down by hand until the impale's blow would end it: now the blow is the impale.
+    const int part = sim->combat().hitboxPart(enemy, "torso");
+    for (int i = 0; i < 60 && !sim->melee().impaleKills(hero, enemy) && !reg.get<Health>(enemy).dead; ++i) {
+        sim->submit(DamagePawnCommand{enemy, "Cut", 2.0f, part});
+        sim->step();
+    }
+    FEEL_REQUIRE(!reg.get<Health>(enemy).dead);
+    FEEL_REQUIRE(sim->melee().impaleKills(hero, enemy));
+    Position& at = reg.get<Position>(hero);
+    const Position& foe = reg.get<Position>(enemy);
+    at.x = foe.x - 1.0f;
+    at.y = foe.y;
+    for (int s = 0; s < 30; ++s) {
+        sim->step();
+    }
+    FEEL_REQUIRE(sim->melee().attack(hero, enemy, true, &why));
+    const MeleeFinisher* impale = sim->melee().finisherOf(hero);
+    FEEL_REQUIRE(impale != nullptr);
+    CHECK(impale->impale);
+    CHECK(impale->drawWeapon);
+    const int impaleWindup = reg.get<Melee>(hero).stepsLeft;
+    CHECK(impaleWindup > hackWindup);              // a bit slower...
+    CHECK(impaleWindup <= hackWindup * 13 / 10);   // ...not much
+    bool torsoHit = false;
+    for (int s = 0; s < 200 && !sim->melee().ready(hero); ++s) {
+        sim->step();
+        for (const Event& e : sim->events()) {
+            if (e.type == EventType::MeleeHit && e.thing == hero && e.target == enemy) {
+                torsoHit = torsoHit || sim->health().partZone(enemy, e.part) == sim->health().partZone(enemy, part);
+            }
+        }
+    }
+    CHECK(torsoHit);
+    CHECK(reg.get<Health>(enemy).dead);
+    CHECK(sim->melee().impales() == 1);
+}
