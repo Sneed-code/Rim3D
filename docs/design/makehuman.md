@@ -245,6 +245,10 @@ Breast jiggle (looseness) slider.
 The question was whether skin can be made drastically more photoreal easily. Already in: the MetaHumans' subsurface
 profile (light scattering under the skin), a 4K colour map with pores and mottling, a normal map from the colour's detail,
 the MetaHumans' tiled micro-normal for pores close up, a roughness map, wrinkle maps driven by the face and wetness.
+Added 2026-11-28: a second, finer pore layer (the same micro-normal turned 36 degrees at 2.37x, `MicroStrength2`) so the
+repeat doesn't show, and cavities from the pores' slopes that dim the specular (`CavitySpecular` 0.6) and darken the
+colour a little (`CavityColour` 0.12), as the MetaHumans' cavity map does. Scanned skin (MetaHuman's scanned body
+textures in `MetaHumanCharacter/Content/Optional/BodyTextures` projected onto MakeHuman's layout) is its own task.
 The limit is the source: MakeHuman's skins are painted 2K textures, not scans, so pores, fine veins, freckles and real
 colour variation are faked. Quick wins added now: subsurface scattering at full resolution and quality (no half-res or
 checkerboard: `r.SSS.*` in DefaultEngine.ini); per person a sheen that follows the skin tone (deeper skin gets a stronger,
@@ -255,8 +259,16 @@ peach fuzz; MetaHuman level everywhere is beyond what MakeHuman's mesh and UVs a
 
 ## Eyes, wrinkles, brows and lashes
 
-`M_MH_Eye` (MakeHumanArt, for the eye slots): glossy wet surface, the iris set back behind the cornea by parallax
-(`BumpOffset`), a darker limbal ring. Wrinkles: `make_wrinkle_map` (config `"wrinkles"`: groups of face-unit morphs)
+`M_MH_Eye` (MakeHumanArt, for the eye slots; MetaHuman-style since 2026-11-28): the cornea bulges more than the
+eyeball (`EyeBulge`, its normal tilted out over the iris) and each pixel's view ray is bent through it (index 1.336) down
+to a flat iris plane `EyeDepth` iris radii below (about 2.7 mm), so the iris sits deep and shifts with the view. The iris
+pattern is MetaHuman's (`/Game/MetaHumans/Common/Face/Textures/Simplified/T_Iris_A_H_Alt`, the Kellan import), coloured
+by `IrisColour`/`IrisAmount` (the creator's eye colour, the Drow's red) or the MakeHuman texture's own iris colour, pupil
+by `PupilScale`, a dark limbal ring (`LimbusDark`). The sclera is the MakeHuman texture's with MetaHuman's veins
+(`T_Veins_D_Alt`, `VeinsAmount`), shaded towards the lids and corners (`CornerShade`, also ambient occlusion). Clear
+coat shading: a glass-smooth wet film (`CoatRoughness` 0.03) over a softer iris (0.55) and sclera (0.3). Not yet: the
+MetaHumans' separate tear-line and eye-occlusion meshes (MakeHuman has none; BACKLOG). The engine's full MetaHuman eye
+(`/MetaHumanCharacter/Lookdev_UHM/Eye`, Eye shading model) needs MetaHuman's eye mesh and UVs, so it is not used. Wrinkles: `make_wrinkle_map` (config `"wrinkles"`: groups of face-unit morphs)
 writes `wrinkles.png` (forehead, brow furrow, smile, nose in RGBA) from how each group squeezes the skin, creases
 across the group's mean squeeze direction on each side of the face; `M_MH_SkinDetail` adds them to the normal by
 custom primitive data 8 to 11, which the creator sets from the face (checked: forehead and brow creases when

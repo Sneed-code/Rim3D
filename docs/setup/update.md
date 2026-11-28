@@ -56,3 +56,12 @@ changed on every update and ran again for nothing.
 
 PR test builds on the PC still use separate clones (`pc-standing-ok`), but nobody plays from them, and
 `update.py` never pulls a copy that is not on `main`.
+
+## Letting Claude update without a typed OK
+
+Claude Code's auto mode safety check on the PC used to refuse `git pull` and `update.py` in `C:\Dev\Rim3D` until sneed
+typed OK. `tools/allow-claude-updates.ps1` (run once, 2026-11-28) adds narrow allow rules (`git pull`, `update.py`,
+`update-and-play.bat`, `smoke.ps1`) and an `autoMode.environment` note saying these and the `C:\Dev\Rim3D-*` test
+clones are routine, to `%USERPROFILE%\.claude\settings.json` (auto mode reads `autoMode` only from user settings, not
+project settings; it keeps narrow allow rules and drops broad ones like `Bash(*)`). It keeps existing settings and
+saves a backup. Restart the Claude desktop app afterwards.

@@ -27,7 +27,7 @@
 #include "Factories/MaterialFactoryNew.h"
 #include "MaterialEditingLibrary.h"
 #include "Materials/Material.h"
-#include "Materials/MaterialExpressionBumpOffset.h"
+#include "Materials/MaterialExpressionCameraVectorWS.h"
 #include "Materials/MaterialExpressionTextureObjectParameter.h"
 #include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionCustom.h"
@@ -502,18 +502,100 @@ namespace
 		auto* Strength = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 900));
 		Strength->ParameterName = TEXT("MicroStrength");
 		Strength->DefaultValue = 0.4f;
+		// A second, finer layer of the same pores, turned and at another scale, so the tiling's repeat doesn't show
+		// (MicroTiling2, MicroStrength2 of MicroStrength).
+		auto* Tiling2 = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1400, 850));
+		Tiling2->ParameterName = TEXT("MicroTiling2");
+		Tiling2->DefaultValue = 2.37f;
+		auto* Turned = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -1200, 850));
+		Turned->OutputType = CMOT_Float2;
+		Turned->Description = TEXT("SkinMicroTurn");
+		Turned->Code = TEXT("float2 t = UV * Scale; return float2(0.809 * t.x - 0.588 * t.y, 0.588 * t.x + 0.809 * t.y) + 0.37;");
+		Turned->Inputs.SetNum(2);
+		Turned->Inputs[0].InputName = TEXT("UV");
+		Turned->Inputs[1].InputName = TEXT("Scale");
+		Turned->Inputs[0].Input.Connect(0, Tiled);
+		Turned->Inputs[1].Input.Connect(0, Tiling2);
+		auto* MicroSample2 = Cast<UMaterialExpressionTextureSampleParameter2D>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionTextureSampleParameter2D::StaticClass(), -1000, 850));
+		MicroSample2->ParameterName = TEXT("MicroNormal");  // the same texture as the first layer
+		MicroSample2->Texture = Micro;
+		MicroSample2->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Micro);
+		MicroSample2->Coordinates.Connect(0, Turned);
+		auto* Strength2 = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 1000));
+		Strength2->ParameterName = TEXT("MicroStrength2");
+		Strength2->DefaultValue = 0.5f;
 		auto* Blend = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -600, 600));
 		Blend->OutputType = CMOT_Float3;
 		Blend->Description = TEXT("SkinMicroNormal");
-		Blend->Code = TEXT("float3 m = lerp(float3(0, 0, 1), Micro, Strength);\nreturn normalize(float3(Base.xy + m.xy, Base.z * m.z));");
-		Blend->Inputs.SetNum(3);
+		Blend->Code = TEXT("float3 m = lerp(float3(0, 0, 1), Micro, Strength);\n"
+			"float3 m2 = lerp(float3(0, 0, 1), Micro2, Strength * Strength2);\n"
+			"return normalize(float3(Base.xy + m.xy + m2.xy, Base.z * m.z * m2.z));");
+		Blend->Inputs.SetNum(5);
 		Blend->Inputs[0].InputName = TEXT("Base");
 		Blend->Inputs[1].InputName = TEXT("Micro");
 		Blend->Inputs[2].InputName = TEXT("Strength");
+		Blend->Inputs[3].InputName = TEXT("Micro2");
+		Blend->Inputs[4].InputName = TEXT("Strength2");
 		Blend->Inputs[0].Input.Connect(0, BaseNormal);
 		Blend->Inputs[1].Input.Connect(0, MicroSample);
 		Blend->Inputs[2].Input.Connect(0, Strength);
+		Blend->Inputs[3].Input.Connect(0, MicroSample2);
+		Blend->Inputs[4].Input.Connect(0, Strength2);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Blend, TEXT(""), MP_Normal);
+
+		// Cavities: the pores' walls (where the micro-normal tilts away) catch less light and hold no shine, as the
+		// MetaHumans' cavity map does: the specular dimmed there (CavitySpecular) and the colour a touch darker
+		// (CavityColour), so pores read in sunlight and the sheen breaks up instead of lying on the skin like plastic.
+		{
+			auto* CavitySpecular = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 1050));
+			CavitySpecular->ParameterName = TEXT("CavitySpecular");
+			CavitySpecular->DefaultValue = 0.6f;
+			auto* CavityColour = Cast<UMaterialExpressionScalarParameter>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionScalarParameter::StaticClass(), -1000, 1100));
+			CavityColour->ParameterName = TEXT("CavityColour");
+			CavityColour->DefaultValue = 0.12f;
+			auto* Cavity = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -700, 1000));
+			Cavity->OutputType = CMOT_Float1;
+			Cavity->Description = TEXT("SkinCavity");
+			Cavity->Code = TEXT("float tilt = 1.0 - lerp(1.0, min(Micro.z, Micro2.z), saturate(Strength * 2.5));\n"
+				"return saturate(1.0 - tilt * 6.0);");
+			Cavity->Inputs.SetNum(3);
+			Cavity->Inputs[0].InputName = TEXT("Micro");
+			Cavity->Inputs[1].InputName = TEXT("Micro2");
+			Cavity->Inputs[2].InputName = TEXT("Strength");
+			Cavity->Inputs[0].Input.Connect(0, MicroSample);
+			Cavity->Inputs[1].Input.Connect(0, MicroSample2);
+			Cavity->Inputs[2].Input.Connect(0, Strength);
+			if (UMaterialExpression* SpecularIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_Specular))
+			{
+				auto* Dim = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, 1000));
+				Dim->OutputType = CMOT_Float1;
+				Dim->Description = TEXT("SkinCavitySpecular");
+				Dim->Code = TEXT("return Base * lerp(1.0, Cavity, Amount);");
+				Dim->Inputs.SetNum(3);
+				Dim->Inputs[0].InputName = TEXT("Base");
+				Dim->Inputs[1].InputName = TEXT("Cavity");
+				Dim->Inputs[2].InputName = TEXT("Amount");
+				Dim->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->Specular.OutputIndex, SpecularIn);
+				Dim->Inputs[1].Input.Connect(0, Cavity);
+				Dim->Inputs[2].Input.Connect(0, CavitySpecular);
+				UMaterialEditingLibrary::ConnectMaterialProperty(Dim, TEXT(""), MP_Specular);
+			}
+			if (UMaterialExpression* ColourIn = UMaterialEditingLibrary::GetMaterialPropertyInputNode(Material, MP_BaseColor))
+			{
+				auto* Darken = Cast<UMaterialExpressionCustom>(UMaterialEditingLibrary::CreateMaterialExpression(Material, UMaterialExpressionCustom::StaticClass(), -400, -1100));
+				Darken->OutputType = CMOT_Float3;
+				Darken->Description = TEXT("SkinCavityColour");
+				Darken->Code = TEXT("return Base * lerp(1.0, Cavity, Amount);");
+				Darken->Inputs.SetNum(3);
+				Darken->Inputs[0].InputName = TEXT("Base");
+				Darken->Inputs[1].InputName = TEXT("Cavity");
+				Darken->Inputs[2].InputName = TEXT("Amount");
+				Darken->Inputs[0].Input.Connect(Material->GetEditorOnlyData()->BaseColor.OutputIndex, ColourIn);
+				Darken->Inputs[1].Input.Connect(0, Cavity);
+				Darken->Inputs[2].Input.Connect(0, CavityColour);
+				UMaterialEditingLibrary::ConnectMaterialProperty(Darken, TEXT(""), MP_BaseColor);
+			}
+		}
 
 		// Wrinkles (mh_common.make_wrinkle_map): four groups of creases as heights in RGBA (forehead, brow furrow, smile,
 		// nose), each by how far its face units are on (custom primitive data 8 to 11, set by the creator), turned into a
@@ -980,9 +1062,19 @@ namespace
 		return Material;
 	}
 
-	// Eyes (MakeHuman's eyeballs: both eyes on one texture, the iris round the middle of each half): glossy and wet, the
-	// iris set back behind the cornea (parallax, so it shifts as the eye turns to the light and the view), a dark ring at
-	// its edge (the limbus), cut out where the texture is clear (the cornea's own area).
+	// Eyes (MakeHuman's eyeballs: both eyes on one texture, the iris round (0.293, 0.713) and (0.707, 0.297), 0.111 across
+	// in texture space): a MetaHuman-style eye on MakeHuman's mesh (sneed 2026-11-28).
+	// - The cornea bulges more than the eyeball (its normal tilted out over the iris), and the iris lies on a flat plane
+	//   behind it: each pixel's view ray is bent through the cornea (water's index, 1.336) and followed down to that plane,
+	//   so the iris sits deep in the eye and shifts as the eye turns to the camera (EyeDepth, EyeBulge).
+	// - The iris pattern is MetaHuman's (T_Iris_A_H_Alt, 1024 px for the iris alone), coloured by the person's own iris
+	//   colour (IrisColour by IrisAmount, as before) or else the MakeHuman texture's own iris colour; the pupil's size by
+	//   PupilScale; a dark limbal ring at its edge.
+	// - The sclera is the MakeHuman texture's with MetaHuman's fine veins over it (T_Veins_D_Alt, VeinsAmount), darker
+	//   towards the lids and corners (CornerShade).
+	// - Clear coat: a glass-smooth wet film (CoatRoughness) over a softer iris and sclera.
+	// Same parameter names as the old eye (BaseColor, Tint, IrisColour, IrisAmount), so the creator's eye colour and the
+	// Drow's red work unchanged; eye size is a shape key and does not touch this.
 	UMaterial* MhEyeMaterial(IAssetTools& Tools)
 	{
 		const FString Name = TEXT("M_MH_Eye");
@@ -1000,92 +1092,163 @@ namespace
 		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_SkeletalMesh, bRecompile);
 		UMaterialEditingLibrary::SetMaterialUsage(Material, MATUSAGE_MorphTargets, bRecompile);
 		Material->BlendMode = BLEND_Masked;
+		Material->SetShadingModel(MSM_ClearCoat);
 		const auto Make = [Material](UClass* Class, int32 X, int32 Y) { return UMaterialEditingLibrary::CreateMaterialExpression(Material, Class, X, Y); };
-		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(Make(UMaterialExpressionTextureCoordinate::StaticClass(), -1400, 0));
-		// Where the iris is: x its mask (1 inside), y the limbal ring.
-		auto* Iris = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -1150, 0));
-		Iris->OutputType = CMOT_Float2;
-		Iris->Description = TEXT("EyeIris");
-		Iris->Code = TEXT("float2 c = UV.x < 0.5 ? float2(0.293, 0.713) : float2(0.707, 0.297);\n"
-			"float d = distance(UV, c);\n"
-			"float m = 1.0 - smoothstep(0.104, 0.118, d);\n"
-			"float ring = exp(-pow((d - 0.111) / 0.011, 2.0));\n"
-			"return float2(m, ring);");
-		Iris->Inputs.SetNum(1);
-		Iris->Inputs[0].InputName = TEXT("UV");
-		Iris->Inputs[0].Input.Connect(0, Coord);
-		// The iris lower than the cornea: the sclera at 1, the iris at 0.
-		auto* Depth = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -900, 150));
-		Depth->OutputType = CMOT_Float1;
-		Depth->Description = TEXT("EyeDepth");
-		Depth->Code = TEXT("return 1.0 - Iris.x;");
-		Depth->Inputs.SetNum(1);
-		Depth->Inputs[0].InputName = TEXT("Iris");
-		Depth->Inputs[0].Input.Connect(0, Iris);
-		auto* Bump = Cast<UMaterialExpressionBumpOffset>(Make(UMaterialExpressionBumpOffset::StaticClass(), -700, 100));
-		Bump->Coordinate.Connect(0, Coord);
-		Bump->Height.Connect(0, Depth);
-		Bump->HeightRatio = 0.035f;
-		Bump->ReferencePlane = 1.0f;
-		auto* EyeUV = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -500, 0));
-		EyeUV->OutputType = CMOT_Float2;
-		EyeUV->Description = TEXT("EyeUV");
-		EyeUV->Code = TEXT("return lerp(UV, Bumped, Iris.x);");
-		EyeUV->Inputs.SetNum(3);
-		EyeUV->Inputs[0].InputName = TEXT("UV");
-		EyeUV->Inputs[1].InputName = TEXT("Bumped");
-		EyeUV->Inputs[2].InputName = TEXT("Iris");
-		EyeUV->Inputs[0].Input.Connect(0, Coord);
-		EyeUV->Inputs[1].Input.Connect(0, Bump);
-		EyeUV->Inputs[2].Input.Connect(0, Iris);
-		auto* Color = Cast<UMaterialExpressionTextureSampleParameter2D>(Make(UMaterialExpressionTextureSampleParameter2D::StaticClass(), -300, -100));
-		Color->ParameterName = TEXT("BaseColor");
-		Color->Texture = LoadObject<UTexture>(nullptr, TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"));
-		Color->Coordinates.Connect(0, EyeUV);
-		auto* Tint = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -300, -300));
-		Tint->ParameterName = TEXT("Tint");
-		Tint->DefaultValue = FLinearColor::White;
-		// The iris in a colour of its own (the creator's eye colour, the Drow's red), by IrisAmount: the texture's
-		// lightness kept as the iris's detail, the colour laid over it.
-		auto* IrisColour = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -300, -450));
-		IrisColour->ParameterName = TEXT("IrisColour");
-		IrisColour->DefaultValue = FLinearColor(0.5f, 0.35f, 0.2f);
-		auto* IrisAmount = Cast<UMaterialExpressionScalarParameter>(Make(UMaterialExpressionScalarParameter::StaticClass(), -300, -550));
-		IrisAmount->ParameterName = TEXT("IrisAmount");
-		IrisAmount->DefaultValue = 0.0f;
-		auto* Shade = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -50, -150));
-		Shade->OutputType = CMOT_Float3;
-		Shade->Description = TEXT("EyeColour");
-		Shade->Code = TEXT("float3 base = Tex * Tint;\n"
-			"float lum = dot(Tex, float3(0.3, 0.59, 0.11));\n"
-			"float3 own = IrisColour * (0.35 + 1.5 * lum);\n"
-			"return lerp(base, own, Iris.x * saturate(Amount)) * (1.0 - 0.4 * Iris.y);");
-		Shade->Inputs.SetNum(5);
-		Shade->Inputs[0].InputName = TEXT("Tex");
-		Shade->Inputs[1].InputName = TEXT("Tint");
-		Shade->Inputs[2].InputName = TEXT("Iris");
-		Shade->Inputs[3].InputName = TEXT("IrisColour");
-		Shade->Inputs[4].InputName = TEXT("Amount");
-		Shade->Inputs[0].Input.Connect(0, Color);
-		Shade->Inputs[1].Input.Connect(0, Tint);
-		Shade->Inputs[2].Input.Connect(0, Iris);
-		Shade->Inputs[3].Input.Connect(0, IrisColour);
-		Shade->Inputs[4].Input.Connect(0, IrisAmount);
-		UMaterialEditingLibrary::ConnectMaterialProperty(Shade, TEXT(""), MP_BaseColor);
-		UMaterialEditingLibrary::ConnectMaterialProperty(Color, TEXT("A"), MP_OpacityMask);
-		// Wet: very smooth (sharp highlights, the sky and the sun's catchlight), the iris smoother still.
-		auto* Rough = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), -50, 100));
-		Rough->OutputType = CMOT_Float1;
-		Rough->Description = TEXT("EyeRoughness");
-		Rough->Code = TEXT("return lerp(0.16, 0.06, Iris.x);");
-		Rough->Inputs.SetNum(1);
-		Rough->Inputs[0].InputName = TEXT("Iris");
-		Rough->Inputs[0].Input.Connect(0, Iris);
+		const auto Scalar = [&Make](const TCHAR* ParamName, float Value, int32 Y)
+		{
+			auto* P = Cast<UMaterialExpressionScalarParameter>(Make(UMaterialExpressionScalarParameter::StaticClass(), -1500, Y));
+			P->ParameterName = ParamName;
+			P->DefaultValue = Value;
+			return P;
+		};
+		const auto Vector = [&Make](const TCHAR* ParamName, const FLinearColor& Value, int32 Y)
+		{
+			auto* P = Cast<UMaterialExpressionVectorParameter>(Make(UMaterialExpressionVectorParameter::StaticClass(), -1500, Y));
+			P->ParameterName = ParamName;
+			P->DefaultValue = Value;
+			return P;
+		};
+		const auto TextureObject = [&Make](const TCHAR* ParamName, const TCHAR* Asset, const TCHAR* Fallback, int32 Y)
+		{
+			auto* P = Cast<UMaterialExpressionTextureObjectParameter>(Make(UMaterialExpressionTextureObjectParameter::StaticClass(), -1500, Y));
+			P->ParameterName = ParamName;
+			P->Texture = LoadObject<UTexture>(nullptr, Asset, nullptr, LOAD_NoWarn | LOAD_Quiet);
+			if (!P->Texture)
+			{
+				UE_LOG(LogMakeHumanArt, Warning, TEXT("Eye: no %s; %s uses a plain texture"), Asset, ParamName);
+				P->Texture = LoadObject<UTexture>(nullptr, Fallback);
+			}
+			P->SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(P->Texture);
+			return P;
+		};
+		struct FEyeIn
+		{
+			const TCHAR* Name;
+			UMaterialExpression* Node;
+			int32 Output;
+		};
+		const auto Custom = [&Make](const TCHAR* Description, ECustomMaterialOutputType Type, const FString& Code, std::initializer_list<FEyeIn> Ins, int32 X, int32 Y)
+		{
+			auto* Node = Cast<UMaterialExpressionCustom>(Make(UMaterialExpressionCustom::StaticClass(), X, Y));
+			Node->OutputType = Type;
+			Node->Description = Description;
+			Node->Code = Code;
+			Node->Inputs.Reset();
+			for (const FEyeIn& In : Ins)
+			{
+				FCustomInput& Input = Node->Inputs.AddDefaulted_GetRef();
+				Input.InputName = In.Name;
+				Input.Input.Connect(In.Output, In.Node);
+			}
+			return Node;
+		};
+		// The shared geometry: which eye, where in its iris (in iris radii), the cornea's normal.
+		const FString EyeCommon = TEXT("float2 c = UV.x < 0.5 ? float2(0.293, 0.713) : float2(0.707, 0.297);\n"
+			"float2 d = (UV - c) / 0.111;\n"
+			"float r = length(d);\n"
+			"float2 dir = r > 1e-4 ? d / r : float2(0, 0);\n"
+			"float k = Bulge * r * (1.0 - smoothstep(0.95, 1.12, r));\n"
+			"float3 N = normalize(float3(dir * k, 1.0));\n");
+
+		auto* Coord = Cast<UMaterialExpressionTextureCoordinate>(Make(UMaterialExpressionTextureCoordinate::StaticClass(), -1500, 0));
+		auto* Camera = Make(UMaterialExpressionCameraVectorWS::StaticClass(), -1500, 100);
+		auto* CameraTangent = Cast<UMaterialExpressionTransform>(Make(UMaterialExpressionTransform::StaticClass(), -1300, 100));
+		CameraTangent->TransformSourceType = TRANSFORMSOURCE_World;
+		CameraTangent->TransformType = TRANSFORM_Tangent;
+		CameraTangent->Input.Connect(0, Camera);
+		auto* BaseColor = TextureObject(TEXT("BaseColor"), TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"), TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"), -900);
+		auto* IrisTexture = TextureObject(TEXT("IrisPattern"), TEXT("/Game/MetaHumans/Common/Face/Textures/Simplified/T_Iris_A_H_Alt.T_Iris_A_H_Alt"), TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"), -800);
+		auto* VeinsTexture = TextureObject(TEXT("ScleraVeins"), TEXT("/Game/MetaHumans/Common/Face/Textures/Simplified/T_Veins_D_Alt.T_Veins_D_Alt"), TEXT("/Engine/EngineResources/WhiteSquareTexture.WhiteSquareTexture"), -700);
+		auto* Tint = Vector(TEXT("Tint"), FLinearColor::White, -600);
+		auto* IrisColour = Vector(TEXT("IrisColour"), FLinearColor(0.5f, 0.35f, 0.2f), -500);
+		auto* IrisAmount = Scalar(TEXT("IrisAmount"), 0.0f, -400);
+		auto* Depth = Scalar(TEXT("EyeDepth"), 0.45f, 200);      // the iris plane below the cornea's top, in iris radii (about 2.7 mm)
+		auto* Bulge = Scalar(TEXT("EyeBulge"), 0.35f, 300);      // how much more the cornea curves than the eyeball
+		auto* Pupil = Scalar(TEXT("PupilScale"), 1.0f, 400);
+		auto* Veins = Scalar(TEXT("VeinsAmount"), 0.6f, 500);
+		auto* Limbus = Scalar(TEXT("LimbusDark"), 0.55f, 600);
+		auto* Corner = Scalar(TEXT("CornerShade"), 0.3f, 700);
+		// Without MetaHuman's iris texture (no MetaHumans in the project) the MakeHuman texture's own pattern is used.
+		auto* Pattern = Scalar(TEXT("IrisPatternAmount"), IrisTexture->Texture && IrisTexture->Texture->GetName() == TEXT("T_Iris_A_H_Alt") ? 1.0f : 0.0f, 800);
+
+		// Where the bent view ray meets the iris plane: (x, y) in iris radii from the iris's centre, z how far out this
+		// pixel is from it (also in iris radii, before bending).
+		auto* Geo = Custom(TEXT("EyeRefraction"), CMOT_Float3, EyeCommon +
+			TEXT("float s = 0.5 * min(r, 1.0);\n"                    // the eye's forward axis, tilted back from this point's normal
+			"float3 F = float3(-dir * s, sqrt(1.0 - s * s));\n"
+			"float3 V = normalize(Cam);\n"
+			"float3 R = refract(-V, N, 1.0 / 1.336);\n"
+			"if (dot(R, R) < 1e-6) R = -N;\n"
+			"float h = Depth * saturate(1.0 - r * r);\n"
+			"float t = h / max(dot(-R, F), 0.25);\n"
+			"float3 p = R * t;\n"
+			"p -= dot(p, F) * F;\n"
+			"return float3(d + p.xy, r);"),
+			{{TEXT("UV"), Coord, 0}, {TEXT("Cam"), CameraTangent, 0}, {TEXT("Depth"), Depth, 0}, {TEXT("Bulge"), Bulge, 0}}, -1000, 100);
+
+		auto* Colour = Custom(TEXT("EyeColour"), CMOT_Float3,
+			TEXT("float2 c = UV.x < 0.5 ? float2(0.293, 0.713) : float2(0.707, 0.297);\n"
+			"float2 q = Geo.xy; float r = Geo.z; float rr = length(q);\n"
+			// The base's own iris colour: its texture averaged round the iris.
+			"float3 avg = 0;\n"
+			"for (int i = 0; i < 4; ++i) { float a = 1.5708 * i + 0.785; avg += Tex.SampleLevel(TexSampler, c + float2(cos(a), sin(a)) * 0.072, 4).rgb; }\n"
+			"avg *= 0.25 * Tint;\n"
+			"float lum = dot(avg, float3(0.3, 0.59, 0.11));\n"
+			"float3 irisBase = lerp(avg, IrisColour * (0.35 + 1.5 * lum), saturate(Amount));\n"
+			// MetaHuman's pattern: the iris 0.46 of the texture across from its middle, the pupil a quarter of the iris.
+			"float p0 = 0.25, p1 = clamp(0.25 * Pupil, 0.08, 0.6);\n"
+			"float rt = rr < p1 ? rr * p0 / p1 : p0 + (rr - p1) * (1.0 - p0) / (1.0 - p1);\n"
+			"float2 qd = rr > 1e-4 ? q / rr * rt : float2(0, 0);\n"
+			"float L = Texture2DSample(Iris, IrisSampler, 0.5 + qd * 0.46).r;\n"
+			"float own = Texture2DSample(Tex, TexSampler, c + qd * 0.111).r;\n"   // fallback without MetaHuman's texture
+			"float pattern = lerp(own / max(lum, 0.02) * 0.7, L, saturate(PatternAmount));\n"
+			"float3 iris = irisBase * pow(saturate(pattern / 0.7), 1.3);\n"
+			"iris *= 1.0 - Limbus * smoothstep(0.8, 1.0, rr);\n"
+			// The sclera: the base's colour, MetaHuman's veins (their red lines show as less red in the texture).
+			"float3 scl = Texture2DSample(Tex, TexSampler, UV).rgb * Tint;\n"
+			"float2 e = (UV - c) / 0.28;\n"
+			"float3 vt = Texture2DSample(VeinTex, VeinTexSampler, 0.5 + e * 0.47).rgb;\n"
+			"float vein = saturate((1.0 - vt.r) * 2.5) * Veins;\n"
+			"scl = lerp(scl, scl * float3(0.8, 0.35, 0.32), vein);\n"
+			"float ringD = (r - 1.04) / 0.07;\n"
+			"scl *= 1.0 - Limbus * 0.5 * exp(-ringD * ringD);\n"      // the ring's soft outer edge on the white
+			// The iris seen through the cornea, the sclera beyond it; darker towards the lids and corners.
+			"float m = (1.0 - smoothstep(0.97, 1.05, rr)) * (1.0 - smoothstep(1.0, 1.07, r));\n"
+			"float3 col = lerp(scl, iris, m);\n"
+			"col *= 1.0 - Corner * smoothstep(0.45, 0.95, length(e));\n"
+			"return col;"),
+			{{TEXT("UV"), Coord, 0}, {TEXT("Geo"), Geo, 0}, {TEXT("Tex"), BaseColor, 0}, {TEXT("Iris"), IrisTexture, 0}, {TEXT("VeinTex"), VeinsTexture, 0},
+				{TEXT("Tint"), Tint, 0}, {TEXT("IrisColour"), IrisColour, 0}, {TEXT("Amount"), IrisAmount, 0}, {TEXT("Pupil"), Pupil, 0},
+				{TEXT("Veins"), Veins, 0}, {TEXT("Limbus"), Limbus, 0}, {TEXT("Corner"), Corner, 0}, {TEXT("PatternAmount"), Pattern, 0}},
+			-600, -300);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Colour, TEXT(""), MP_BaseColor);
+
+		auto* Normal = Custom(TEXT("EyeCornea"), CMOT_Float3, EyeCommon + TEXT("return N;"),
+			{{TEXT("UV"), Coord, 0}, {TEXT("Bulge"), Bulge, 0}}, -600, 100);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Normal, TEXT(""), MP_Normal);
+
+		// Under the wet film: the iris soft, the sclera a little smoother; the film itself glass-smooth.
+		auto* Rough = Custom(TEXT("EyeRoughness"), CMOT_Float1,
+			TEXT("float rr = length(Geo.xy);\n"
+			"return lerp(0.3, 0.55, (1.0 - smoothstep(0.97, 1.05, rr)) * (1.0 - smoothstep(1.0, 1.07, Geo.z)));"),
+			{{TEXT("Geo"), Geo, 0}}, -600, 250);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Rough, TEXT(""), MP_Roughness);
-		auto* Specular = Cast<UMaterialExpressionScalarParameter>(Make(UMaterialExpressionScalarParameter::StaticClass(), -50, 250));
-		Specular->ParameterName = TEXT("Specular");
-		Specular->DefaultValue = 0.7f;
+		auto* Specular = Scalar(TEXT("Specular"), 0.35f, 900);
 		UMaterialEditingLibrary::ConnectMaterialProperty(Specular, TEXT(""), MP_Specular);
+		auto* Coat = Scalar(TEXT("Coat"), 1.0f, 1000);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Coat, TEXT(""), MP_CustomData0);
+		auto* CoatRough = Scalar(TEXT("CoatRoughness"), 0.03f, 1100);
+		UMaterialEditingLibrary::ConnectMaterialProperty(CoatRough, TEXT(""), MP_CustomData1);
+		// Soft occlusion in the corners and under the lids, where the eyelids hide the sky.
+		auto* Occlusion = Custom(TEXT("EyeOcclusion"), CMOT_Float1,
+			TEXT("float2 c = UV.x < 0.5 ? float2(0.293, 0.713) : float2(0.707, 0.297);\n"
+			"return 1.0 - 0.6 * Corner * smoothstep(0.5, 1.0, length((UV - c) / 0.28));"),
+			{{TEXT("UV"), Coord, 0}, {TEXT("Corner"), Corner, 0}}, -600, 400);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Occlusion, TEXT(""), MP_AmbientOcclusion);
+		// Cut out where the texture is clear (the cornea's own area).
+		auto* Mask = Custom(TEXT("EyeMask"), CMOT_Float1, TEXT("return Texture2DSample(Tex, TexSampler, UV).a;"),
+			{{TEXT("UV"), Coord, 0}, {TEXT("Tex"), BaseColor, 0}}, -600, 550);
+		UMaterialEditingLibrary::ConnectMaterialProperty(Mask, TEXT(""), MP_OpacityMask);
 		Material->PostEditChange();
 		MhSave(Material);
 		return Material;

@@ -2,6 +2,14 @@
 
 Updated 2026-11-28.
 
+MetaHuman-style eyes and finer skin (sneed, 2026-11-28; Unreal editor only, `docs/design/makehuman.md` "Eyes" and
+"Skin realism"): the eye material bends each view ray through a **bulging cornea** down to a deep **iris plane**, so the
+iris sits inside the eye and shifts with the view, uses **MetaHuman's iris pattern and sclera veins**, a dark limbal
+ring, shading towards the lids and corners and a **clear-coat wet film**; the creator's eye colour, strength and the
+Drow's red work as before. Skin gets a second pore layer (hides the tiling) and **pore cavities** that dim the shine and
+darken the colour slightly. Applies with the makehuman-bodies art step on the next update. Not yet checked on the PC.
+Scanned skin projection is its own thread; tear-line and eye-shadow meshes are in BACKLOG.
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then
