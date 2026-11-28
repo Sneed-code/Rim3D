@@ -337,6 +337,22 @@
       "from": 0.1,
       "to": 1.6,
       "hitSeconds": 0.63
+    },
+    {
+      "defName": "Motion_SS_HeavyDown",
+      "kind": "Attack",
+      "anim": "Mixamo/MeleeAxe/A_ProMeleeAxeStandingMeleeAttackDownward",
+      "from": 0.1,
+      "to": 1.9,
+      "hitSeconds": 0.85
+    },
+    {
+      "defName": "Motion_SS_Leap",
+      "kind": "Attack",
+      "anim": "Mixamo/SwordandShield/A_ProSwordAndShieldSwordAndShieldAttack",
+      "from": 0.0,
+      "to": 2.3,
+      "hitSeconds": 1.25
     }
   ]
 }

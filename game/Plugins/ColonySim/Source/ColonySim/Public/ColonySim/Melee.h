@@ -112,6 +112,9 @@ struct Melee {
     int64_t counterUntil = 0;       // a heavy press before this step is a guard counter
     bool guardStun = false;         // stunUntil is a block's stun: the guard may stay up
     int64_t rollEndsAt = 0;         // the step its last roll ends (an attack right after is a rolling attack)
+    // The opening after a chain (sneed 2026-11-28, melee section 9): once an attack's recovery runs out with no next blow
+    // pressed, the attacker stays committed until this step: no attack, roll or guard (a press is kept for after).
+    int64_t openUntil = 0;
 };
 
 // A press of the attack buttons (MeleeCommand), Elden Ring style.
@@ -142,6 +145,15 @@ struct MeleeFinisher {
     float standOff = 0.6f;
     bool kneel = false;
     float bend = 25.0f;
+    // Two blows at the downed (sneed 2026-11-28): a hack that injures, and an impale for the blow that will kill. A hack
+    // finisher names its impale in `lethal` (a MeleeRules finishers key): when that impale's blow would take the downed
+    // body's torso to 0 it plays instead. An impale (`impale`) goes into the torso, through the chest, and kills; its blow
+    // is `damage` times the weapon's. `drawWeapon`: the whole body plays the clip, but Unreal drives the weapon along its
+    // `move`'s drawn path (point first into the chest) with the hand kept on it.
+    std::string lethal;
+    bool impale = false;
+    bool drawWeapon = false;
+    float damage = 1.0f;
 };
 
 // The numbers (MeleeRules in data/defs/Rules/MeleeRules.json). Ours and sneed's: RimWorld's hit and dodge
@@ -361,6 +373,15 @@ public:
     // When in its clip finisher `finisher`'s blow lands (clip seconds from the clip's start): its clipHitSeconds, else the
     // clip's own hitSeconds. 0 if it plays no clip.
     float finisherClipHit(int finisher) const;
+    // Whether Unreal drives the weapon along finisher `finisher`'s drawn path: a finisher with no clip, or one marked
+    // `drawWeapon` (the impale: the body plays its clip, the blade goes into the chest along the path).
+    bool finisherDrawsWeapon(int finisher) const;
+    // Whether `pawn`'s impale (its weapon's lethal finisher) would kill the downed `target`: the blow, as the impale
+    // strikes it, takes the target's torso to 0 (sneed 2026-11-28: "the impale is when it's calculated the final attack
+    // kills them").
+    bool impaleKills(Entity pawn, Entity target) const;
+    // Still committed after an attack chain ended (the opening, SoulsRules openingSteps).
+    bool inOpening(Entity pawn) const;
     // The swing under way (or the last one) uses a strong tool: one whose power is MeleeRules `strongPowerShare`
     // of its set's mean or more (a longsword's cut against its point). Unreal plays a heavy blow for it (AN1).
     bool strongSwing(Entity pawn) const;
@@ -453,6 +474,7 @@ public:
     uint64_t blocks() const { return blocks_; }
     uint64_t armBlocks() const { return armBlocks_; }  // weapon blows taken on a bare forearm held up
     uint64_t guardBreaks() const { return guardBreaks_; }
+    uint64_t impales() const { return impales_; }  // impales struck at the downed (sneed 2026-11-28)
     uint64_t rolls() const { return rolls_; }
     uint64_t footworks() const { return footworks_; }
 
@@ -474,11 +496,13 @@ private:
         std::vector<DefId> attackClips;  // MotionClips of its style that are short enough
         std::vector<DefId> lowAttackClips;  // the same for blows at a body on the ground (MeleeRules lowAttacks)
         int finisher = 0;                // 1 + its MeleeRules finishers index (0: none): its blow at a body on the ground
+        int finisherLethal = 0;          // 1 + the index of that finisher's impale (its `lethal`), 0 none
         float lunge = 0.0f;              // the least any of them steps forward by its blow (a man's metres)
         int moveset = -1;                // its SoulsRules moveset (index), or -1
     };
 
     const ToolSet* toolsOf(Entity pawn, bool& weapon, bool fists = false) const;
+    uint8_t impaleTool(const ToolSet& set) const;  // the tool an impale strikes with (its stab, else the hardest-hitting)
     // Souls (Souls.cpp).
     const SoulsMoveset* movesetOf(Entity pawn) const;
     bool soulsLowTarget(Entity pawn, Entity target, bool player) const;
@@ -535,6 +559,7 @@ private:
     uint64_t blocks_ = 0;
     uint64_t armBlocks_ = 0;
     uint64_t guardBreaks_ = 0;
+    uint64_t impales_ = 0;
     uint64_t rolls_ = 0;
     uint64_t footworks_ = 0;
 };

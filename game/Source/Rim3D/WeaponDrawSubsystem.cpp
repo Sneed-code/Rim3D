@@ -29,6 +29,7 @@
 #include "SimSubsystem.h"
 #include "VisualMesh.h"
 
+#include "ColonySim/BodyMotion.h"
 #include "ColonySim/Clock.h"
 #include "ColonySim/Combat.h"
 #include "ColonySim/Commands.h"
@@ -890,9 +891,10 @@ void UWeaponDrawSubsystem::UpdatePawn(ASimPawnActor& Actor, const colony::ThingV
 		FTransform WeaponPlaced;
 		// A finisher holds the weapon at its place whatever the stance clip or a recent float fix says: its own path
 		// puts the weapon on the body with both hands on it.
-		// (A finisher that plays a whole-body clip, sneed 2026-11-22, holds the weapon in the hand like any clip swing.)
+		// (A finisher that plays a whole-body clip, sneed 2026-11-22, holds the weapon in the hand like any clip swing,
+		// unless it draws its weapon: the impale, sneed 2026-11-28, drives the blade into the chest along its path.)
 		const colony::Sim* FinisherSim = BridgeSource.Get() ? BridgeSource.Get()->GetSim() : nullptr;
-		const bool bFinisherNow = View.meleeFinisher != 0 && !IsGun(Def) && !(FinisherSim && FinisherSim->melee().finisherPlaysClip(View.meleeFinisher));
+		const bool bFinisherNow = View.meleeFinisher != 0 && !IsGun(Def) && FinisherSim && FinisherSim->melee().finisherDrawsWeapon(View.meleeFinisher);
 		if (bControlled && bPinSlot)
 		{
 			PinFailReason = TEXT("");
@@ -1157,7 +1159,7 @@ bool UWeaponDrawSubsystem::PinWeapon(ASimPawnActor& Actor, const colony::ThingVi
 	// tumbling body to the weapon, then snapped back as the clip ended, sneed 2026-11-24).
 	const bool bRideClip = bFullBodyClip && !bClipSwing && !bFinisher && Mesh->GetBoneIndex(TEXT("neck_01")) != INDEX_NONE;
 	Pawn.ClipRide = FMath::FInterpConstantTo(Pawn.ClipRide, bRideClip && Pawn.bWeaponInNeck ? 1.0f : 0.0f, FrameDelta, 8.0f);
-	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || (bFullBodyClip && !bRideClip) ? 1.0f : 0.0f, FrameDelta, 8.0f);
+	Pawn.HandFree = FMath::FInterpConstantTo(Pawn.HandFree, bClipSwing || (bFullBodyClip && !bRideClip && !bFinisher) ? 1.0f : 0.0f, FrameDelta, 8.0f);
 	Pawn.SwingBlend = FMath::FInterpConstantTo(Pawn.SwingBlend, bWeaponSwing ? 1.0f : 0.0f, FrameDelta, 10.0f);
 
 	// The anchors in the world from this frame's pose: between the shoulder joints, or the head; the body's facing.
@@ -1453,9 +1455,19 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	}
 	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim()->melee().rules().finishers;
 	const size_t Index = static_cast<size_t>(View.meleeFinisher) - 1;
-	if (Index >= Finishers.size() || Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher))
+	if (Index >= Finishers.size() || !Bridge->GetSim()->melee().finisherDrawsWeapon(View.meleeFinisher))
 	{
 		return false;  // a whole-body clip plays it (sneed 2026-11-22): the weapon follows the hand, nothing drawn by hand
+	}
+	// An impale (sneed 2026-11-28) plays its whole-body clip and draws the blade along the move's path: the path's own
+	// blow (its first key reaching the body) is laid on the clip's, and only the move's bone (the chest) is struck.
+	const bool bImpale = Finishers[Index].impale;
+	float HitShare = -1.0f;
+	if (Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher))
+	{
+		const colony::MotionClip* FinisherClip = Bridge->GetSim()->combat().motion().clip(Finishers[Index].clip);
+		HitShare = FinisherClip && FinisherClip->seconds > 0.0f
+			? FMath::Clamp(Bridge->GetSim()->melee().finisherClipHit(View.meleeFinisher) / FinisherClip->seconds, 0.05f, 0.95f) : -1.0f;
 	}
 	const FString MoveName = UTF8_TO_TCHAR(Finishers[Index].move.c_str());
 	const FWeaponFinisherMove* Move = WeaponFinisherMoves().FindByPredicate([&](const FWeaponFinisherMove& M) { return MoveName == M.Name; });
@@ -1490,7 +1502,11 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 				continue;
 			}
 			const FVector At = TargetMesh->GetSocketLocation(Bone);
-			// The move's own bone wins unless another is 15 cm nearer.
+			// The move's own bone wins unless another is 15 cm nearer; an impale strikes only its own (the chest's centre).
+			if (bImpale && Bone != Own)
+			{
+				continue;
+			}
 			const double Distance = FVector::Dist(At, From) + (Bone == Own ? -15.0 : 0.0);
 			if (Distance < Best)
 			{
@@ -1513,7 +1529,21 @@ bool UWeaponDrawSubsystem::FinisherPose(const ASimPawnActor& Actor, const colony
 	}
 	const FVector U = FVector::UpVector;
 	const FVector R = FVector::CrossProduct(U, F);
-	const float T = FMath::Clamp(View.meleeFinisherT, 0.0f, 1.0f);
+	float T = FMath::Clamp(View.meleeFinisherT, 0.0f, 1.0f);
+	if (HitShare > 0.0f)
+	{
+		// The path's blow key (the first that puts the point into the body) lands when the clip's blow does.
+		float PathHit = 0.6f;
+		for (const FWeaponFinisherKey& Key : Move->Keys)
+		{
+			if (Key.Point.Z < 0.0f)
+			{
+				PathHit = Key.T;
+				break;
+			}
+		}
+		T = T < HitShare ? T / HitShare * PathHit : PathHit + (T - HitShare) / FMath::Max(0.05f, 1.0f - HitShare) * (1.0f - PathHit);
+	}
 	FVector Point;
 	FVector Dir;
 	WeaponFinisherAt(*Move, T, Point, Dir);
@@ -1665,7 +1695,15 @@ void UWeaponDrawSubsystem::UpdateStance(ASimPawnActor& Actor, const colony::Thin
 	float Bend = View.carryingPawn != colony::kNoEntity && !View.downed && !View.dead ? WeaponCarryBend : 0.0f;
 	// Through a finisher: bent over the body on the ground, most at the blow (sneed 2026-11-20).
 	const std::vector<colony::MeleeFinisher>& Finishers = Bridge->GetSim() ? Bridge->GetSim()->melee().rules().finishers : std::vector<colony::MeleeFinisher>{};
-	if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed &&
+	if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed && Bridge->GetSim() &&
+		Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher) && Bridge->GetSim()->melee().finisherDrawsWeapon(View.meleeFinisher))
+	{
+		// An impale's clip bends the body itself; only the reach's own bend over the chest goes on top.
+		const float T = View.meleeFinisherT;
+		const float In = MeleePose::EaseInOut(FMath::Clamp(T / 0.2f, 0.0f, 1.0f)) * (1.0f - MeleePose::EaseInOut(FMath::Clamp((T - 0.86f) / 0.14f, 0.0f, 1.0f)));
+		Bend = FMath::Max(Bend, Pawn.FinisherReachBend * In);
+	}
+	else if (View.meleeFinisher != 0 && static_cast<size_t>(View.meleeFinisher) <= Finishers.size() && !View.downed &&
 		!(Bridge->GetSim() && Bridge->GetSim()->melee().finisherPlaysClip(View.meleeFinisher)))
 	{
 		const colony::MeleeFinisher& F = Finishers[static_cast<size_t>(View.meleeFinisher) - 1];

@@ -115,6 +115,10 @@ struct SoulsRules {
     float cancelShare = 0.55f;        // a roll, a step or a raised guard can cut it short from here on
     int comboResetSteps = 12;         // the combo starts over this long after an attack ended
     int rollAttackSteps = 15;         // an attack this soon after a roll is a rolling attack
+    // The opening (sneed 2026-11-28: "fast attacks and quick follow ups, but a slight delay after you stop attacking that
+    // gives an opening"): when an attack's recovery runs out and no next blow was pressed, the attacker is still
+    // committed this many steps (no attack, roll or guard).
+    int openingSteps = 10;
     // Charging a heavy (holding the button): it holds at chargeShare of its wind-up, for up to maxChargeSteps; held
     // at least minChargeSteps it is a charged heavy.
     float chargeShare = 0.55f;

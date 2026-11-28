@@ -78,7 +78,8 @@
     "finishers": {
       "Melee_Spear": {"move": "Spear", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.8, "hitSeconds": 0.9, "standOff": 1.1, "clipSlack": 0.6, "clipHitSeconds": 0.72, "kneel": false, "bend": 20},
       "Club": {"move": "Club", "clip": "Motion_Club_Downward", "seconds": 1.7, "hitSeconds": 0.8, "standOff": 0.9, "clipSlack": 0.6, "clipHitSeconds": 0.6, "kneel": true, "bend": 25},
-      "OneHand": {"move": "Sword", "clip": "Motion_OneHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 0.95, "clipSlack": 0.6, "clipHitSeconds": 0.68, "kneel": true, "bend": 30},
+      "OneHand": {"move": "Sword", "clip": "Motion_OneHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 0.95, "clipSlack": 0.6, "clipHitSeconds": 0.68, "kneel": true, "bend": 30, "lethal": "OneHandImpale"},
+      "OneHandImpale": {"move": "Sword", "clip": "Motion_SS_HeavyDown", "seconds": 2.1, "hitSeconds": 0.95, "standOff": 0.7, "clipSlack": 0.6, "clipHitSeconds": 0.75, "kneel": false, "bend": 30, "impale": true, "drawWeapon": true, "damage": 2.0},
       "TwoHand": {"move": "Sword", "clip": "Motion_TwoHand_Hack_Low", "seconds": 1.9, "hitSeconds": 0.8, "standOff": 0.85, "clipSlack": 0.6, "clipHitSeconds": 0.72, "kneel": false, "bend": 40},
       "Melee_Knife": {"move": "Knife", "clip": "Motion_Knife_Kneel", "seconds": 1.6, "hitSeconds": 0.9, "standOff": 0.85, "clipSlack": 0.5, "clipHitSeconds": 0.95, "kneel": true, "bend": 60}
     },

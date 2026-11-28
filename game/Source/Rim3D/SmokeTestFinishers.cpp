@@ -75,6 +75,8 @@ namespace
 		float ShortAtStrike = 0.0f;
 		FString PinAtStrike;
 		FString PinAtStart;
+		uint64 ImpalesAtStart = 0;  // the sim's impale count when the phase began (sneed 2026-11-28)
+		float WoundAt = -1.0f;      // the last cut to the torso (the impale phase wears it down till the blow would kill)
 
 		// The Tab run.
 		FVector LastBody = FVector::ZeroVector;
@@ -167,6 +169,7 @@ namespace
 		const char* Def;
 		const char* Move;
 		bool bKneels;
+		bool bImpale = false;  // wear the torso down first: the blow is the impale, through the chest (sneed 2026-11-28)
 	};
 }
 
@@ -305,6 +308,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		{TEXT("finisher_spear"), "Melee_Spear", "Spear", false},
 		{TEXT("finisher_club"), "Melee_Club", "Club", true},
 		{TEXT("finisher_gladius"), "Melee_Gladius", "Sword", true},
+		{TEXT("finisher_gladius_impale"), "Melee_Gladius", "Sword", false, true},
 		{TEXT("finisher_longsword"), "Melee_Longsword", "Sword", false},
 		{TEXT("finisher_knife"), "Melee_Knife", "Knife", true},
 	};
@@ -332,6 +336,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			State->FramesAtStart = Weapons()->GetFinisherFrames();
 			State->FixesAtStart = Weapons()->GetFloatFixes();
 			State->HitsAtStart = Weapons()->GetHitsSeen();
+			State->ImpalesAtStart = Sim->melee().impales();
 			Weapons()->TakeWorstGripGap();
 		}, 0.6f, 8.0f, [=, this]()
 		{
@@ -380,7 +385,23 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				State->bSent = false;  // refused (out of reach, still recovering): walk in and try again
 			}
-			if (!State->bSent && State->DownedAt >= 0.0f && PhaseTime > State->DownedAt + 1.0f)
+			// The impale phase: cuts to the torso until the sword's impale would end it.
+			bool bWorn = true;
+			if (Weapon.bImpale && Victim->downed && !Victim->dead && !State->bSent && !Sim->melee().impaleKills(State->Me, State->Enemy))
+			{
+				bWorn = false;
+				if (PhaseTime - State->WoundAt > 0.2f)
+				{
+					colony::DamagePawnCommand Cut;
+					Cut.pawn = State->Enemy;
+					Cut.damageType = "Cut";
+					Cut.amount = 3.0f;
+					Cut.part = Sim->combat().hitboxPart(State->Enemy, "torso");
+					B->Submit(Cut);
+					State->WoundAt = PhaseTime;
+				}
+			}
+			if (!State->bSent && bWorn && State->DownedAt >= 0.0f && PhaseTime > State->DownedAt + 1.0f)
 			{
 				// Face it, step up to it if the blows knocked it away, then the attack: a finisher, since it is on the ground.
 				AProtagonistPawn* Body = Prot()->GetBody();
@@ -425,7 +446,21 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 				}
 				State->bKneelSeen |= Actor->GetFinisherKneels() > State->KneelsAtStart && T > 0.2f && T < 0.8f;
 			}
-			if (T > 0.5f && T < 0.75f)
+			// (An impale's blow is where its clip's is: around that.)
+			float TipFrom = 0.5f;
+			float TipTo = 0.75f;
+			if (const colony::Sim* TipSim = Bridge()->GetSim(); TipSim && MeView && MeView->meleeFinisher != 0 &&
+				TipSim->melee().finisherPlaysClip(MeView->meleeFinisher) && TipSim->melee().finisherDrawsWeapon(MeView->meleeFinisher))
+			{
+				const colony::MeleeFinisher& TipRule = TipSim->melee().rules().finishers[static_cast<size_t>(MeView->meleeFinisher - 1)];
+				if (const colony::MotionClip* TipClip = TipSim->combat().motion().clip(TipRule.clip); TipClip && TipClip->seconds > 0.0f)
+				{
+					const float Hit = TipSim->melee().finisherClipHit(MeView->meleeFinisher) / TipClip->seconds;
+					TipFrom = Hit - 0.03f;
+					TipTo = Hit + 0.15f;
+				}
+			}
+			if (T > TipFrom && T < TipTo)
 			{
 				State->BestTipGap = FMath::Min(State->BestTipGap, static_cast<float>(FVector::Dist(Weapons()->GetFinisherTip(), Weapons()->GetFinisherGoal())));
 			}
@@ -533,6 +568,28 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			const colony::Sim* ClipSim = Bridge()->GetSim();
 			const int ClipFinisher = ClipSim ? ClipSim->melee().finisherFor(ClipSim->defs().idOf("Things", Weapon.Def)) : 0;
 			const bool bClip = ClipSim && ClipSim->melee().finisherPlaysClip(ClipFinisher);
+			if (Weapon.bImpale)
+			{
+				const uint64 Impales = ClipSim ? ClipSim->melee().impales() - State->ImpalesAtStart : 0;
+				Notes.Add(FString::Printf(TEXT("%s: impale, %llu impales, the point %.0f cm from the chest's centre at its closest"), *PhaseName, Impales, State->BestTipGap));
+				if (Impales == 0)
+				{
+					Fail(PhaseName + TEXT(": the killing blow was not the impale"));
+				}
+				if (State->MaxT < 0.8f)
+				{
+					Fail(FString::Printf(TEXT("%s: the impale did not play through (T %.2f)"), *PhaseName, State->MaxT));
+				}
+				if (State->BestTipGap > 15.0f)
+				{
+					Fail(FString::Printf(TEXT("%s: the blade never went into the chest (closest %.0f cm)"), *PhaseName, State->BestTipGap));
+				}
+				if (Fixes > 0)
+				{
+					Fail(FString::Printf(TEXT("%s: the weapon floated off the hand %d times"), *PhaseName, Fixes));
+				}
+				return;
+			}
 			Notes.Add(FString::Printf(TEXT("%s: %s"), *PhaseName, bClip ? TEXT("whole-body clip finisher") : TEXT("hand-drawn finisher")));
 			if (bClip)
 			{
