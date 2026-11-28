@@ -1590,6 +1590,216 @@
     0.708,
     0.252
    ]
+  },
+  "Door": {
+   "kind": "building",
+   "def": "Door",
+   "size": [
+    0.74,
+    0.1,
+    2.15
+   ]
+  },
+  "Stairs": {
+   "kind": "building",
+   "def": "Stairs",
+   "size": [
+    1.0,
+    3.0,
+    3.886
+   ]
+  },
+  "Ladder": {
+   "kind": "building",
+   "def": "Ladder",
+   "size": [
+    0.823,
+    1.19,
+    3.019
+   ]
+  },
+  "MealSimple": {
+   "kind": "item",
+   "def": "MealSimple",
+   "size": [
+    0.2,
+    0.205,
+    0.088
+   ]
+  },
+  "MealFine": {
+   "kind": "item",
+   "def": "MealFine",
+   "size": [
+    0.28,
+    0.28,
+    0.079
+   ]
+  },
+  "WoodLog": {
+   "kind": "item",
+   "def": "WoodLog",
+   "size": [
+    0.563,
+    0.298,
+    0.221
+   ]
+  },
+  "RawBerries": {
+   "kind": "item",
+   "def": "RawBerries",
+   "size": [
+    0.122,
+    0.113,
+    0.053
+   ]
+  },
+  "MilkRaw": {
+   "kind": "item",
+   "def": "MilkRaw",
+   "size": [
+    0.116,
+    0.096,
+    0.142
+   ]
+  },
+  "Meat": {
+   "kind": "item",
+   "def": "MeatBase",
+   "size": [
+    0.26,
+    0.201,
+    0.083
+   ]
+  },
+  "Leather": {
+   "kind": "item",
+   "def": "LeatherBase",
+   "size": [
+    0.403,
+    0.26,
+    0.138
+   ]
+  },
+  "Wool": {
+   "kind": "item",
+   "def": "WoolBase",
+   "size": [
+    0.34,
+    0.26,
+    0.2
+   ]
+  },
+  "EggSmall": {
+   "kind": "item",
+   "def": "EggChickenUnfertilized",
+   "size": [
+    0.15,
+    0.13,
+    0.059
+   ]
+  },
+  "EggLarge": {
+   "kind": "item",
+   "def": "EggGooseUnfertilized",
+   "size": [
+    0.2,
+    0.168,
+    0.114
+   ]
+  },
+  "ChunkGranite": {
+   "kind": "item",
+   "def": "ChunkGranite",
+   "size": [
+    0.6,
+    0.5,
+    0.32
+   ]
+  },
+  "BlocksGranite": {
+   "kind": "item",
+   "def": "BlocksGranite",
+   "size": [
+    0.407,
+    0.315,
+    0.197
+   ]
+  },
+  "ChunkLimestone": {
+   "kind": "item",
+   "def": "ChunkLimestone",
+   "size": [
+    0.6,
+    0.48,
+    0.3
+   ]
+  },
+  "BlocksLimestone": {
+   "kind": "item",
+   "def": "BlocksLimestone",
+   "size": [
+    0.411,
+    0.316,
+    0.193
+   ]
+  },
+  "ChunkSandstone": {
+   "kind": "item",
+   "def": "ChunkSandstone",
+   "size": [
+    0.62,
+    0.5,
+    0.3
+   ]
+  },
+  "BlocksSandstone": {
+   "kind": "item",
+   "def": "BlocksSandstone",
+   "size": [
+    0.418,
+    0.318,
+    0.202
+   ]
+  },
+  "ChunkSlate": {
+   "kind": "item",
+   "def": "ChunkSlate",
+   "size": [
+    0.62,
+    0.46,
+    0.26
+   ]
+  },
+  "BlocksSlate": {
+   "kind": "item",
+   "def": "BlocksSlate",
+   "size": [
+    0.413,
+    0.305,
+    0.203
+   ]
+  },
+  "ChunkMarble": {
+   "kind": "item",
+   "def": "ChunkMarble",
+   "size": [
+    0.58,
+    0.5,
+    0.32
+   ]
+  },
+  "BlocksMarble": {
+   "kind": "item",
+   "def": "BlocksMarble",
+   "size": [
+    0.411,
+    0.313,
+    0.195
+   ]
+  },
+  "Gun_HeavyChargeBlaster": {
+   "kind": "gun"
   }
  },
  "buildings": [
@@ -3705,6 +3915,259 @@
     "fbx": "assets/raw/codex/CraftingSpot/CraftingSpot_Game.fbx",
     "combine": true,
     "slotTextureDir": "assets/raw/codex/CraftingSpot",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Door",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Door",
+    "fbx": "assets/raw/codex/Door/Door_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Door",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Stairs",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Stairs",
+    "fbx": "assets/raw/codex/Stairs/Stairs_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Stairs",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "Ladder",
+   "credit": "Neon (our own model, Gemini 4 Neon)",
+   "art": {
+    "name": "Ladder",
+    "fbx": "assets/raw/codex/Ladder/Ladder_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Ladder",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MealSimple",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MealSimple",
+    "fbx": "assets/raw/codex/MealSimple/MealSimple_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MealSimple",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MealFine",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MealFine",
+    "fbx": "assets/raw/codex/MealFine/MealFine_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MealFine",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoodLog",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "WoodLog",
+    "fbx": "assets/raw/codex/WoodLog/WoodLog_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/WoodLog",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "RawBerries",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "RawBerries",
+    "fbx": "assets/raw/codex/RawBerries/RawBerries_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/RawBerries",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MilkRaw",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "MilkRaw",
+    "fbx": "assets/raw/codex/MilkRaw/MilkRaw_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/MilkRaw",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "MeatBase",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Meat",
+    "fbx": "assets/raw/codex/Meat/Meat_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Meat",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "LeatherBase",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Leather",
+    "fbx": "assets/raw/codex/Leather/Leather_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Leather",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "WoolBase",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "Wool",
+    "fbx": "assets/raw/codex/Wool/Wool_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/Wool",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "EggChickenUnfertilized",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "EggSmall",
+    "fbx": "assets/raw/codex/EggSmall/EggSmall_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/EggSmall",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "EggGooseUnfertilized",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "EggLarge",
+    "fbx": "assets/raw/codex/EggLarge/EggLarge_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/EggLarge",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChunkGranite",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChunkGranite",
+    "fbx": "assets/raw/codex/ChunkGranite/ChunkGranite_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChunkGranite",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BlocksGranite",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BlocksGranite",
+    "fbx": "assets/raw/codex/BlocksGranite/BlocksGranite_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BlocksGranite",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChunkLimestone",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChunkLimestone",
+    "fbx": "assets/raw/codex/ChunkLimestone/ChunkLimestone_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChunkLimestone",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BlocksLimestone",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BlocksLimestone",
+    "fbx": "assets/raw/codex/BlocksLimestone/BlocksLimestone_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BlocksLimestone",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChunkSandstone",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChunkSandstone",
+    "fbx": "assets/raw/codex/ChunkSandstone/ChunkSandstone_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChunkSandstone",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BlocksSandstone",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BlocksSandstone",
+    "fbx": "assets/raw/codex/BlocksSandstone/BlocksSandstone_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BlocksSandstone",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChunkSlate",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChunkSlate",
+    "fbx": "assets/raw/codex/ChunkSlate/ChunkSlate_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChunkSlate",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BlocksSlate",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BlocksSlate",
+    "fbx": "assets/raw/codex/BlocksSlate/BlocksSlate_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BlocksSlate",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "ChunkMarble",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "ChunkMarble",
+    "fbx": "assets/raw/codex/ChunkMarble/ChunkMarble_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/ChunkMarble",
+    "normalOpenGL": true
+   }
+  },
+  {
+   "def": "BlocksMarble",
+   "credit": "Codex (our own model)",
+   "art": {
+    "name": "BlocksMarble",
+    "fbx": "assets/raw/codex/BlocksMarble/BlocksMarble_Game.fbx",
+    "combine": true,
+    "slotTextureDir": "assets/raw/codex/BlocksMarble",
     "normalOpenGL": true
    }
   }

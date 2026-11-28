@@ -35,6 +35,7 @@
   "parent": "BlocksBase",
   "label": "granite blocks",
   "visual": {
+   "mesh": "/Game/Rim3D/Generated/Buildings/BlocksGranite/SM_BlocksGranite.SM_BlocksGranite",
    "surface": "granite",
    "tint": [
     0.9,
@@ -60,6 +61,7 @@
   "parent": "BlocksBase",
   "label": "limestone blocks",
   "visual": {
+   "mesh": "/Game/Rim3D/Generated/Buildings/BlocksLimestone/SM_BlocksLimestone.SM_BlocksLimestone",
    "surface": "limestone",
    "tint": [
     1,
@@ -85,6 +87,7 @@
   "parent": "BlocksBase",
   "label": "sandstone blocks",
   "visual": {
+   "mesh": "/Game/Rim3D/Generated/Buildings/BlocksSandstone/SM_BlocksSandstone.SM_BlocksSandstone",
    "surface": "sandstone",
    "tint": [
     1,
@@ -110,6 +113,7 @@
   "parent": "BlocksBase",
   "label": "slate blocks",
   "visual": {
+   "mesh": "/Game/Rim3D/Generated/Buildings/BlocksSlate/SM_BlocksSlate.SM_BlocksSlate",
    "surface": "slate",
    "tint": [
     0.6,
@@ -135,6 +139,7 @@
   "parent": "BlocksBase",
   "label": "marble blocks",
   "visual": {
+   "mesh": "/Game/Rim3D/Generated/Buildings/BlocksMarble/SM_BlocksMarble.SM_BlocksMarble",
    "surface": "marble",
    "tint": [
     1,
