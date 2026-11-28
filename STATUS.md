@@ -15,6 +15,8 @@ chest's centre (always the torso, always kills). Two clips measured in Blender f
 25 cm, so the impale now uses the overhead downward chop from closer in; Tab-run slowing to 3 m/s in that smoke is in
 code this change doesn't touch).
 
+Models batch 11 (sneed, 2026-11-28; data only, `assets/codex_art.json`, `assets/guns.json`): 24 more non-living models, all first try. **Neon** (high): a proper sliding **door** leaf (replaces the downloaded roller shutter; the game still draws the frame), **stairs** (twelve 25 cm steps on the sim's exact treads, handrail on one side), a leaning **ladder** and the mechanoids' **heavy charge blaster**. **Codex** (GPT 6.2 Sol; high for food and soft things, medium for stone): a chunk and a block stack for each of the five stones, simple and fine meals, wood, berries, milk, one meat look for every meat, leather, wool, small and large egg clutches. Briefs in `tools/codex_assets/` and `tools/neon_assets/`; the import runs in the codex-models/codex-art/gun-art art steps on the next update.
+
 No AI-made animals (sneed, 2026-11-27, standing rule: never make living things with Neon or Codex; data, art steps and
 Unreal): the 21 Neon creatures from batches 7 to 9 and the two chitinids are gone (art table entries, `codex_art.json`
 prep, briefs), back on their free models: monkey on the chimpanzee, cougar and boar and boomalope on the lioness and
