@@ -195,6 +195,36 @@ sides, a knockdown each way and the get-up, the impale, a light and a heavy jump
   (`UWeaponDrawSubsystem::ImpaleAim`; within about 10 cm of spine_03 in the looks).
 - **The shield**: the steel medium shield is a real CC0 round shield (shields.md "Models").
 
+## Combos, feet, jumps and gore (sneed 2026-11-28, third round)
+
+- **Combos for fast attacks**: "you attack and if you attack again you attack fast after, right after the breadth of
+  the swing, then again for the 3rd". A press during a swing (wind-up included: `earlyPressBreaksChain` false) is kept
+  and the next blow of the chain starts `chainShare` 0.1 into the recovery, just after the blade has gone through.
+  The opening after the chain ends stays.
+- **Attacks don't move you** (moveset `playerStaysPut`, the sword for now): the player's light, heavy, charged, roll and
+  guard-counter attacks carry nobody in and play where the body stands (`BodyMotion.freeFeet`); walking goes on under
+  them and the swing is then drawn on the upper body (`BodyMotionSystem::walkUnder`). Running, jumping and critical
+  attacks still lunge. The AI keeps the whole-body clips.
+- **Jumps**: the jumping heavy has no air time (the grounded downward chop `Motion_SS_HeavyDown`, speed 1.6); the jump
+  attack is the lunging slash (`Motion_SS_Attack3`). The jump goes on until the attack's clip really starts
+  (`ASimPawnActor::MarkJumpAttack`; it was cut at the press, and when the sim held the press back the body dropped with
+  nothing playing), then its height eases down to the clip's feet over at least 0.25 s.
+- **No flicker**: a flinch clip is no longer laid over a clip the sim plays on the whole body (an attack, its own stagger,
+  a get-up); each hit restarted it. The hit's lean still shows.
+- **Downward blows don't move the body** (impale, hack, ground stab, any melee blow at a body that is down, dead or knocked
+  down): no ragdoll jolt and no death throw; the ragdoll is pinned (`ASimPawnActor::PinRagdoll`, motion damped for 1.5 s)
+  and the blood sprays at full force with a second spray up out of the wound.
+- **Blows land on the drawn body**: corpses are steered over their sim spot like the downed (not ones a blast threw), so
+  reach is measured to the body you see; a blow at a ragdoll is drawn at its chest or head bone
+  (`GetRagdollStrikePoint`); and every blow at a body on the ground or reeling turns the blade about its grip so its line
+  runs through the drawn chest as it lands (`UWeaponDrawSubsystem::ImpaleAim`, which did only the standing impale).
+- **Sounds**: a light blade (knife, gladius, the remnant reaper's arms) in flesh or plain clothes plays one of sneed's
+  files at random (`Hit_Blade_Flesh`, folder `game/Content/Rim3D/Sounds/cues/Hit_Blade_Flesh`, swap files freely; a weapon
+  joins with `visual.sound.flesh`). The colony alarm siren is gone (it was the "school drill ring" in the duel, whose
+  practice foe counts as a raid), and the game has no music: no tracks or stingers, and the samples' level ambient sound
+  actor (Starter Content `BackgroundMix`, with `Starter_Music01`) is removed at load.
+- **Keys**: the mouse wheel click rolls; T locks on.
+
 ## Still to do
 
 - The spear's flicking and jarring (the old swing path; it gets a moveset next).

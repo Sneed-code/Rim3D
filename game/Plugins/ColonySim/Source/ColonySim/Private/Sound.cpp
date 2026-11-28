@@ -188,6 +188,11 @@ std::string soundMeleeCue(const DefDatabase& db, const Event& e) {
     const Def* weaponDef = soundDef(db, e.def);
     const std::string slot = weaponDef != nullptr ? soundSlot(*weaponDef, "hit") : std::string();
     if (flesh) {
+        // A light blade (sneed 2026-11-28: one-handed swords, knives, dual blades, scythe arms) has its own set for
+        // flesh and plain clothes (its `flesh` cue, one of the folder's files at random).
+        if (weaponDef != nullptr) {
+            if (std::string own = soundSlot(*weaponDef, "flesh"); !own.empty() && db.find("SoundCues", own) != nullptr) return own;
+        }
         // A blade sounds like itself in flesh (its `hit`: Flesh_Cut, Flesh_Stab); a blunt blow by what it is made of.
         if (!slot.empty() && slot != "Flesh_Blunt") return slot;
         if (!weapon.empty() && !slot.empty()) return "Hit_" + weapon + "_Flesh";
@@ -579,13 +584,8 @@ void soundForEvent(const DefDatabase& db, const Event& e, const SoundDefOf& defO
             out.push_back(p);
             break;
         }
-        case EventType::AlarmChanged: {
-            SoundPlay p;
-            p.cue = "Alarm";
-            p.mode = e.message.rfind("on", 0) == 0 ? SoundMode::LoopStart : SoundMode::LoopStop;
-            out.push_back(p);
-            break;
-        }
+        // The colony alarm makes no sound (sneed 2026-11-28: the looping siren was the "school drill alarm" heard in the
+        // sword and shield range, where the practice foe counts as a raid). The alarm still drafts and the music knows.
         default: break;
     }
 }

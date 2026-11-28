@@ -380,6 +380,13 @@ void BodyMotionSystem::setLayers(Entity pawn, bool upper, bool freeFeet) {
     }
 }
 
+void BodyMotionSystem::walkUnder(Entity pawn) {
+    entt::registry& reg = things_.registry();
+    if (BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr; m != nullptr && m->freeFeet) {
+        m->upper = true;
+    }
+}
+
 bool BodyMotionSystem::holdsBody(Entity pawn) const {
     const entt::registry& reg = things_.registry();
     const BodyMotion* m = reg.valid(pawn) ? reg.try_get<BodyMotion>(pawn) : nullptr;

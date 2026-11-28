@@ -254,7 +254,14 @@ void UWeaponDrawSubsystem::OnMeleeHit(const colony::Event& Event)
 		Attacker->MeleeHitMoment();
 	}
 
-	const FVector At = WeaponSimToWorld(*Bridge, Event.x, Event.y, Event.z);
+	FVector At = WeaponSimToWorld(*Bridge, Event.x, Event.y, Event.z);
+	// A body lying limp (the downed, a corpse): the blow lands on its drawn chest or head, wherever the ragdoll lies, not
+	// at the sim's spot by its feet (sneed 2026-11-28: "the hit point seems to be where their feet were").
+	if (FVector Strike; Victim && Victim->GetRagdollStrikePoint(Victim->IsHeadPart(*Bridge, Event.part), Strike))
+	{
+		At = Strike;
+		++RagdollStrikes;
+	}
 	FVector Direction = Attacker ? At - Attacker->GetActorLocation() : FVector::ForwardVector;
 	Direction.Z = 0.0;
 	Direction = Direction.GetSafeNormal();
@@ -1877,10 +1884,27 @@ FTransform UWeaponDrawSubsystem::ImpaleAim(const colony::ThingView& View, FPawnW
 	const colony::Sim* Sim = Bridge ? Bridge->GetSim() : nullptr;
 	float Want = 0.0f;
 	FVector Chest = FVector::ZeroVector;
-	const bool bImpale = View.meleeKind == static_cast<uint8>(colony::SoulsAttack::Riposte) && View.meleePhase != colony::MeleePhase::Ready;
+	// The impale, and (sneed 2026-11-28: "make the attacks actually strike the body, even a forward thrusting kneeling
+	// strike") every blow at a body on the ground, kneeling or knocked down: a ground stab, a finisher, any swing whose
+	// target lies. The blade is turned about the grip so its line runs through the drawn chest as the blow lands.
+	const bool bRiposte = View.meleeKind == static_cast<uint8>(colony::SoulsAttack::Riposte);
+	// (A finisher that draws the blade itself, the downed impale, has FinisherPose.)
+	const bool bOwnFinisher = View.meleeFinisher != 0 && !(Sim && Sim->melee().finisherDrawsWeapon(View.meleeFinisher));
+	bool bLowBlow = View.meleeKind == static_cast<uint8>(colony::SoulsAttack::GroundStab) || bOwnFinisher;
+	if (!bLowBlow && Bridge && View.meleeTarget != colony::kNoEntity)
+	{
+		const colony::ThingView* Struck = Bridge->GetCurrentSnapshot().find(View.meleeTarget);
+		bLowBlow = Struck && (Struck->downed || Struck->dead || Struck->knockedDown);
+	}
+	const bool bImpale = (bRiposte || bLowBlow) && (View.meleePhase != colony::MeleePhase::Ready || bOwnFinisher) &&
+		!(View.meleeFinisher != 0 && !bOwnFinisher);
 	if (!bImpale)
 	{
 		Pawn.ImpaleTarget = colony::kNoEntity;
+	}
+	else if (View.meleeFinisher != 0 && View.meleeFinisherTarget != colony::kNoEntity)
+	{
+		Pawn.ImpaleTarget = View.meleeFinisherTarget;
 	}
 	else if (View.meleeTarget != colony::kNoEntity)
 	{
@@ -1899,7 +1923,8 @@ FTransform UWeaponDrawSubsystem::ImpaleAim(const colony::ThingView& View, FPawnW
 			const float T = View.motionTime;
 			const float Rate = FMath::Max(0.05f, View.motionRate);
 			const colony::SoulsRules& Rules = Sim->melee().souls();
-			const float Held = static_cast<float>(Rules.criticalHoldSteps + Rules.impaleHoldSteps) / static_cast<float>(colony::kStepsPerRealSecondAt1x) * Rate;
+			const float Held = bRiposte ? static_cast<float>(Rules.criticalHoldSteps + Rules.impaleHoldSteps) / static_cast<float>(colony::kStepsPerRealSecondAt1x) * Rate
+										: 0.15f * Rate;  // a low blow: in, a moment in the body, out
 			const float In = MeleePose::EaseInOut(FMath::Clamp((T - 0.45f * Hit) / (0.55f * Hit), 0.0f, 1.0f));
 			const float Out = 1.0f - MeleePose::EaseInOut(FMath::Clamp((T - Hit - Held) / (0.3f * Rate), 0.0f, 1.0f));
 			Want = In * Out;
@@ -2129,13 +2154,15 @@ bool UWeaponDrawSubsystem::SoulsSwing(bool bHeavy, bool bHold)
 	Order.heavy = bHeavy;
 	Order.hold = bHeavy && bHold;
 	Order.running = Body && Body->IsSprinting() && Speed > WeaponSoulsRunSpeed;
-	// A jump attack: the jump's own arc gives way to the attack's clip, which carries the body from here.
+	// A jump attack: the jump's own arc gives way to the attack's clip, which carries the body from here. The jump goes
+	// on until that clip really starts (it took the jump down at the press before, and if the sim held the press back the
+	// body dropped to the ground with nothing playing: sneed 2026-11-28, "the jumping attack isn't working, it's jarry").
 	const USimPawnSubsystem* Pawns = GetWorld()->GetSubsystem<USimPawnSubsystem>();
 	ASimPawnActor* Actor = Pawns ? Pawns->FindPawn(Me->id) : nullptr;
 	if (Actor && Actor->IsJumping())
 	{
 		Order.jumping = true;
-		Actor->CancelJump();
+		Actor->MarkJumpAttack();
 	}
 	Bridge->Submit(Order);
 	LastOrderStep = Bridge->GetGameSeconds();

@@ -33,7 +33,7 @@ namespace
 			{ERim3DAction::WalkSlow, TEXT("WalkSlow"), TEXT("Walk slowly (hold)"), TEXT("Moving"), EKeys::LeftControl},
 			{ERim3DAction::Sprint, TEXT("Sprint"), TEXT("Sprint (on / off)"), TEXT("Moving"), EKeys::LeftShift},
 			{ERim3DAction::Jump, TEXT("Jump"), TEXT("Jump"), TEXT("Moving"), EKeys::SpaceBar},
-			{ERim3DAction::RollDash, TEXT("RollDash"), TEXT("Roll / dash"), TEXT("Moving"), EKeys::T},
+			{ERim3DAction::RollDash, TEXT("RollDash"), TEXT("Roll / dash"), TEXT("Moving"), EKeys::MiddleMouseButton},
 			{ERim3DAction::Interact, TEXT("Interact"), TEXT("Interact: pick up, work, use"), TEXT("Hands"), EKeys::F},
 			{ERim3DAction::PutDown, TEXT("PutDown"), TEXT("Put down what you hold"), TEXT("Hands"), EKeys::X},
 			{ERim3DAction::EquipWeapon, TEXT("EquipWeapon"), TEXT("Equip the nearest weapon"), TEXT("Hands"), EKeys::E},
@@ -47,7 +47,7 @@ namespace
 			{ERim3DAction::Attack, TEXT("Attack"), TEXT("Shoot / swing (hold for a heavy swing)"), TEXT("Fighting"), EKeys::LeftMouseButton},
 			{ERim3DAction::AimBlock, TEXT("AimBlock"), TEXT("Aim / block (hold)"), TEXT("Fighting"), EKeys::RightMouseButton},
 			{ERim3DAction::FocusNextTarget, TEXT("FocusNextTarget"), TEXT("Focus the next enemy"), TEXT("Fighting"), EKeys::Tab},
-			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("Lock on / let go"), TEXT("Fighting"), EKeys::MiddleMouseButton},
+			{ERim3DAction::EndFocus, TEXT("EndFocus"), TEXT("Lock on / let go"), TEXT("Fighting"), EKeys::T},
 			{ERim3DAction::SleepHere, TEXT("SleepHere"), TEXT("Sleep here"), TEXT("Other"), EKeys::N},
 			{ERim3DAction::Unstuck, TEXT("Unstuck"), TEXT("Unstuck (stand still 5 s)"), TEXT("Other"), EKeys::F12},
 			{ERim3DAction::Inventory, TEXT("Inventory"), TEXT("Inventory"), TEXT("Other"), EKeys::I},
@@ -93,6 +93,18 @@ namespace
 						Current.Add(Row.Action, Key);
 					}
 				}
+			}
+			// sneed 2026-11-28: the mouse wheel click rolls and T locks on (they were the other way round). A Reset all
+			// saved the old pair; that pair goes back to the new defaults, any other choice is kept.
+			const FKey* OldRoll = Current.Find(ERim3DAction::RollDash);
+			const FKey* OldFocus = Current.Find(ERim3DAction::EndFocus);
+			if (OldRoll && OldFocus && *OldRoll == EKeys::T && *OldFocus == EKeys::MiddleMouseButton)
+			{
+				Current.Remove(ERim3DAction::RollDash);
+				Current.Remove(ERim3DAction::EndFocus);
+				GConfig->RemoveKey(KeyBindSection, TEXT("RollDash"), GGameUserSettingsIni);
+				GConfig->RemoveKey(KeyBindSection, TEXT("EndFocus"), GGameUserSettingsIni);
+				GConfig->Flush(false, GGameUserSettingsIni);
 			}
 		}
 		return Current;

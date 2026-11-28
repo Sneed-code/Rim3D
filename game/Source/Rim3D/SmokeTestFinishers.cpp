@@ -85,6 +85,7 @@ namespace
 		TArray<colony::Entity> FocusSeen;
 		int32 TabsSent = 0;
 		bool bKeysDown = false;
+		bool bSprintReleased = false;
 		float FastestBeforeTab = 0.0f;
 		float SlowestAfterTab = 1.0e9f;
 		bool bFocusLeftViewport = false;
@@ -647,6 +648,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		State->bHaveLast = false;
 		State->TabsSent = 0;
 		State->bKeysDown = false;
+		State->bSprintReleased = false;
 		State->SlowestAfterTab = 1.0e9f;
 		State->bFocusLeftViewport = false;
 		State->FastestBeforeTab = 0.0f;
@@ -709,7 +711,16 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 		{
 			State->bKeysDown = true;
 			FinSmokeKey(Rim3DKeys::Get(ERim3DAction::MoveForward), true, false);
-			FinSmokeKey(Rim3DKeys::Get(ERim3DAction::Sprint), true, true);
+			// Held, and the toggle on: locked on with a melee weapon only a held sprint key sprints (lock-on.md, #487),
+			// unlocked the toggle does.
+			FinSmokeKey(Rim3DKeys::Get(ERim3DAction::Sprint), true, false);
+			AProtagonistPawn::SetSprintToggle(true);
+		}
+		// Let go of sprint before the phase ends, so the key's release is seen (and the toggle reset after it).
+		if (At >= 3.6f && State->bKeysDown && !State->bSprintReleased)
+		{
+			State->bSprintReleased = true;
+			FinSmokeKey(Rim3DKeys::Get(ERim3DAction::Sprint), false, true);
 		}
 		for (int32 Press = 0; Press < 3; ++Press)
 		{
@@ -739,7 +750,7 @@ void USmokeTestSubsystem::BuildFinishersPhases()
 			{
 				State->FastestBeforeTab = FMath::Max(State->FastestBeforeTab, Speed);
 			}
-			if (State->TabsSent > 0 && At > 1.0f)
+			if (State->TabsSent > 0 && At > 1.0f && !State->bSprintReleased)
 			{
 				// Averaged over the last 8 frames, so one slow frame doesn't count.
 				float Sum = 0.0f;
