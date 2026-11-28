@@ -91,6 +91,18 @@ def main():
             if not (reuse and os.path.exists(variant["dump_vertices"])):
                 run(variant, work, name)
             morphs[name] = variant["dump_vertices"]
+        # The scalp follows the hair (scalp_follow.py, sneed 2026-11-28): each morph's change on the hair-covered scalp
+        # becomes the scale per axis and move the game moves the hair by, so no slider mix shows skin through the hair.
+        if base.get("scalp_follow", True):
+            plain = dict(cfg, dump_vertices=os.path.join(work, "_base.npz"), skin_normal=False)
+            plain.pop("morphs", None)
+            plain["out"] = os.path.join(work, "_base", "_base.fbx")
+            if not (reuse and os.path.exists(plain["dump_vertices"])):
+                run(plain, work, "_base")
+            sys.path.insert(0, HERE)
+            import scalp_follow
+            morphs = scalp_follow.follow_npz(plain["dump_vertices"], morphs, os.path.join(work, "_scalp"),
+                                             log=lambda *a: print("  ", *a))
         for name, change in sided.items():
             morphs[name] = {"path": morph_file(morphs[change["from"]]), "side": change["side"]}
         cfg["morphs"] = morphs

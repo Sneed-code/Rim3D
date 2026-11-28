@@ -48,7 +48,7 @@
     {
       "name": "creator-bodies",
       "what": "Build the character creator's bodies in Blender",
-      "inputs": ["tools/makehuman/mh_creator.py", "tools/makehuman/mh_common.py", "tools/makehuman/mh_export.py", "tools/makehuman/markings.py", "tools/makehuman/skin_4k.py", "tools/makehuman/creator.json"],
+      "inputs": ["tools/makehuman/mh_creator.py", "tools/makehuman/mh_common.py", "tools/makehuman/mh_export.py", "tools/makehuman/markings.py", "tools/makehuman/skin_4k.py", "tools/makehuman/scalp_follow.py", "tools/makehuman/creator.json"],
       "needs": ["blender"],
       "makes": ["game/Saved/MakeHuman/CreatorFemale/CreatorFemale.fbx", "game/Saved/MakeHuman/CreatorMale/CreatorMale.fbx"],
       "run": [{"python": ["tools/makehuman/mh_creator.py"]}]
