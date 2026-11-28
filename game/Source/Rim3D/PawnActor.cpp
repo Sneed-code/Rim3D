@@ -490,7 +490,10 @@ void ASimPawnActor::UpdateFromSim(const USimSubsystem& Bridge, const colony::Thi
 	UpdateLiveFace(Now, DeltaTime * Speed);
 	if (bRagdoll)
 	{
-		if (Now.downed && !Now.dead)
+		// Downed and dead alike (sneed 2026-11-28: a blow at a corpse came down where its feet had been): the body lies
+		// over the sim's spot, so the chest drawn is the chest the sim strikes and measures reach to. A body a blast threw
+		// is left where it flew.
+		if ((Now.downed || Now.dead) && !bRagdollBlastThrown)
 		{
 			UpdateRagdollTether(Location, DeltaTime);
 		}
@@ -837,6 +840,16 @@ void ASimPawnActor::CancelJump()
 	JumpLandLegsLeft = 0.0f;
 }
 
+void ASimPawnActor::MarkJumpAttack()
+{
+	if (!IsJumping())
+	{
+		return;
+	}
+	bJumpAttackPending = true;
+	JumpAttackWait = 0.0f;
+}
+
 void ASimPawnActor::JumpFitsClip(const UAnimSequence& Clip, float From, float Rate)
 {
 	// sneed 2026-11-28 ("the jump attack is bad"): the attack's clip has its own jump in it (the mid-air slam starts with
@@ -859,6 +872,16 @@ void ASimPawnActor::JumpFitsClip(const UAnimSequence& Clip, float From, float Ra
 	}
 	const double Scale = Mesh->GetComponentScale().Z;
 	const double Now = GetJumpHeight();
+	// Still in the air (MarkJumpAttack kept the jump going until this clip came): the jump ends here, its height taken
+	// over below, so nothing drops in the frames between the press and the clip.
+	if (IsJumping())
+	{
+		JumpAge = -1.0f;
+		bJumpFalling = false;
+	}
+	// The attack's clip has its own landing: the jump's (started early so its feet meet the ground) gives way to it.
+	bJumpLanding = false;
+	JumpLandLegsLeft = 0.0f;
 	// Where the hips are drawn now, and where the clip's first frame would draw them with no height added.
 	const double HipsNow = Mesh->GetSocketLocation(TEXT("pelvis")).Z;
 	const double HipsClip = Mesh->GetComponentLocation().Z - Now + PawnMotionBoneAt(Clip, Pelvis, From).Z * Scale;
@@ -876,7 +899,9 @@ void ASimPawnActor::JumpFitsClip(const UAnimSequence& Clip, float From, float Ra
 	}
 	JumpCancelHeight = static_cast<float>(HipsNow - HipsClip);
 	JumpCancelAge = 0.0f;
-	JumpCancelSeconds = FMath::Max(0.12f, static_cast<float>(Land - From) / FMath::Max(0.05f, Rate));
+	// At least a quarter of a second: a grounded clip (the jumping heavy's chop, the jump attack's lunge) lands the body
+	// at once, and 45 cm in 0.12 s read as a drop, not a landing (sneed 2026-11-28: "make the landing natural").
+	JumpCancelSeconds = FMath::Max(0.25f, static_cast<float>(Land - From) / FMath::Max(0.05f, Rate));
 	bJumpEasedToLanding = true;
 	++JumpsFitted;
 	LastJumpFit = FString::Printf(TEXT("%s from %.2f: height %.0f cm eased out over %.2f s"), *Clip.GetName(), From, JumpCancelHeight, JumpCancelSeconds);
@@ -957,6 +982,14 @@ void ASimPawnActor::AdvanceJump(float GameDelta)
 	}
 	USimPawnAnimInstance* Anim = GetAnim();
 	JumpAge += GameDelta;
+	if (bJumpAttackPending)
+	{
+		JumpAttackWait += GameDelta;
+		if (JumpAttackWait > 0.35f)
+		{
+			bJumpAttackPending = false;  // the sim took no attack: an ordinary jump to the end
+		}
+	}
 	const float Left = JumpTotalSeconds() - JumpAge;
 	// The touch-down's lead: the landing clip's own time from its start to its feet on the ground, at least a short blend.
 	const float Lead = FMath::Clamp(JumpLandContact, 0.05f, 0.3f);
@@ -2785,6 +2818,13 @@ ESimPawnZone ASimPawnActor::ZoneOfSimZone(const USimSubsystem& Bridge, int32 Sim
 	return ESimPawnZone::Torso;
 }
 
+bool ASimPawnActor::IsHeadPart(const USimSubsystem& Bridge, int32 Part) const
+{
+	const colony::Sim* Sim = Bridge.GetSim();
+	const int32 SimZone = Sim && Part >= 0 ? Sim->health().partZone(Thing, Part) : -1;
+	return SimZone >= 0 && ZoneOfSimZone(Bridge, SimZone) == ESimPawnZone::Head;
+}
+
 void ASimPawnActor::KickZone(const USimSubsystem& Bridge, int32 Part, const FVector& AtWorld, const FVector& DirectionWorld, float Strength)
 {
 	USimPawnAnimInstance* Anim = GetAnim();
@@ -3260,6 +3300,8 @@ void ASimPawnActor::StartRagdoll(const FVector& Impulse)
 	}
 	SpawnRagdollFloor();
 	bRagdoll = true;
+	bRagdollBlastThrown = false;
+	RagdollPinSeconds = 0.0f;
 	++RagdollsStarted;
 	ReactionAge = kHitReactionSeconds;
 	LeanDegrees = 0.0f;
@@ -3381,12 +3423,54 @@ void ASimPawnActor::StopRagdoll()
 	}
 }
 
+void ASimPawnActor::PinRagdoll(float Seconds)
+{
+	if (!bRagdoll || !Body || !Body->IsSimulatingPhysics())
+	{
+		return;
+	}
+	RagdollPinSeconds = FMath::Max(RagdollPinSeconds, Seconds);
+	++RagdollPins;
+}
+
+bool ASimPawnActor::GetRagdollStrikePoint(bool bHead, FVector& OutLocation) const
+{
+	if (!bRagdoll || !Body)
+	{
+		return false;
+	}
+	const USkeletalMeshComponent* Mesh = Body;
+	for (const TCHAR* Bone : {bHead ? TEXT("head") : TEXT("spine_03"), TEXT("spine_02"), TEXT("pelvis")})
+	{
+		if (Mesh->GetBoneIndex(Bone) != INDEX_NONE)
+		{
+			OutLocation = Mesh->GetSocketLocation(Bone);
+			return true;
+		}
+	}
+	return false;
+}
+
 void ASimPawnActor::UpdateRagdollRest(float DeltaTime)
 {
 	RagdollSeconds += DeltaTime;
 	if (!Body || !Body->IsSimulatingPhysics())
 	{
 		return;
+	}
+	// Pinned under a blade (PinRagdoll): every part's motion damped to nothing within about a tenth of a second.
+	if (RagdollPinSeconds > 0.0f)
+	{
+		RagdollPinSeconds -= DeltaTime;
+		const float Keep = FMath::Exp(-25.0f * DeltaTime);
+		for (FBodyInstance* Instance : Body->Bodies)
+		{
+			if (Instance && Instance->IsInstanceSimulatingPhysics())
+			{
+				Instance->SetLinearVelocity(Instance->GetUnrealWorldVelocity() * Keep, false);
+				Instance->SetAngularVelocityInRadians(Instance->GetUnrealWorldAngularVelocityInRadians() * Keep, false);
+			}
+		}
 	}
 	// Settled: every part slower than 6 cm/s for half a second, at least 2 s after the fall. Then it sleeps, and the small
 	// jitter of limbs resting on each other and the ground (the twitching) stops. A blast or a hit wakes it again.
@@ -3488,6 +3572,7 @@ void ASimPawnActor::PushRagdoll(const FVector& Centre, float RadiusCm, float Spe
 	Body->WakeAllRigidBodies();
 	// A velocity change, so a light and a heavy body fly alike; falling off linearly to the edge, lifted a little.
 	Body->AddRadialImpulse(Centre - FVector(0.0, 0.0, 40.0), RadiusCm, SpeedCmPerSecond, ERadialImpulseFalloff::RIF_Linear, true);
+	bRagdollBlastThrown = true;
 	BlastFlesh(Centre, SpeedCmPerSecond * 0.5f, RadiusCm);
 	RagdollSeconds = 0.0f;
 	RagdollStillSeconds = 0.0f;

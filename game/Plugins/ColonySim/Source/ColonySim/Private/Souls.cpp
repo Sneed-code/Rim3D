@@ -42,6 +42,12 @@ bool soulsHeavyChain(SoulsAttack kind) {
            kind == SoulsAttack::JumpHeavy || kind == SoulsAttack::GuardCounter;
 }
 
+// The attacks made standing where you are (a moveset's playerStaysPut leaves these where the body is and the feet free).
+bool soulsGroundedKind(SoulsAttack kind) {
+    return kind == SoulsAttack::Light || kind == SoulsAttack::Heavy || kind == SoulsAttack::Charged || kind == SoulsAttack::Roll ||
+           kind == SoulsAttack::GuardCounter;
+}
+
 size_t soulsIndex(SoulsAttack kind) { return std::min(static_cast<size_t>(kind), kSoulsAttackKinds - 1); }
 
 // What a shield or a weapon is made of, for the sound of a blow on it (Melee.cpp's meleeSoundStruck).
@@ -205,6 +211,7 @@ void soulsReadRules(const DefDatabase& defs, SoulsRules& r) {
         ms.weaponPoise = static_cast<float>(def->number((base + "weaponPoise").c_str(), ms.weaponPoise));
         ms.lungeOnly = def->flag((base + "lungeOnly").c_str(), ms.lungeOnly);
         ms.unarmed = def->flag((base + "unarmed").c_str(), ms.unarmed);
+        ms.playerStaysPut = def->flag((base + "playerStaysPut").c_str(), ms.playerStaysPut);
         for (size_t i = 0; i < kSoulsAttackKinds; ++i) {
             const std::string clips = base + "clips." + kSoulsKindNames[i];
             for (size_t j = 0; j < def->count(clips.c_str()); ++j) {
@@ -722,8 +729,11 @@ bool MeleeSystem::soulsStart(Entity pawn, Entity target, bool player, SoulsAttac
     if (clip != nullptr && combat_.motion().hasClips(pawn)) {
         const Posture& posture = reg.get<Posture>(pawn);
         combat_.motion().playTimed(pawn, clip->def, hitSeconds, windup, posture.facingX, posture.facingY, false);
-        combat_.motion().setLayers(pawn, false, false);  // the whole body: no walking under a sword blow
-        if (target != kNoEntity) {
+        // The whole body: no walking under a sword blow; or, the player's grounded attack with a moveset that stays put,
+        // the clip where the body stands and the feet the player's (walking hands it to the upper body).
+        const bool staysPut = player && ms->playerStaysPut && soulsGroundedKind(kind);
+        combat_.motion().setLayers(pawn, false, staysPut);
+        if (target != kNoEntity && !staysPut) {
             // Line up the blow (Elden Ring's tracking): stand idealInset inside the reach when it lands.
             const Position& a = reg.get<Position>(pawn);
             const Position& b = reg.get<Position>(target);

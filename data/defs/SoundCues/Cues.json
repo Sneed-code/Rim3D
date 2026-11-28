@@ -15,6 +15,7 @@
   {"defName": "Impact_Rock", "label": "bullet on rock", "loop": false, "volume": 0.6, "range": 120, "priority": 2, "near": 2, "tone": {"wave": "square", "hz": 2400, "seconds": 0.05}},
   {"defName": "Flesh_Bullet", "label": "bullet hits flesh", "loop": false, "volume": 1.0, "range": 70, "priority": 0, "near": 5, "tone": {"wave": "noise", "hz": 200, "seconds": 0.1}},
   {"defName": "Flesh_Cut", "label": "blade cuts flesh", "loop": false, "volume": 1.0, "range": 70, "priority": 0, "near": 5, "tone": {"wave": "noise", "hz": 600, "seconds": 0.1}},
+  {"defName": "Hit_Blade_Flesh", "label": "light blade into flesh (sneed's sounds: game/Content/Rim3D/Sounds/cues/Hit_Blade_Flesh, one at random)", "loop": false, "volume": 1.0, "range": 70, "priority": 0, "near": 5, "tone": {"wave": "noise", "hz": 600, "seconds": 0.1}},
   {"defName": "Flesh_Stab", "label": "stab into flesh", "loop": false, "volume": 1.0, "range": 70, "priority": 0, "near": 5, "tone": {"wave": "noise", "hz": 300, "seconds": 0.1}},
   {"defName": "Flesh_Blunt", "label": "blunt blow on flesh", "loop": false, "volume": 1.0, "range": 70, "priority": 0, "near": 5, "tone": {"wave": "sine", "hz": 110, "seconds": 0.1}},
   {"defName": "Flesh_Bite", "label": "bite", "loop": false, "volume": 0.85, "range": 60, "priority": 1, "near": 4, "tone": {"wave": "noise", "hz": 450, "seconds": 0.1}},

@@ -25,6 +25,18 @@ own colour only on the Drow (they were never tinted: pale for everyone). **Backi
 returns to the real title screen (was the title menu over that colony's bare map). Needs the `creator-bodies`, `hair-grow`
 and following art steps (update-and-play runs them).
 
+Sword and shield, third round (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md` "Combos,
+feet, jumps and gore"): **fast combos** (press during a swing and the next blow follows right after it, three in a row),
+**the player's sword attacks stay put** with the feet free (walk while swinging; running, jump and critical attacks still
+lunge), **jumping heavy** a fast grounded chop with no air time, **jump attack** a lunging slash and the jump carries on
+until the attack's clip starts (no drop), **no flinch flicker** over whole-body clips. **Downward blows** (impale, hack,
+ground stab, anything at a body on the ground) no longer punt it: it is pinned, with heavy blood spray. **Blows land on the
+body you see**: corpses stay over their sim spot like the downed, hit effects go to the ragdoll's chest or head, and the
+blade turns through the chest of a body on the ground. **Sounds**: sneed's six blade-in-flesh sounds play at random for
+knives, gladius and reaper blades (`game/Content/Rim3D/Sounds/cues/Hit_Blade_Flesh`, swap files freely); the colony alarm
+siren (the "school drill ring" in the duel) is gone; no music at all (our tracks, stingers and the Unreal sample level's
+Starter Content music bed). **Mouse wheel click rolls, T locks on.**
+
 Sword and shield made tactical (sneed, 2026-11-28; sim, data, sounds and Unreal; `docs/design/souls-combat.md`,
 `lock-on.md`): **poise** 10 for a person, a light blow takes 2 and a heavy 6; at 0 the fighter is broken for 2 s, then
 can't be broken again for 10 s. **Any press at a broken foe is the impale** (fast, the victim held while it lands, then

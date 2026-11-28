@@ -749,15 +749,27 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					// 2026-11-27, "when I shoot someone esp in the head the body staggers") over legs that keep what they
 					// were doing; the arms stay as they were (no arm thrown up), and the lean goes on top, full for the head.
 					const bool bHeadHit = Actor->GetLastKickZone() == ESimPawnZone::Head;
-					if (HitView && !HitView->downed && !HitView->dead && Actor->PlayHitClip(Dir, HitView->staggeredFor > 0 || bHeadHit))
+					// Not over a clip the sim plays on the whole body (an attack, its own stagger, a get-up): a second clip on
+					// top restarted every hit and the body flickered (sneed 2026-11-28); the lean below still shows the hit.
+					if (HitView && !HitView->downed && !HitView->dead && !Actor->IsInWholeBodyClip() &&
+						Actor->PlayHitClip(Dir, HitView->staggeredFor > 0 || bHeadHit))
 					{
 						++HitClipsPlayed;
 					}
 					Actor->PlayHitReaction(Dir, bHeadHit ? 1.0f : Strength);
 					++HitReactionsPlayed;
+					// A blade going down into a body on the ground (a finisher, an impale, a stab at the downed or a corpse)
+					// leaves it where it lies, pinned under the blow, with far more blood (sneed 2026-11-28: "it punts them
+					// suddenly; they don't move and I'm goring them").
+					const bool bGored = Tracer.Id == colony::kNoEntity && (Actor->IsRagdoll() || (HitView && (HitView->downed || HitView->dead || HitView->knockedDown)));
+					if (bGored)
+					{
+						Actor->PinRagdoll(1.5f);
+						++GoredBlows;
+					}
 					// A body lying limp (a corpse, the knocked out) jolts where it was hit: the struck bone is knocked
 					// along the shot or blow, a little up, and the ragdoll wakes (sneed, 2026-11-22).
-					if (Actor->IsRagdoll())
+					else if (Actor->IsRagdoll())
 					{
 						const float JoltSpeed = FMath::Clamp(Tracer.Amount * FightRagdollHitPerDamage, FightRagdollHitMin, FightRagdollHitMax);
 						Actor->PushRagdollAt(At, (Dir.GetSafeNormal() + FVector::UpVector * 0.35f).GetSafeNormal() * JoltSpeed);
@@ -778,7 +790,20 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					Hit.Victim = Tracer.Target;
 					Hit.Part = Tracer.Part;
 					Hit.Mesh = Actor ? Actor->GetDecalMesh() : nullptr;
+					const bool bGoreSpray = Actor && Tracer.Id == colony::kNoEntity && (Actor->IsRagdoll() || (HitView && (HitView->downed || HitView->dead)));
+					if (bGoreSpray)
+					{
+						Hit.Force = 2.5f;  // the hardest spray there is
+					}
 					Blood->AddHit(Hit);
+					if (bGoreSpray)
+					{
+						// The blade going in and the blood coming back up out of the wound: a second spray up and back.
+						FBloodHit Up = Hit;
+						Up.Direction = (FVector::UpVector * 1.4f - Dir.GetSafeNormal()).GetSafeNormal();
+						Up.Damage = Hit.Damage * 0.6f;
+						Blood->AddHit(Up);
+					}
 				}
 				else if (Actor)
 				{
@@ -786,7 +811,8 @@ void UFightSubsystem::SpawnImpact(const FFightTracer& Tracer)
 					SpawnGroundDecal(FVector(At.X, At.Y, Actor->GetActorLocation().Z), FMath::Clamp(14.0f + Tracer.Amount * 1.2f, 16.0f, 40.0f));
 				}
 			}
-			if (const USimSubsystem* Bridge = BridgeSource.Get())
+			const bool bLyingBlow = Tracer.Id == colony::kNoEntity && HitView && (HitView->downed || HitView->dead || HitView->knockedDown);
+			if (const USimSubsystem* Bridge = BridgeSource.Get(); Bridge && !bLyingBlow)
 			{
 				RecentImpulse.Add(entt::to_integral(Tracer.Target), TPair<FVector, int64>(Dir * FMath::Min(Tracer.Amount * FightImpulsePerDamage, FightImpulseMax), Bridge->GetSteps()));
 			}

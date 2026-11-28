@@ -1945,6 +1945,11 @@ void Sim::applyCommand(const Command& command, uint64_t id) {
                 dy *= kDirectMaxStep / length;
             }
             melee_->orbitMove(move->pawn, dx, dy);  // locked on with melee: sideways walks round the target (lock-on.md)
+            // A swing that leaves the feet free but is drawn on the whole body (a moveset that stays put) goes to the upper
+            // body as soon as the player walks under it.
+            if (dx * dx + dy * dy > 0.005f * 0.005f) {
+                combat_->motion().walkUnder(move->pawn);
+            }
             // Tree trunks are solid (sneed 2026-11-20, docs/design/structure-damage.md): the part of the move into a trunk
             // is taken off, so the body slides round it instead of through.
             if (pos.level == 0) {

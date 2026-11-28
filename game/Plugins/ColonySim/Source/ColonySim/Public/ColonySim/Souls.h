@@ -90,6 +90,10 @@ struct SoulsMoveset {
     // rest. `unarmed`: it is the bare fists' (a person's body, no weapon in hand).
     bool lungeOnly = false;
     bool unarmed = false;
+    // sneed 2026-11-28 ("for this weapon attacks don't move us forward for now, we can move as we want"): the player's
+    // grounded attacks (light, heavy, charged, roll, guard counter) carry nobody in and leave the feet to the keys: the
+    // clip plays where the body stands and walking goes on under it (drawn on the upper body once it walks).
+    bool playerStaysPut = false;
 };
 
 // The numbers (Rules/SoulsRules). Elden Ring's where it has them (as players measured them), sneed's where he set

@@ -14,7 +14,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | Left Ctrl (hold) | walk slowly |
 | Left Shift | **sprint on / off**. It stays on until pressed again, also when you take over another colonist |
 | Space | jump |
-| T | **roll** (third person only since 2026-11-22, `docs/decisions/0012-third-person-only.md`). Left Alt does nothing now |
+| Mouse wheel click | **roll** (sneed 2026-11-28; was T. Third person only since 2026-11-22, `docs/decisions/0012-third-person-only.md`). Left Alt does nothing now |
 | F (hold) | **interact**: pick up, mine, chop, harvest, build, sleep in a bed, and take a weapon lying in reach into your hands. Work reaches two cells; held on, it goes on to the next of the same kind in reach ([handson.md](handson.md)) |
 | X | put down what you hold |
 | E | take the nearest weapon (within 8 m) |
@@ -26,7 +26,7 @@ cancels; "Reset all keys to default" puts them back). Code reads keys only throu
 | left mouse | shoot or swing |
 | right mouse (hold) | aim a gun, or block with a melee weapon or shield |
 | Tab | focus the next enemy (lock-on focus, its own task) |
-| Middle mouse | lock on / let go (lock-on focus; Tab shuffles targets). Unreal's F-key debug views are cleared in DefaultInput.ini |
+| T | lock on / let go (lock-on focus; Tab shuffles targets; was middle mouse until 2026-11-28, when the wheel click became roll). Unreal's F-key debug views are cleared in DefaultInput.ini |
 | N | sleep here at night |
 | I | inventory |
 | B | the build screen: the overseer's bar over this view with Build open, the mouse places plans; B or Esc back ([handson.md](handson.md)) |
