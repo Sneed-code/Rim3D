@@ -381,6 +381,8 @@ namespace
 		TArray<FVector> ScalpPoints;             // cm from the skull centre
 		TArray<FVector> ScalpNormals;
 		TArray<FStrandHairShape> Collision;
+		/** grow_hair.py collision_morphs: per body slider, the shapes it moves and grows (index, grow cm, move cm). */
+		TMap<FName, TArray<TPair<int32, FVector4f>>> CollisionMorphs;
 	};
 
 	/** How a person's sliders move their hair: hair point p (cm from the head bone, the body's axes) goes to p * Scale + Offset. */
@@ -389,6 +391,7 @@ namespace
 		FVector Scale = FVector::OneVector;
 		FVector Offset = FVector::ZeroVector;
 		float LiftMm = 0.0f;  // the largest leftover the lift covers, for the log
+		FVector Apply(const FVector& P) const { return P * Scale + Offset; }
 	};
 
 	const FStrandHairHeadFit& StrandHairHeadFit(const FString& Base)
@@ -501,8 +504,27 @@ namespace
 				}
 			}
 		}
-		UE_LOG(LogTemp, Display, TEXT("Strand hair: %s head fit, skull %s from the head bone, %d head sliders (%d per axis over %d scalp points), %d collision shapes (%d capsules)"),
-			*Base, *HeadFit.SkullFromHead.ToString(), HeadFit.Morphs.Num(), HeadFit.Axes.Num(), HeadFit.ScalpPoints.Num(), HeadFit.Collision.Num(), Capsules);
+		const TSharedPtr<FJsonObject>* CollisionMorphs = nullptr;
+		if (Root->TryGetObjectField(TEXT("collision_morphs"), CollisionMorphs))
+		{
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*CollisionMorphs)->Values)
+			{
+				TArray<TPair<int32, FVector4f>>& Moves = HeadFit.CollisionMorphs.Add(FName(*Entry.Key));
+				for (const TSharedPtr<FJsonValue>& Item : Entry.Value->AsArray())
+				{
+					const TArray<TSharedPtr<FJsonValue>>& V = Item->AsArray();
+					const int32 Index = V.Num() == 5 ? static_cast<int32>(V[0]->AsNumber()) : INDEX_NONE;
+					if (HeadFit.Collision.IsValidIndex(Index))
+					{
+						// x y z: the move (cm), w: the growth (cm).
+						Moves.Add({Index, FVector4f(static_cast<float>(V[2]->AsNumber()), static_cast<float>(V[3]->AsNumber()),
+							static_cast<float>(V[4]->AsNumber()), static_cast<float>(V[1]->AsNumber()))});
+					}
+				}
+			}
+		}
+		UE_LOG(LogTemp, Display, TEXT("Strand hair: %s head fit, skull %s from the head bone, %d head sliders (%d per axis over %d scalp points), %d collision shapes (%d capsules), %d body sliders move them"),
+			*Base, *HeadFit.SkullFromHead.ToString(), HeadFit.Morphs.Num(), HeadFit.Axes.Num(), HeadFit.ScalpPoints.Num(), HeadFit.Collision.Num(), Capsules, HeadFit.CollisionMorphs.Num());
 		return HeadFit;
 	}
 
@@ -571,6 +593,44 @@ namespace
 		return Shape;
 	}
 
+	/** How this person's body sliders move and grow each collision shape (grow_hair.py collision_morphs, added up by morph
+	 *  weight): per shape, x y z the move (cm, the body's axes) and w the growth (cm). Empty when nothing moves. */
+	TArray<FVector4f> StrandHairBodyMovesOf(const USkeletalMeshComponent& Body, const FStrandHairHeadFit& HeadFit)
+	{
+		TArray<FVector4f> Moves;
+		for (const TPair<FName, TArray<TPair<int32, FVector4f>>>& Entry : HeadFit.CollisionMorphs)
+		{
+			const float Weight = Body.GetMorphTarget(Entry.Key);
+			if (FMath::Abs(Weight) < 1e-3f)
+			{
+				continue;
+			}
+			if (Moves.IsEmpty())
+			{
+				Moves.SetNumZeroed(HeadFit.Collision.Num());
+			}
+			for (const TPair<int32, FVector4f>& Move : Entry.Value)
+			{
+				Moves[Move.Key] += Move.Value * Weight;
+			}
+		}
+		return Moves;
+	}
+
+	/** One number for those moves, to the millimetre. */
+	uint32 StrandHairBodyMovesKey(const TArray<FVector4f>& Moves)
+	{
+		uint32 Key = 0xb0d1u + static_cast<uint32>(Moves.Num());
+		for (const FVector4f& Move : Moves)
+		{
+			for (const float Value : {Move.X, Move.Y, Move.Z, Move.W})
+			{
+				Key = HashCombineFast(Key, GetTypeHash(FMath::RoundToInt32(Value * 10.0f)));
+			}
+		}
+		return Key;
+	}
+
 	/** A garment the body wears (a MakeHuman garment following the body's pose) and how far its material pushes it out. */
 	struct FStrandHairCloth
 	{
@@ -618,8 +678,9 @@ namespace
 		}
 		FString BaseName = Base->GetName();
 		BaseName.RemoveFromStart(TEXT("SK_MH_"));
-		const FStrandHairHeadShape Shape = StrandHairHeadShapeOf(Body, StrandHairHeadFit(BaseName));
-		uint32 Key = 0x4ead0u;
+		const FStrandHairHeadFit& HeadFit = StrandHairHeadFit(BaseName);
+		const FStrandHairHeadShape Shape = StrandHairHeadShapeOf(Body, HeadFit);
+		uint32 Key = StrandHairBodyMovesKey(StrandHairBodyMovesOf(Body, HeadFit));  // the body sliders move the collision too
 		for (int32 a = 0; a < 3; ++a)
 		{
 			Key = HashCombineFast(Key, GetTypeHash(FMath::RoundToInt32(Shape.Scale[a] * 500.0)));
@@ -810,7 +871,7 @@ namespace
 	}
 
 	UPhysicsAsset* StrandHairFittedCollision(const USkeletalMesh& Mesh, const FStrandHairHeadFit& HeadFit, const TArray<FStrandHairCloth>& Cloth, float BreastScale,
-		const FStrandHairHeadShape& HeadShape)
+		const FStrandHairHeadShape& HeadShape, const TArray<FVector4f>& BodyMoves)
 	{
 		const float GapCm = FMath::Clamp(GStrandHairClothGap.GetValueOnGameThread(), -1.0f, 2.0f);
 		const bool bClothes = GStrandHairClothes.GetValueOnGameThread() != 0 && !Cloth.IsEmpty();
@@ -821,6 +882,7 @@ namespace
 		uint32 Key = HashCombineFast(HashCombineFast(GetTypeHash(&Mesh), GetTypeHash(FMath::RoundToInt32(BreastScale * 20.0f))),
 			bClothes ? HashCombineFast(StrandHairClothKey(Cloth), GetTypeHash(FMath::RoundToInt32(GapCm * 100.0f))) : 0u);
 		Key = HashCombineFast(Key, HashCombineFast(GetTypeHash(HeadScaleKey), GetTypeHash(HeadMoveKey)));
+		Key = HashCombineFast(Key, StrandHairBodyMovesKey(BodyMoves));
 		static TMap<uint32, TWeakObjectPtr<UPhysicsAsset>> Made;
 		if (const TWeakObjectPtr<UPhysicsAsset>* Known = Made.Find(Key))
 		{
@@ -855,8 +917,9 @@ namespace
 		int32 Placed = 0;
 		int32 Grown = 0;
 		float GrownCm = 0.0f;
-		for (const FStrandHairShape& Shape : HeadFit.Collision)
+		for (int32 ShapeIndex = 0; ShapeIndex < HeadFit.Collision.Num(); ++ShapeIndex)
 		{
+			const FStrandHairShape& Shape = HeadFit.Collision[ShapeIndex];
 			if (Placed >= StrandHairMaxShapes)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("STRANDHAIR collision for %s: more than %d shapes, the rest left out"), *Mesh.GetName(), StrandHairMaxShapes);
@@ -865,8 +928,11 @@ namespace
 			const bool bHeadShape = Shape.Part == TEXT("head");
 			// The head's spheres move and shrink with the person's head sliders (a narrower head would otherwise leave
 			// them standing out through the scalp, a wider one sunk deep under it).
-			const FVector A = Head.GetLocation() + (bHeadShape ? Shape.A * HeadShape.Scale + HeadShape.Offset : Shape.A);
-			const FVector B = Head.GetLocation() + (bHeadShape ? Shape.B * HeadShape.Scale + HeadShape.Offset : Shape.B);
+			// The body's move with the person's body sliders (broad shoulders, a heavy build: grow_hair.py collision_morphs).
+			const FVector4f BodyMove = !bHeadShape && BodyMoves.IsValidIndex(ShapeIndex) ? BodyMoves[ShapeIndex] : FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+			const FVector Moved(BodyMove.X, BodyMove.Y, BodyMove.Z);
+			const FVector A = Head.GetLocation() + (bHeadShape ? HeadShape.Apply(Shape.A) : Shape.A + Moved);
+			const FVector B = Head.GetLocation() + (bHeadShape ? HeadShape.Apply(Shape.B) : Shape.B + Moved);
 			const FVector Centre = (A + B) * 0.5;
 			// head, neck, torso, or a bone by name (clavicles and arms: sneed 2026-11-22, hair through the arms as they move);
 			// a named bone the skeleton lacks falls back to the spine.
@@ -892,7 +958,7 @@ namespace
 			}
 			// grow_hair.py's radius puts the shape's surface on the barrier (just outside the skin); the groom adds each
 			// guide's own thickness (StrandHairGuideRadiusCm), so the physics shape is that much smaller.
-			const float Barrier = bHeadShape ? Shape.Radius * static_cast<float>(HeadShape.Scale.GetMin()) : Shape.Radius;
+			const float Barrier = bHeadShape ? Shape.Radius * static_cast<float>(HeadShape.Scale.GetMin()) : FMath::Max(0.5f, Shape.Radius + BodyMove.W);
 			float Radius = Barrier;
 			if (bClothes && ClothRead > 0 && !bHeadShape && !Shape.Out.IsNearlyZero())
 			{
@@ -1006,7 +1072,8 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 		{
 			// This person's bust against the base's: the breast sliders (BreastsLarge grows it, BreastsSmall shrinks it).
 			const float BreastScale = FMath::Clamp(1.0f + 0.45f * Body->GetMorphTarget(TEXT("BreastsLarge")) - 0.3f * Body->GetMorphTarget(TEXT("BreastsSmall")), 0.6f, 1.6f);
-			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit, StrandHairWornCloth(*Body), BreastScale, HeadShape);
+			Collision = StrandHairFittedCollision(*Body->GetSkeletalMeshAsset(), HeadFit, StrandHairWornCloth(*Body), BreastScale, HeadShape,
+				StrandHairBodyMovesOf(*Body, HeadFit));
 		}
 		static int32 Logged = 0;
 		if ((HeadShape.LiftMm > 0.0f || !HeadShape.Scale.Equals(FVector::OneVector, 1.0e-3)) && Logged < 20)
@@ -1019,6 +1086,22 @@ UGroomComponent* StrandHairAttachGrown(USkeletalMeshComponent* Body, UGroomAsset
 	return StrandHairFit(Body, Groom, FVector::ZeroVector, BaseNeck, bFound, Existing, HeadShape.Scale, HeadShape.Offset, Collision);
 }
 
+float StrandHairMelanin(float Luminance)
+{
+	// The creator's hair colours (CreatorHairPalette, sRGB) by their linear luminance. The old curve (1 - 1.6 sqrt L) gave
+	// every blond no melanin at all, the material's platinum white (sneed 2026-11-28: a dark-skinned blonde came out white).
+	static const FVector2f Points[] = {{0.0f, 1.0f}, {0.015f, 0.88f}, {0.05f, 0.64f}, {0.126f, 0.43f}, {0.42f, 0.2f}, {0.62f, 0.08f}, {0.8f, 0.0f}};
+	const float L = FMath::Max(Luminance, 0.0f);
+	for (int32 i = 1; i < static_cast<int32>(UE_ARRAY_COUNT(Points)); ++i)
+	{
+		if (L <= Points[i].X)
+		{
+			return FMath::Lerp(Points[i - 1].Y, Points[i].Y, (L - Points[i - 1].X) / (Points[i].X - Points[i - 1].X));
+		}
+	}
+	return 0.0f;
+}
+
 void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)
 {
 	if (!Groom)
@@ -1026,8 +1109,7 @@ void StrandHairSetColour(UGroomComponent* Groom, const FLinearColor& Hair)
 		return;
 	}
 	// The MetaHuman hair material is coloured by melanin and redness (as ASimPawnActor does for the MetaHuman grooms).
-	const float Lightness = Hair.GetLuminance();
-	const float Melanin = FMath::Clamp(1.0f - FMath::Sqrt(Lightness) * 1.6f, 0.0f, 1.0f);
+	const float Melanin = StrandHairMelanin(Hair.GetLuminance());
 	const float Redness = FMath::Clamp((Hair.R - Hair.B) / FMath::Max(Hair.R, 0.01f), 0.0f, 1.0f) * 0.8f;
 	Groom->SetScalarParameterValueOnMaterials(TEXT("HairMelanin"), Melanin);
 	Groom->SetScalarParameterValueOnMaterials(TEXT("HairRedness"), Redness);

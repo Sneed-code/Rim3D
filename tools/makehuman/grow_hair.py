@@ -589,6 +589,51 @@ def collision_shapes(body, budget=MAX_COLLISION_SHAPES, target=COLLISION_TARGET,
     return shapes
 
 
+def collision_morphs(body, shapes, keys, reach=0.012, share=85.0):
+    """How each slider moves and grows the body's collision shapes (sneed 2026-11-28: long hair still through the
+    shoulders). The sliders are morphs, which move no bones, so the shapes stayed where the base's skin is while broad
+    shoulders, a heavy or masculine build or the ethnic base shapes moved the skin they guard 1.5 to 7 cm out past
+    them, and resting hair sank that far into the shoulders and back. Per shape, the skin it guards (within `reach` of
+    its surface, neck down to the waist): the slider's average move of that skin moves the shape, and the shape grows by
+    how much further out the skin then lies (the `share` percentile, so a few outliers don't puff it up). The game adds
+    them up by each person's morph weights (StrandHair.cpp). Returns {slider: [[shape index, grow cm, move x, y, z cm]]}
+    in Unreal's axes, keeping only changes over a fifth of a millimetre; the head's shapes follow head_axes instead."""
+    v = body.verts
+    low = body.heights["waist"] - 0.03
+    high = body.skull[2] - 0.5 * body.skull_r
+    region = np.nonzero((v[:, 2] > low) & (v[:, 2] < high))[0]
+    P = v[region]
+
+    def seg_dist(X, a, b):
+        ab = b - a
+        t = np.clip(((X - a) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
+        return np.linalg.norm(X - (a + t[:, None] * ab), axis=1)
+
+    guarded = []
+    for kind, part, a, b, r, out in shapes:
+        guarded.append(np.nonzero(seg_dist(P, a, b) - r < reach)[0] if part != "head" else np.zeros(0, dtype=np.int64))
+    flip = np.array([1.0, -1.0, 1.0])
+    moves = {}
+    for name, kv in keys:
+        if name.startswith("Face_"):
+            continue
+        D = (kv - v)[region]
+        if np.abs(D).max() < 2e-4:
+            continue
+        entries = []
+        for i, ((kind, part, a, b, r, out), idx) in enumerate(zip(shapes, guarded)):
+            if len(idx) < 3:
+                continue
+            m = D[idx].mean(0)
+            grow = float(np.percentile(seg_dist(P[idx] + D[idx], a + m, b + m) - seg_dist(P[idx], a, b), share))
+            if abs(grow) > 2e-4 or np.abs(m).max() > 2e-4:
+                entries.append([i, round(grow * 100.0, 3)] + [round(float(x), 3) for x in m * 100.0 * flip])
+        if entries:
+            moves[name] = entries
+    log("collision follows %d sliders (%s)" % (len(moves), ", ".join(sorted(moves)[:12])))
+    return moves
+
+
 def collision_entry(shape, head):
     """grooms.json's form of a collision shape: centimetres from the head bone in Unreal's axes (Blender x, -y, z)."""
     kind, part, a, b, r, out = shape
@@ -1254,6 +1299,8 @@ def main():
                 # bone (clavicle_l, upperarm_l, lowerarm_r...) picks the bone. A sphere has only "centre_cm".
                 # They reach a little out of the skin (HEAD_MARGIN, BODY_MARGIN): the barrier hair stops at.
                 "collision": [collision_entry(shape, head) for shape in shapes],
+                # How the body sliders move and grow those shapes (collision_morphs): {slider: [[index, grow cm, move cm x3]]}.
+                "collision_morphs": collision_morphs(body, shapes, keys),
                 "styles": {}}
     log("collision shapes:", len(manifest["collision"]), [(c["part"], c["radius_cm"]) for c in manifest["collision"]])
     hat = json.load(open(a.config)).get("hat")

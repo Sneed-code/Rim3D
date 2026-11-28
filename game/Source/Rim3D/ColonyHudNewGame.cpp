@@ -421,6 +421,7 @@ void UColonyHudSubsystem::CheckLanding(USimSubsystem& Bridge)
 
 void UColonyHudSubsystem::EnterPeoplePage(USimSubsystem& Bridge)
 {
+	bPregameColony = true;
 	bMainMenuOpen = true;
 	MainMenuPage = 3;
 	PeopleSelected = 0;
@@ -443,6 +444,7 @@ void UColonyHudSubsystem::LandColony(USimSubsystem& Bridge)
 	// Whatever is still queued (the last edit) goes in before the clock starts.
 	Bridge.ApplyPregameCommands();
 	EndPeopleCamera();
+	bPregameColony = false;
 	bMainMenuOpen = false;
 	MainMenuPage = 0;
 	if (UOverseerSubsystem* Overseer = GetWorld()->GetSubsystem<UOverseerSubsystem>())
@@ -1009,6 +1011,7 @@ void UColonyHudSubsystem::LoadFromMenu(USimSubsystem& Bridge, const FString& Slo
 	{
 		return;
 	}
+	bPregameColony = false;
 	EndTitleCamera();
 	bNarratorPending = false;
 	bMainMenuOpen = false;
@@ -1361,6 +1364,14 @@ void UColonyHudSubsystem::DrawScenarioPage(USimSubsystem& Bridge, float Scale)
 	if (NgButton(TEXT("Back"), false, ImVec2(160.0f * Scale, 0.0f)))
 	{
 		MainMenuPage = 0;
+		// Back out of a colony made for its people pages (the landing site picked, then Back from "Who you are"): the
+		// title screen again, its orbit and its look, not the title menu over that colony's bare map.
+		if (bPregameColony && !Bridge.IsTitleBackdrop())
+		{
+			bPregameColony = false;
+			UE_LOG(LogTemp, Display, TEXT("New colony: backed out before landing, back to the title screen"));
+			bLeavingDebugScene = DebugScenes::ReturnToTitle(GetWorld());
+		}
 	}
 	ImGui::SameLine(FooterRight - 260.0f * Scale);
 	if ((NgButton(TEXT("Choose landing site"), false, ImVec2(260.0f * Scale, 0.0f), true) || ColonyHud::EnterPressed()) && Picked)

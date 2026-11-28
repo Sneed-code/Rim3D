@@ -1023,14 +1023,23 @@ namespace
 		const float PubicDefault[3] = {P.Hair[0] * 0.72f, P.Hair[1] * 0.70f, P.Hair[2] * 0.70f};
 		const FLinearColor HairColour = Linear(P.Hair);
 		const FLinearColor PubicColour = Linear(P.bOwnPubicColour ? P.PubicHair : PubicDefault);
+		// Eyelashes (sneed 2026-11-28: "regular lashes should just be black ... platinum is a drow feature"): near black with
+		// a hint of the hair's colour (an auburn or blond person's lashes are a very dark brown), the hair's own colour only
+		// on the Drow. Their material was never tinted, so everyone had the texture's own pale, almost white lashes.
+		const float LashColour[3] = {
+			P.Kind == ECreatorKind::Drow ? P.Hair[0] : FMath::Lerp(0.035f, P.Hair[0], 0.18f),
+			P.Kind == ECreatorKind::Drow ? P.Hair[1] : FMath::Lerp(0.030f, P.Hair[1], 0.18f),
+			P.Kind == ECreatorKind::Drow ? P.Hair[2] : FMath::Lerp(0.027f, P.Hair[2], 0.18f)};
+		const FLinearColor LashTint = Linear(LashColour);
 		const TArray<FName> Slots = Mesh->GetMaterialSlotNames();
 		for (int32 i = 0; i < Slots.Num(); ++i)
 		{
 			const FString Slot = Slots[i].ToString();
 			const bool bPubic = Slot.Contains(TEXT("Pubic"));
 			const bool bBrow = Slot.Contains(TEXT("eyebrow"));
-			const bool bHead = !bPubic && !Slot.Contains(TEXT("lash")) && CreatorIsHairSlot(Slot);
-			if (!bPubic && !bBrow && !bHead)
+			const bool bLash = Slot.Contains(TEXT("eyelash"));
+			const bool bHead = !bPubic && !bLash && !Slot.Contains(TEXT("lash")) && CreatorIsHairSlot(Slot);
+			if (!bPubic && !bBrow && !bHead && !bLash)
 			{
 				continue;
 			}
@@ -1041,7 +1050,7 @@ namespace
 			}
 			if (Dynamic)
 			{
-				Dynamic->SetVectorParameterValue(TEXT("Tint"), bPubic ? PubicColour : (bBrow ? HairColour * 0.8f : HairColour));
+				Dynamic->SetVectorParameterValue(TEXT("Tint"), bPubic ? PubicColour : (bLash ? LashTint : (bBrow ? HairColour * 0.8f : HairColour)));
 			}
 		}
 		// Only the chosen jewellery shows, in its metal.

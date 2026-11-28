@@ -402,3 +402,37 @@ three holes, each a different one from the ones fixed before:
 
 Still grooms (Buzz, the afro) and the undercoats are left where they were grown (they never move, so never meet the
 shapes). Needs the `hair-grow` and `hair-grooms` art steps again (`update-and-play.bat` runs them).
+
+## The scalp follows the hair (2026-11-28)
+
+sneed (2026-11-28): "some races or elongated skull types have the scalp visible ... can you fix this with a system wide
+fix?" The game moves the hair with a person's head sliders by one scale per axis about the skull centre and a move
+(`head_axes`), and lifts it for what that leaves. MakeHuman's brow ridge target also pushes the back of the crown out
+(at full it moves the scalp up to 6 cm), and with the ethnic base shapes a Melanesian preset left skin 10 mm out at the
+back of the crown while the lift (capped at 12%) floated the hair 9 mm off everywhere else. No one transform follows
+that, so the scalp now follows the hair instead:
+
+- **`tools/makehuman/scalp_follow.py`** (plain numpy, run by `mh_creator.py` on the variant builds' vertex dumps before
+  the base is built with them; one extra plain build `_base` gives the rest positions): each morph's change on the
+  hair-covered scalp (inside grow_hair's hairline) is replaced by the scale per axis and move that fit it best, blended
+  back to the morph's own change from 5 to 17 degrees under the hairline (forehead, temples, nape) and kept off the ears.
+  Ear morphs (pointed, large, sticking out, the cat head) and the live face units are left as they are. Every mesh gets
+  the same rule by where its vertices are (wig cards and hats sit on the scalp too). The scalp then changes exactly as
+  the game moves the hair, for any mix (the fits add up), so `scalp_left_mm` comes out near zero and the lift with it.
+  The face below the hairline is untouched; a bald head keeps each slider's overall change but not the brow ridge's
+  bulge at the back.
+- Measured in the cloud on the PC's CreatorFemale and CreatorMale (surface to surface: each morphed scalp vertex against
+  the moved hair surface), 13 mixes (Melanesian, West African, East Asian, brow ridge and forehead at full, orc, imp,
+  masculine...): skin out at most 1.1 mm (1.6 mm on the man at full brow ridge; the hair lies 1.2 mm off the scalp), hair
+  float median about 1 mm (lower brows 3 to 6 mm). Before: up to 20 mm out, 9 mm float.
+- **The body's collision follows the body sliders.** Morphs move no bones, so the shapes the hair rests on stayed on the
+  base's skin while broad shoulders, a heavy, masculine or orc build and the ethnic shapes moved that skin 1.5 to 7 cm
+  out past them (measured): resting long hair sank into the shoulders and back. `grow_hair.py` `collision_morphs` writes
+  per slider and shape the average move of the skin the shape guards (within 12 mm of it) and how much it must grow
+  (85th percentile); the game adds them up by morph weight (`StrandHairBodyMovesOf`) and moves and grows the shapes, and
+  refits when they change. Cloud check: that skin's 95th percentile went from 13 to 68 mm outside to under 1 mm.
+- **Hair colour:** the MetaHuman material's melanin came from 1 - 1.6 sqrt(luminance), which gave every blond none at
+  all: platinum white. `StrandHairMelanin` maps the creator's palette by luminance (black 1, brown 0.64, light brown
+  0.43, blond 0.2, platinum 0.08, the Drow's white 0).
+- **Eyelashes:** their material was never tinted, so every lash was the texture's own pale colour. Now near black with
+  18% of the hair colour; the Drow's take the hair colour.
