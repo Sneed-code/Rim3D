@@ -3,6 +3,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "Sound/AmbientSound.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
@@ -495,6 +497,16 @@ void USoundSubsystem::LoadCues()
 
 void USoundSubsystem::LoadMusic()
 {
+	// No music in the game at all (sneed 2026-11-28: "remove all default music from my game"): no calm, tense or combat
+	// tracks and no stingers, even if the old downloads are still in Content/ThirdParty/Sounds/music.
+	for (TArray<FString>& Files : MusicFiles)
+	{
+		Files.Reset();
+	}
+	if (MusicFiles.Num() > 0)
+	{
+		return;
+	}
 	const FString MusicFolder = FPaths::Combine(SoundFolder(), TEXT("music"));
 	for (int32 M = 0; M < SoundMusicMoods; ++M)
 	{
@@ -1334,6 +1346,26 @@ void USoundSubsystem::KeepLoop(const FString& CueName, uint64 Key, const FVector
 void USoundSubsystem::Tick(float DeltaTime)
 {
 	Now += DeltaTime;
+	// The levels we took from Unreal's samples carry an ambient sound actor playing the Starter Content's music bed
+	// (/Game/Audio/Ambient/BackgroundMix: Starter_Music01 with wind and birds). sneed 2026-11-28: "remove all UE5 default
+	// music from my game". Every such actor is silenced and removed, now and whenever a level streams one in.
+	if (Now >= NextLevelSoundSweep)
+	{
+		NextLevelSoundSweep = Now + 2.0;
+		if (UWorld* World = GetWorld())
+		{
+			for (TActorIterator<AAmbientSound> It(World); It; ++It)
+			{
+				if (UAudioComponent* Audio = It->GetAudioComponent())
+				{
+					Audio->Stop();
+					Audio->SetSound(nullptr);
+				}
+				It->Destroy();
+				++LevelSoundsRemoved;
+			}
+		}
+	}
 	USimSubsystem* Source = Bridge.Get();
 	if (!Source || !Source->GetSim() || !Source->GetDefs())
 	{

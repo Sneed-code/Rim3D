@@ -258,6 +258,7 @@ private:
 	FTransform ImpaleAim(const colony::ThingView& View, FPawnWeapons& Pawn, const FTransform& Weapon);
 	/** Impales drawn into a chest (frames), and how far the last one's blade line passed from the chest's centre (cm). */
 	int32 ImpaleFrames = 0;
+	int32 RagdollStrikes = 0;  // blows drawn on a lying ragdoll's chest instead of the sim spot
 	float ImpaleMiss = -1.0f;
 	bool FinisherPose(const ASimPawnActor& Actor, const colony::ThingView& View, const HoldDraw::FPoints& Points, float Size, FTransform& OutDrawn,
 					  FTransform& OutPinned, float& OutWeight);

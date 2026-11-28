@@ -88,7 +88,8 @@
     "idle": "Animal_Mech_Idle",
     "hurt": "Animal_Mech_Hurt",
     "death": "Animal_Mech_Death",
-    "burning": "Pawn_Burning"
+    "burning": "Pawn_Burning",
+    "flesh": "Hit_Blade_Flesh"
    }
   }
  },

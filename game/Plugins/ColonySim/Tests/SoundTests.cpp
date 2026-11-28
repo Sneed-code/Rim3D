@@ -160,15 +160,13 @@ TEST_CASE("sound: events turn into cues") {
     CHECK(plays.at(0).mode == SoundMode::LoopStop);
     CHECK(plays.at(0).cell == CellPos{4, 5, 0});
 
-    // The colony alarm is a loop heard everywhere.
+    // The colony alarm is silent (sneed 2026-11-28: no siren, it rang like a school drill in the duel).
     Event alarm;
     alarm.type = EventType::AlarmChanged;
     alarm.message = "on: raiders";
-    plays = soundTestPlay(db, alarm);
-    CHECK(plays.at(0).mode == SoundMode::LoopStart);
-    CHECK(!plays.at(0).hasPos);
+    CHECK(soundTestPlay(db, alarm).empty());
     alarm.message = "off: calm";
-    CHECK(soundTestPlay(db, alarm).at(0).mode == SoundMode::LoopStop);
+    CHECK(soundTestPlay(db, alarm).empty());
 
     // Events that name only an entity find its def through the callback; no callback, no sound.
     const Entity pawn = static_cast<Entity>(7);
@@ -433,9 +431,17 @@ TEST_CASE("sound: melee blows sound by what strikes what") {
     e.stuff = DefId{};
     e.def = mace;
     CHECK(soundMeleeCue(db, e) == "Hit_Steel_Flesh");
-    // A blade sounds like itself.
+    // A light blade in flesh (sneed 2026-11-28): the knife, the gladius and the reaper's arms pick from sneed's own set;
+    // a heavier blade sounds like itself.
     e.def = knife;
+    CHECK(soundMeleeCue(db, e) == "Hit_Blade_Flesh");
+    e.def = db.idOf("Things", "Melee_Gladius");
+    CHECK(soundMeleeCue(db, e) == "Hit_Blade_Flesh");
+    e.def = db.idOf("Things", "Mech_Scyther");
+    CHECK(soundMeleeCue(db, e) == "Hit_Blade_Flesh");
+    e.def = db.idOf("Things", "Melee_Longsword");
     CHECK(soundMeleeCue(db, e) == "Flesh_Cut");
+    e.def = knife;
     // Parried by a wooden club, blocked by a steel shield, turned by armour, into a wall or rock.
     e.def = mace;
     e.message = "blocked";
